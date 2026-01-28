@@ -1,0 +1,30 @@
+# Node / npm artifacts
+node_modules
+npm-debug.log*
+
+# Git metadata
+.git
+.gitignore
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Editor / OS noise
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Build outputs
+apps/web/.next
+apps/web/out
+apps/web/dist
+apps/ws-server/dist
+packages/**/dist
+
+# Misc
+backup

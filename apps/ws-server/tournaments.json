@@ -1,0 +1,43 @@
+[
+  {
+    "id": "stt-daily-1",
+    "name": "Daily Sit & Go",
+    "type": "stt",
+    "startMode": "full",
+    "buyIn": { "currency": "chips", "amount": 100 },
+    "maxPlayers": 9,
+    "startingStack": 5000,
+    "blindScheduleId": "default-stt",
+    "payout": { "mode": "top_x_split", "topX": 3 },
+    "tableConfigId": "mid",
+    "description": "Starts when full. Pays top 3."
+  },
+  {
+    "id": "stt-daily-6max",
+    "name": "Daily Sit & Go (6-max)",
+    "type": "stt",
+    "startMode": "full",
+    "buyIn": { "currency": "chips", "amount": 100 },
+    "maxPlayers": 6,
+    "startingStack": 5000,
+    "blindScheduleId": "default-stt",
+    "payout": { "mode": "top_x_split", "topX": 2 },
+    "tableConfigId": "mid",
+    "description": "6-max S&G starts when full."
+  },
+  {
+    "id": "mtt-prime-1",
+    "name": "Prime Time MTT",
+    "type": "mtt",
+    "startMode": "scheduled",
+    "startAt": "2099-01-01T20:00:00.000Z",
+    "buyIn": { "currency": "chips", "amount": 5000 },
+    "lateRegMinutes": 120,
+    "maxPlayers": 540,
+    "startingStack": 15000,
+    "blindScheduleId": "default-mtt",
+    "payout": { "mode": "top_x_split", "topX": 54 },
+    "tableConfigId": "mid",
+    "description": "Scheduled start with 2 hour late reg window."
+  }
+]

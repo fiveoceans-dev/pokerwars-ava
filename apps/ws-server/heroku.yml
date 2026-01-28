@@ -1,0 +1,23 @@
+# Heroku container deployment configuration
+# This tells Heroku to build and deploy the app using Docker instead of buildpacks
+
+build:
+  docker:
+    web: Dockerfile
+    
+run:
+  web: npx ts-node src/index.ts
+
+# Optional: Release phase for database migrations or other setup tasks
+# release:
+#   command:
+#     - echo "Release phase - add any pre-deployment tasks here"
+
+# Optional: Environment-specific configuration
+# environments:
+#   staging:
+#     formation:
+#       web: 1
+#   production:
+#     formation:
+#       web: 2

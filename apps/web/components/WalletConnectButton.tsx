@@ -1,0 +1,115 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
+import { formatWalletLabel, useWallet } from "~~/components/providers/WalletProvider";
+
+const WalletConnectDialog = dynamic(
+  () => import("~~/components/wallet/WalletConnectDialog").then((m) => m.WalletConnectDialog),
+  { ssr: false },
+);
+
+export function WalletConnectButton() {
+  const { address, status, disconnect } = useWallet();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      setMenuOpen(false);
+      setIsDialogOpen(true);
+    };
+    window.addEventListener("open-wallet-connect", handler);
+    return () => window.removeEventListener("open-wallet-connect", handler);
+  }, []);
+
+  // Close the menu when clicking outside
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (!menuContainer) return;
+      if (event.target instanceof Node && menuContainer.contains(event.target)) {
+        return;
+      }
+      setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen, menuContainer]);
+
+  const isConnected = status === "connected" && !!address;
+  const isConnecting = status === "connecting";
+
+  // Avoid hydration mismatch: only show connected label once mounted on client
+  const label = isMounted && isConnected ? formatWalletLabel(address) : "Connect Wallet";
+  const showMenu = isMounted && isConnected;
+
+  const handleButtonClick = () => {
+    if (isConnecting) return;
+    if (!showMenu) {
+      setIsDialogOpen(true);
+      return;
+    }
+    setMenuOpen(true);
+  };
+
+  return (
+    <>
+      <div
+        className="relative"
+        ref={setMenuContainer}
+      >
+        <button
+          type="button"
+          className={`tbtn text-xs uppercase tracking-wide ${isConnecting ? "opacity-60" : ""}`}
+          onClick={handleButtonClick}
+          onMouseEnter={() => setIsDialogOpen(false)}
+          onBlur={(e) => {
+            if (!menuContainer?.contains(e.relatedTarget as Node)) {
+              setMenuOpen(false);
+            }
+          }}
+          aria-expanded={menuOpen}
+          aria-haspopup="menu"
+          disabled={isConnecting}
+        >
+          {isConnecting ? "Confirm…" : label}
+        </button>
+        {showMenu && menuOpen ? (
+          <div className="pointer-events-auto absolute left-0 top-full mt-1 min-w-full space-y-2 text-xs">
+            <Link
+              href="/account"
+              className="tbtn"
+              onClick={() => setMenuOpen(false)}
+              tabIndex={0}
+            >
+              Account
+            </Link>
+            <button
+              type="button"
+              onClick={async () => {
+                await disconnect();
+                setMenuOpen(false);
+              }}
+              className="tbtn"
+              tabIndex={0}
+            >
+              Disconnect
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <WalletConnectDialog
+        open={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+      />
+    </>
+  );
+}

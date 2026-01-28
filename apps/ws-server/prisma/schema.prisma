@@ -1,0 +1,217 @@
+// Prisma schema for PokerWars tournament orchestration
+// Datasource points to Cloud SQL Postgres via DATABASE_URL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TournamentType {
+  STT
+  MTT
+}
+
+enum TournamentStartMode {
+  FULL
+  SCHEDULED
+}
+
+enum TournamentStatus {
+  REGISTERING
+  SCHEDULED
+  LATE_REG
+  RUNNING
+  BREAKING
+  FINISHED
+  CANCELLED
+}
+
+enum BuyInCurrency {
+  CHIPS
+  TICKETS
+}
+
+enum PayoutMode {
+  TOP_X_SPLIT
+  TICKETS
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  SEATED
+  BUSTED
+  CASHED
+}
+
+enum Asset {
+  COINS
+  TICKET_X
+  TICKET_Y
+  TICKET_Z
+}
+
+enum LedgerType {
+  MINT
+  BURN
+  TRANSFER
+  BUY_IN
+  REFUND
+  PAYOUT
+  CONVERT_BUY
+  CONVERT_SELL
+  CLAIM_FREE
+}
+
+enum AccountOwnerType {
+  USER
+  TREASURY
+  TOURNAMENT
+}
+
+model User {
+  id             String   @id @default(cuid())
+  walletAddress  String?  @unique
+  email          String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Account {
+  id        String           @id @default(cuid())
+  ownerType AccountOwnerType
+  ownerId   String
+  coins     Int              @default(0)
+  ticket_x  Int              @default(0)
+  ticket_y  Int              @default(0)
+  ticket_z  Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([ownerType, ownerId])
+}
+
+model LedgerTransaction {
+  id            String     @id @default(cuid())
+  seq           Int        @unique
+  prevHash      String?
+  hash          String
+  type          LedgerType
+  fromAccountId String?
+  toAccountId   String?
+  asset         Asset
+  amount        Int
+  referenceType String
+  referenceId   String
+  metadata      Json?
+  createdAt     DateTime   @default(now())
+
+  @@index([createdAt])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+}
+
+model Treasury {
+  id                   String   @id
+  coin_supply_total    BigInt
+  coin_supply_remaining BigInt
+  ticket_x_issued      Int      @default(0)
+  ticket_y_issued      Int      @default(0)
+  ticket_z_issued      Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model TournamentEscrow {
+  tournamentId String   @id
+  accountId    String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Tournament {
+  id              String              @id
+  name            String
+  type            TournamentType
+  startMode       TournamentStartMode
+  startAt         DateTime?
+  lateRegMinutes  Int?
+  status          TournamentStatus    @default(REGISTERING)
+  maxPlayers      Int
+  startingStack   Int
+  blindScheduleId String
+  buyInCurrency   BuyInCurrency
+  buyInAmount     Int
+  payoutMode      PayoutMode
+  payoutTopX      Int?
+  payoutTicketCount Int?
+  tableConfigId   String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  levels          TournamentLevel[]
+  registrations   TournamentRegistration[]
+  tables          TournamentTable[]
+  events          TournamentEvent[]
+  payouts         TournamentPayout[]
+}
+
+model TournamentLevel {
+  id               String    @id @default(cuid())
+  tournament       Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId     String
+  levelIndex       Int
+  smallBlind       Int
+  bigBlind         Int
+  ante             Int       @default(0)
+  durationSeconds  Int
+
+  @@unique([tournamentId, levelIndex])
+}
+
+model TournamentRegistration {
+  id           String              @id @default(cuid())
+  tournament   Tournament          @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  playerId     String
+  status       RegistrationStatus  @default(REGISTERED)
+  registeredAt DateTime            @default(now())
+  tableId      String?
+  seatIndex    Int?
+  stack        Int?
+  position     Int?
+
+  @@unique([tournamentId, playerId])
+}
+
+model TournamentTable {
+  id            String     @id @default(cuid())
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
+  tournamentId  String
+  engineTableId String      @unique // ID used by the EventEngine
+  status        String      @default("ACTIVE")
+  createdAt     DateTime    @default(now())
+  closedAt      DateTime?
+}
+
+model TournamentEvent {
+  id            String     @id @default(cuid())
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
+  tournamentId  String
+  type          String
+  payload       Json
+  createdAt     DateTime    @default(now())
+}
+
+model TournamentPayout {
+  id            String     @id @default(cuid())
+  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
+  tournamentId  String
+  playerId      String
+  amount        Int
+  currency      BuyInCurrency
+  createdAt     DateTime    @default(now())
+}

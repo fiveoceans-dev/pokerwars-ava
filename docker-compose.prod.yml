@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  poker-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE=web
+      - NODE_ENV=production
+      - PORT=8090
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:8090}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:8099}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8099/api}
+      - WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID:-}
+    ports:
+      - "8090:8090"
+    depends_on:
+      - poker-ws
+
+  poker-ws:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE=ws-server
+      - NODE_ENV=production
+      - PORT=8099
+      - ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS:-http://localhost:8090}
+      - DEV_ALLOWED_WS_ORIGINS=${DEV_ALLOWED_WS_ORIGINS:-http://localhost:8090}
+      - REDIS_URL=${REDIS_URL:-}
+      - RECONNECT_GRACE_SECONDS=${RECONNECT_GRACE_SECONDS:-30}
+      - WS_MAX_PAYLOAD=${WS_MAX_PAYLOAD:-65536}
+    ports:
+      - "8099:8099"

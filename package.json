@@ -1,0 +1,23 @@
+{
+  "name": "poker-protocol",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/engine"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:ws": "npm run dev -w apps/ws-server",
+    "build:packages": "npm run build -w packages/engine",
+    "build:web": "npm run build -w apps/web",
+    "build:ws": "npm run build -w apps/ws-server",
+    "build": "npm run build:packages && npm run build:web && npm run build:ws",
+    "db:generate": "npm run prisma:generate -w apps/ws-server",
+    "db:migrate": "npm run prisma:migrate -w apps/ws-server",
+    "start": "./start.sh",
+    "lint": "npx eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "typecheck": "npm run check-types -w apps/web && npx tsc -p packages/engine/tsconfig.json --noEmit"
+  }
+}

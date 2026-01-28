@@ -1,0 +1,25 @@
+# Docker Compose Development Overrides
+# This file is automatically loaded by docker-compose and provides development-specific configurations
+
+version: '3.8'
+
+services:
+  pokernft-server:
+    build:
+      target: builder  # Use builder stage for development
+    command: npm run dev  # Use development command with hot reload
+    environment:
+      - NODE_ENV=development
+      - DEBUG=pokernft:*
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      # Exclude node_modules and dist from mounting
+      - /app/node_modules
+      - /app/dist
+
+  redis:
+    # Development-specific Redis configuration
+    command: redis-server --appendonly yes --save 60 1000 --loglevel verbose

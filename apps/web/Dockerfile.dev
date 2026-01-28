@@ -1,0 +1,26 @@
+# Development Dockerfile for PokerWars Frontend
+# This is OPTIONAL - for developers who prefer full Docker development
+# The recommended approach is native Next.js development (yarn dev)
+
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies for hot reload
+RUN apk add --no-cache libc6-compat
+
+# Copy package files
+COPY package*.json yarn.lock ./
+
+# Install dependencies
+RUN yarn install --frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Expose port (matches package.json dev script)
+EXPOSE 3005
+
+# Development command with hot reload
+CMD ["yarn", "dev"]

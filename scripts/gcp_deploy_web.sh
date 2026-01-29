@@ -3,18 +3,34 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.gcp}"
+ALT_ENV_FILES=("$ROOT_DIR/.env" "$ROOT_DIR/apps/web/.env")
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  . "$ENV_FILE"
-  set +a
+load_env() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    set -a
+    . "$file"
+    set +a
+    echo "Loaded env from $file"
+    return 0
+  fi
+  return 1
+}
+
+if ! load_env "$ENV_FILE"; then
+  for f in "${ALT_ENV_FILES[@]}"; do
+    if load_env "$f"; then
+      break
+    fi
+  done
 fi
 
 : "${PROJECT_ID:?Missing PROJECT_ID}"
 : "${REGION:?Missing REGION}"
 : "${REPO_NAME:?Missing REPO_NAME}"
 : "${WEB_SERVICE_NAME:?Missing WEB_SERVICE_NAME}"
-: "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID}"
+: "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID (set in .env/.env.gcp/apps/web/.env)}"
+: "${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:=${WALLETCONNECT_PROJECT_ID}}"
 
 if [[ -z "${NEXT_PUBLIC_APP_URL:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
   NEXT_PUBLIC_APP_URL="$WEB_PUBLIC_URL"
@@ -42,11 +58,11 @@ WEB_PORT="${WEB_PORT:-8080}"
 ENV_VARS=(
   "SERVICE=web"
   "NODE_ENV=production"
-  "PORT=${WEB_PORT}"
   "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}"
   "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
   "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
   "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
+  "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID}"
 )
 
 join_env_vars() {
@@ -64,7 +80,8 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
-gcloud builds submit "$ROOT_DIR" --tag "$IMAGE_URI" --file "$ROOT_DIR/Dockerfile"
+# Use Dockerfile directly (Cloud Build default)
+gcloud builds submit "$ROOT_DIR" --tag "$IMAGE_URI"
 
 gcloud run deploy "$WEB_SERVICE_NAME" \
   --image "$IMAGE_URI" \

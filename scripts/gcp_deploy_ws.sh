@@ -3,11 +3,26 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.gcp}"
+ALT_ENV_FILES=("$ROOT_DIR/.env" "$ROOT_DIR/apps/web/.env")
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  . "$ENV_FILE"
-  set +a
+load_env() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    set -a
+    . "$file"
+    set +a
+    echo "Loaded env from $file"
+    return 0
+  fi
+  return 1
+}
+
+if ! load_env "$ENV_FILE"; then
+  for f in "${ALT_ENV_FILES[@]}"; do
+    if load_env "$f"; then
+      break
+    fi
+  done
 fi
 
 : "${PROJECT_ID:?Missing PROJECT_ID}"
@@ -15,7 +30,7 @@ fi
 : "${REPO_NAME:?Missing REPO_NAME}"
 : "${WS_SERVICE_NAME:?Missing WS_SERVICE_NAME}"
 : "${DATABASE_URL:?Missing DATABASE_URL}"
-: "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID}" # required for web auth flows hitting ws auth
+: "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID}"
 
 if [[ -z "${ALLOWED_WS_ORIGINS:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
   ALLOWED_WS_ORIGINS="$WEB_PUBLIC_URL"
@@ -28,7 +43,6 @@ WS_PORT="${WS_PORT:-8080}"
 ENV_VARS=(
   "SERVICE=ws-server"
   "NODE_ENV=production"
-  "PORT=${WS_PORT}"
   "ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}"
   "DATABASE_URL=${DATABASE_URL}"
   "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
@@ -61,7 +75,7 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
-gcloud builds submit "$ROOT_DIR" --tag "$IMAGE_URI" --file "$ROOT_DIR/Dockerfile"
+gcloud builds submit "$ROOT_DIR" --tag "$IMAGE_URI"
 
 gcloud run deploy "$WS_SERVICE_NAME" \
   --image "$IMAGE_URI" \

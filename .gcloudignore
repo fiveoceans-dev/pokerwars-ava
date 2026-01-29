@@ -1,0 +1,20 @@
+# Ignore files when uploading to Cloud Build
+.git/
+.gitignore
+.dockerignore
+.vscode/
+node_modules/
+**/node_modules/
+npm-debug.log
+yarn-error.log
+.next/
+**/.next/
+dist/
+build/
+coverage/
+.env*
+.DS_Store
+.idea/
+tmp/
+temp/
+**/*.local

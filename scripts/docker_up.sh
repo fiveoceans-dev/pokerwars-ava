@@ -6,6 +6,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT_DIR/docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.docker}"
+POSTGRES_CONTAINER_NAME="${POSTGRES_CONTAINER_NAME:-pokerwars-pg}"
+POSTGRES_IMAGE="${POSTGRES_IMAGE:-postgres:16}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
+POSTGRES_DB="${POSTGRES_DB:-pokerwars}"
 
 if [[ ! -f "$COMPOSE_FILE" ]]; then
   echo "Compose file not found: $COMPOSE_FILE" >&2
@@ -30,7 +35,31 @@ if [[ "${DETACH:-}" == "1" || "${DETACH:-}" == "true" ]]; then
   DETACH_FLAG+=("-d")
 fi
 
-echo "Using compose file: $COMPOSE_FILE"
-echo "Starting containers (docker compose up --build ${DETACH_FLAG[*]})..."
+# Ensure local Postgres is running (optional but convenient)
+if ! docker ps --format '{{.Names}}' | grep -q "^${POSTGRES_CONTAINER_NAME}\$"; then
+  echo "Starting local Postgres container '${POSTGRES_CONTAINER_NAME}' on port ${POSTGRES_PORT}..."
+  docker run --name "${POSTGRES_CONTAINER_NAME}" \
+    -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+    -e POSTGRES_DB="${POSTGRES_DB}" \
+    -p "${POSTGRES_PORT}:5432" \
+    -d "${POSTGRES_IMAGE}" >/dev/null
+else
+  echo "Postgres container '${POSTGRES_CONTAINER_NAME}' already running."
+fi
 
-exec docker compose -f "$COMPOSE_FILE" up --build "${DETACH_FLAG[@]}" "$@"
+# If DATABASE_URL is unset, set a sane default pointing at the local Postgres container
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  export DATABASE_URL="postgresql://postgres:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public"
+  echo "DATABASE_URL not set; defaulting to ${DATABASE_URL}"
+fi
+
+# Basic defaults for web/ws URLs if not provided
+export NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:8090}"
+export NEXT_PUBLIC_WS_URL="${NEXT_PUBLIC_WS_URL:-ws://localhost:8099}"
+export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8099/api}"
+export ALLOWED_WS_ORIGINS="${ALLOWED_WS_ORIGINS:-http://localhost:8090}"
+
+echo "Using compose file: $COMPOSE_FILE"
+echo "Starting containers (docker compose up --build ${DETACH_FLAG[*]-})..."
+
+exec docker compose -f "$COMPOSE_FILE" up --build ${DETACH_FLAG[@]+"${DETACH_FLAG[@]}"} "$@"

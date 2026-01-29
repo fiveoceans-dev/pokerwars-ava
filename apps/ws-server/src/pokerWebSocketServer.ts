@@ -20,10 +20,14 @@ import {
   getTableConfig,
   getRecommendedBuyIn,
   validateBuyIn,
+  listTableConfigs,
 } from "./tableConfig";
 import { globalSeatMappings } from "./seatMappingManager";
 import { saveSession } from "./persistence";
 import { BotManager, type BotConfig } from "./botManager";
+import { verifiedWallets } from "./security";
+import { Asset } from "@prisma/client";
+import { LedgerPort } from "./ledgerPort";
 
 /**
  * Professional WebSocket-FSM Bridge
@@ -46,7 +50,7 @@ class WebSocketFSMBridge extends EventEmitter {
   private rl = new Map<string, { t: number; c: number }>();
   private onPlayerBust?: (tableId: string, playerId: string) => void;
   private botManager?: BotManager;
-  constructor(sessions: SessionManager) {
+  constructor(sessions: SessionManager, private ledgerService?: LedgerPort | null) {
     super();
     this.sessions = sessions;
   }
@@ -72,12 +76,21 @@ class WebSocketFSMBridge extends EventEmitter {
     session: Session,
     command?: any,
   ): Promise<string> {
+    const requireVerified = (id: string) => {
+      // Temporary dev bypass: allow seating without prior auth; production should enforce verified wallets
+      if (process.env.ALLOW_UNVERIFIED_WALLETS === "1") return;
+      if (id && id.startsWith("0x") && !verifiedWallets.has(id.toLowerCase())) {
+        throw new Error("wallet not verified");
+      }
+    };
+
     // If command provides identity, bind it to session if not already bound
     if (command?.playerId) {
       const normalizedPlayerId = this.normalizePlayerId(command.playerId);
       logger.debug(
         `🔍 [Identity] Command playerId: ${normalizedPlayerId}, Session userId: ${session.userId}`,
       );
+      requireVerified(normalizedPlayerId);
 
       if (!session.userId) {
         // Bind wallet identity to session
@@ -134,6 +147,7 @@ class WebSocketFSMBridge extends EventEmitter {
           const seat = table.seats[session.seat];
           if (seat?.pid) {
             const recovered = this.normalizePlayerId(seat.pid);
+            requireVerified(recovered);
             const success = this.sessions.updateBinding(session, recovered);
             if (success) {
               await saveSession(session);
@@ -153,6 +167,7 @@ class WebSocketFSMBridge extends EventEmitter {
     const canonicalId = this.normalizePlayerId(
       session.userId || session.sessionId,
     );
+    requireVerified(canonicalId);
     logger.debug(
       `🎯 [Identity] Resolved canonical ID: ${canonicalId} (from ${session.userId ? "userId" : "sessionId"})`,
     );
@@ -719,16 +734,29 @@ class WebSocketFSMBridge extends EventEmitter {
 
       const engine = this.getEngine(command.tableId);
 
-      // Calculate buy-in based on table configuration
+      // Calculate buy-in based on table configuration (ignore arbitrary client values)
       const requestedChips = command.chips;
       const recommendedBuyIn = getRecommendedBuyIn(command.tableId);
-      const buyInChips = requestedChips ?? recommendedBuyIn; // Use requested or recommended
+      const clampToConfig = (val: number) => {
+        const validation = validateBuyIn(command.tableId, val);
+        if (validation.valid) return val;
+        if (validation.suggested) return validation.suggested;
+        throw new Error(validation.error || "Invalid buy-in amount");
+      };
+      const buyInChips = clampToConfig(
+        typeof requestedChips === "number" ? requestedChips : recommendedBuyIn,
+      );
 
-      // Validate buy-in amount
-      const buyInValidation = validateBuyIn(command.tableId, buyInChips);
-      if (!buyInValidation.valid) {
-        throw new Error(buyInValidation.error || "Invalid buy-in amount");
+      // Debit user balance into per-table escrow (ledger-first for cash)
+      if (!this.ledgerService) {
+        throw new Error("Ledger unavailable");
       }
+      await this.ledgerService.buyIn(
+        canonicalId,
+        command.tableId,
+        Asset.COINS,
+        buyInChips,
+      );
 
       // Dispatch PlayerJoin event through FSM with canonical ID
       await engine.dispatch({
@@ -893,6 +921,24 @@ class WebSocketFSMBridge extends EventEmitter {
       seat: seatId,
       pid: canonicalId,
     });
+
+    // Refund remaining stack from escrow to user
+    if (this.ledgerService) {
+      try {
+        const seat = tableState.seats[seatId];
+        const remaining = seat?.chips ?? 0;
+        if (remaining > 0) {
+          await this.ledgerService.refund(
+            canonicalId,
+            session.roomId,
+            Asset.COINS,
+            remaining,
+          );
+        }
+      } catch (err) {
+        logger.error("Refund on leave failed", err);
+      }
+    }
 
     // Clean up mappings
     globalSeatMappings.removePlayer(session.roomId, canonicalId);
@@ -1124,6 +1170,31 @@ class WebSocketFSMBridge extends EventEmitter {
    * Get all tables for lobby with enhanced information
    */
   getTables(): LobbyTable[] {
+    // Ensure capacity: if all instances of a config are full, spin up another
+    listTableConfigs().forEach((cfg) => {
+      const matchingIds = Array.from(this.engines.keys()).filter(
+        (id) => id === cfg.id || id.startsWith(`${cfg.id}-`),
+      );
+      const hasOpenSeat = matchingIds.some((id) => {
+        const engine = this.engines.get(id);
+        if (!engine) return false;
+        const table = engine.getState();
+        const maxPlayers =
+          getTableConfig(id)?.maxPlayers ?? table.seats.length ?? cfg.maxPlayers;
+        const occupied = table.seats.filter((s) => s.pid).length;
+        return occupied < maxPlayers;
+      });
+
+      if (!hasOpenSeat) {
+        const nextIndex = matchingIds.length + 1;
+        const newId = `${cfg.id}-${nextIndex}`;
+        logger.info(
+          `🆕 No open seats for ${cfg.id}; creating additional table ${newId}`,
+        );
+        this.getEngine(newId, cfg.blinds.small, cfg.blinds.big);
+      }
+    });
+
     return Array.from(this.engines.entries()).map(([id, engine]) => {
       const table = engine.getState();
       const config = getTableConfig(id);
@@ -1136,10 +1207,13 @@ class WebSocketFSMBridge extends EventEmitter {
         maxPlayers: config?.maxPlayers ?? table.seats.length,
         smallBlind: table.smallBlind,
         bigBlind: table.bigBlind,
-        // Add stake level information
         stakeLevel: config?.stakeLevel,
-        buyInRange: config
-          ? `${config.buyIn.min}-${config.buyIn.max}`
+        buyIn: config
+          ? {
+              min: config.buyIn.min,
+              max: config.buyIn.max,
+              default: config.buyIn.default,
+            }
           : undefined,
       };
     });

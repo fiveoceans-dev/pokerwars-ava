@@ -61,7 +61,7 @@ export default function FreePage() {
           <div>
             <p className="text-lg text-white">Claim free coins</p>
             <p className="text-sm text-white/70">
-              Receive {freeClaimAmount} coins every 5 minutes.
+              Receive {freeClaimAmount} coins every 10 hours.
             </p>
             <p className="text-xs text-white/50 mt-2">
               Balance: {hydrated ? balances.coins : "—"} coins

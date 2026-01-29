@@ -14,11 +14,11 @@ export type Balances = {
 };
 
 const DEFAULT_BALANCES: Balances = {
-  coins: 500,
-  tickets: { ticket_x: 3, ticket_y: 0, ticket_z: 0 },
+  coins: 0,
+  tickets: { ticket_x: 0, ticket_y: 0, ticket_z: 0 },
 };
-const FREE_CLAIM_AMOUNT = 500;
-const FREE_CLAIM_COOLDOWN_MS = 5 * 60 * 1000;
+const FREE_CLAIM_AMOUNT = 1_000;
+const FREE_CLAIM_COOLDOWN_MS = 10 * 60 * 60 * 1000;
 
 function resolveApiBase(): string | null {
   try {

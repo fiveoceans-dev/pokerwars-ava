@@ -15,6 +15,7 @@ fi
 : "${REPO_NAME:?Missing REPO_NAME}"
 : "${WS_SERVICE_NAME:?Missing WS_SERVICE_NAME}"
 : "${DATABASE_URL:?Missing DATABASE_URL}"
+: "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID}" # required for web auth flows hitting ws auth
 
 if [[ -z "${ALLOWED_WS_ORIGINS:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
   ALLOWED_WS_ORIGINS="$WEB_PUBLIC_URL"
@@ -30,6 +31,7 @@ ENV_VARS=(
   "PORT=${WS_PORT}"
   "ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}"
   "DATABASE_URL=${DATABASE_URL}"
+  "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
 )
 
 if [[ -n "${REDIS_URL:-}" ]]; then

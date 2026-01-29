@@ -1,6 +1,7 @@
 // src/components/Table.tsx
 
 import type { CSSProperties } from "react";
+import { useState } from "react";
 import { useTableViewModel } from "../hooks/useTableViewModel";
 import { useGameStore } from "../hooks/useGameStore";
 import Card from "./Card";
@@ -61,6 +62,12 @@ export default function Table({ timer }: { timer?: number | null }) {
   // Use new client-driven countdown system
   const countdownInfo = useCountdownWithPriority(gameStore.countdowns);
   const seats = seatStore((state) => state.seats);
+  const [buyInModal, setBuyInModal] = useState<{
+    seat: number;
+    amount: number;
+    min: number;
+    max: number;
+  } | null>(null);
 
   // Ensure arrays are always defined
   const safePlayers = Array.isArray(players) ? players : Array(9).fill(null);
@@ -73,23 +80,6 @@ export default function Table({ timer }: { timer?: number | null }) {
   const safePlayerStates = Array.isArray(playerStates)
     ? playerStates
     : Array(9).fill("empty");
-
-  // Debug logging for player data
-  console.log("🎲 Table component debug:", {
-    playersCount: safePlayers.filter((p) => p).length,
-    players: safePlayers
-      .map((p, i) => ({ seat: i, name: p }))
-      .filter((p) => p.name),
-    playerIds: safePlayerIds
-      .map((id, i) => ({ seat: i, id: id?.slice(0, 10) + "..." }))
-      .filter((p) => p.id && p.id !== "undefined..."),
-    chips: safeChips
-      .map((c, i) => ({ seat: i, chips: c }))
-      .filter((c) => c.chips > 0),
-    currentTurn,
-    dealerIndex,
-    displayTimer,
-  });
 
   const handleSeatRequest = (idx: number) => {
     if (!isConnected || !address) {
@@ -159,13 +149,16 @@ export default function Table({ timer }: { timer?: number | null }) {
     }
 
     console.log(
-      "✅ Address validation passed, joining seat",
+      "✅ Address validation passed, opening buy-in modal",
       idx,
       "with address:",
       address.slice(0, 10) + "...",
     );
-    // Join seat using the validated address
-    joinSeat(idx);
+    // Compute buy-in bounds from blind level (40–100 BB policy)
+    const min = bigBlind * 40;
+    const max = bigBlind * 100;
+    const recommended = Math.min(Math.max(min, bigBlind * 100), max);
+    setBuyInModal({ seat: idx, amount: recommended, min, max });
   };
 
   // The table is always visible; wallet connections are handled elsewhere.
@@ -438,7 +431,7 @@ export default function Table({ timer }: { timer?: number | null }) {
     <div className="relative flex flex-col items-center justify-center w-full h-full">
       {/* Client-driven countdown display with priority handling */}
       {countdownInfo.timeLeft !== null && (
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white bg-black/70 px-4 py-2 rounded-lg z-50">
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white bg-black px-4 py-2 rounded-lg z-50">
           {countdownInfo.activeType && (
             <span className="text-sm font-medium">
               {countdownInfo.activeType === "game_start" && "Game Starting"}
@@ -456,11 +449,82 @@ export default function Table({ timer }: { timer?: number | null }) {
 
       {/* Legacy timer fallback for compatibility */}
       {countdownInfo.timeLeft === null && displayTimer !== null && (
-        <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white bg-black/70 px-4 py-2 rounded-lg z-50">
+        <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 text-white bg-black px-4 py-2 rounded-lg z-50">
           <span className="text-sm font-medium">Timer</span>
           <span className="text-2xl font-mono font-bold">
             {displayTimer.toString().padStart(2, "0")}
           </span>
+        </div>
+      )}
+
+      {buyInModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+          <div className="w-full max-w-md rounded-lg bg-black p-5 shadow-xl border border-white/10">
+            <h3 className="text-lg font-semibold mb-2">Choose Buy-in</h3>
+            <p className="text-sm text-white/70 mb-4">
+              Min {buyInModal.min.toLocaleString()} · Max{" "}
+              {buyInModal.max.toLocaleString()} chips
+            </p>
+            <div className="space-y-3">
+              <input
+                type="range"
+                min={buyInModal.min}
+                max={buyInModal.max}
+                step={bigBlind}
+                value={buyInModal.amount}
+                onChange={(e) =>
+                  setBuyInModal((prev) =>
+                    prev ? { ...prev, amount: Number(e.target.value) } : prev,
+                  )
+                }
+                className="w-full"
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  className="w-full rounded bg-black border border-white/10 px-3 py-2"
+                  min={buyInModal.min}
+                  max={buyInModal.max}
+                  step={bigBlind}
+                  value={buyInModal.amount}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setBuyInModal((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            amount: Math.min(
+                              buyInModal.max,
+                              Math.max(buyInModal.min, v),
+                            ),
+                          }
+                        : prev,
+                    );
+                  }}
+                />
+                <span className="text-white/60 text-sm">chips</span>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="tbtn-secondary px-4 py-2 text-sm"
+                  onClick={() => setBuyInModal(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="tbtn px-4 py-2 text-sm"
+                  onClick={() => {
+                    const seat = buyInModal.seat;
+                    const amount = buyInModal.amount;
+                    setBuyInModal(null);
+                    joinSeat(seat, undefined, amount);
+                  }}
+                >
+                  Buy in
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

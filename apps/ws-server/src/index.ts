@@ -25,7 +25,7 @@ import type {
 import { SessionManager, Session } from "./sessionManager";
 import { WebSocketFSMBridge } from "./pokerWebSocketServer";
 import { logger } from "@hyper-poker/engine/utils/logger";
-import { TABLES, getTableConfig } from "./tableConfig";
+import { getTableConfig, listTableConfigs, setTableConfigs } from "./tableConfig";
 import { globalSeatMappings } from "./seatMappingManager";
 import { getServerEnv, normalizeOrigin } from "./env";
 import { TournamentManager, loadTournamentDefinitions } from "./tournamentManager";
@@ -33,7 +33,12 @@ import { getPrisma } from "./prisma";
 import { TournamentOrchestrator } from "./tournamentOrchestrator";
 import { BotManager } from "./botManager";
 import { LedgerService } from "./ledgerService";
+import { LedgerPort } from "./ledgerPort";
+import { InMemoryLedger } from "./inMemoryLedger";
+import { ChainAdapter } from "./chainAdapter";
 import { Asset } from "@prisma/client";
+import { authNonces, verifiedWallets } from "./security";
+import { ethers } from "ethers";
 import {
   saveSession,
   saveRoom,
@@ -46,7 +51,15 @@ const env = getServerEnv();
 const PORT = typeof env.port === "number" && !Number.isNaN(env.port) ? env.port : 8099;
 const RECONNECT_GRACE_MS = env.reconnectGraceMs; // default 30s
 const prisma = getPrisma();
-const ledgerService = prisma ? new LedgerService(prisma) : null;
+const ledger: LedgerPort | null = prisma ? new LedgerService(prisma) : new InMemoryLedger();
+const chain = ledger ? new ChainAdapter(ledger) : null;
+const allowUnverifiedWallets = process.env.ALLOW_UNVERIFIED_WALLETS === "1";
+
+function isWalletVerified(wallet: string | undefined): boolean {
+  if (!wallet) return false;
+  if (allowUnverifiedWallets) return true;
+  return verifiedWallets.has(wallet.toLowerCase());
+}
 
 const isDevEnvironment = !env.isProduction;
 const allowedOrigins = env.allowedOrigins;
@@ -58,13 +71,48 @@ if (isDevEnvironment && allowedOrigins.length === 0 && devAllowedOrigins.length 
   );
 }
 
-// Kick off scheduled tournament checks every minute
-setInterval(() => tournamentOrchestrator.checkScheduled(), 60_000);
+// Load cash table configs from DB if available; fall back to defaults otherwise.
+if (prisma) {
+  prisma.gameTemplate
+    .findMany({ where: { type: "CASH" as any }, orderBy: { bigBlind: "asc" } })
+    .then((templates) => {
+      if (templates.length) {
+        setTableConfigs(
+          templates.map((t) => ({
+            id: t.id,
+            name: t.name,
+            blinds: { small: t.smallBlind, big: t.bigBlind },
+            maxPlayers: t.maxPlayers,
+            buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
+            stakeLevel: "custom",
+          })),
+        );
+        logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
+      }
+    })
+    .catch((err) => {
+      logger.error("❌ Failed to load cash table configs; using defaults", err);
+    });
+}
+
+const rateLimits = new Map<string, { window: number; count: number }>(); // key = `${wallet}:${route}`
+function checkRateLimit(key: string, limitPerMinute = 60): boolean {
+  const now = Date.now();
+  const windowMs = 60_000;
+  const current = rateLimits.get(key) || { window: now, count: 0 };
+  if (now - current.window > windowMs) {
+    current.window = now;
+    current.count = 0;
+  }
+  current.count += 1;
+  rateLimits.set(key, current);
+  return current.count <= limitPerMinute;
+}
 
 /**
  * HTTP Server with Health Endpoints
  */
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host}`);
   const origin = normalizeOrigin(req.headers.origin?.toString());
 
@@ -93,6 +141,51 @@ const server = createServer((req, res) => {
     return;
   }
   
+  // Auth: challenge
+  if (url.pathname === '/api/auth/challenge' && req.method === 'GET') {
+    setCorsHeaders(res, origin);
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
+    if (!wallet) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "wallet param required" }));
+      return;
+    }
+    const nonce = randomUUID();
+    authNonces.set(wallet, nonce);
+    const message = `PokerWars login nonce: ${nonce}`;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ nonce, message }));
+    return;
+  }
+
+  // Auth: verify
+  if (url.pathname === '/api/auth/verify' && req.method === 'POST') {
+    setCorsHeaders(res, origin);
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', async () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        const wallet: string | undefined = parsed.wallet?.toLowerCase();
+        const signature: string | undefined = parsed.signature;
+        if (!wallet || !signature) throw new Error("wallet and signature required");
+        const nonce = authNonces.get(wallet);
+        if (!nonce) throw new Error("no challenge found");
+        const message = `PokerWars login nonce: ${nonce}`;
+        const recovered = ethers.verifyMessage(message, signature).toLowerCase();
+        if (recovered !== wallet) throw new Error("signature does not match wallet");
+        verifiedWallets.add(wallet);
+        authNonces.delete(wallet);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: err instanceof Error ? err.message : "invalid request" }));
+      }
+    });
+    return;
+  }
+
   // API endpoint to list tables
   if (url.pathname === '/api/tables') {
     setCorsHeaders(res, origin);
@@ -141,37 +234,47 @@ const server = createServer((req, res) => {
 
   if (url.pathname === '/api/user/balance' && req.method === 'GET') {
     setCorsHeaders(res, origin);
-    if (!ledgerService) {
+    if (!chain) {
       res.writeHead(503);
       res.end(JSON.stringify({ error: "Database not configured" }));
       return;
     }
-    const wallet = url.searchParams.get('wallet');
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
     if (!wallet) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    const { account } = await ledgerService.getBalanceForWallet(wallet);
+    if (!isWalletVerified(wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    const receipt = await chain.getBalance(wallet);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ balance: account }));
+    res.end(JSON.stringify(receipt.payload));
     return;
   }
 
   if (url.pathname === '/api/user/profile' && req.method === 'GET') {
     setCorsHeaders(res, origin);
-    if (!ledgerService) {
+    if (!chain) {
       res.writeHead(503);
       res.end(JSON.stringify({ error: "Database not configured" }));
       return;
     }
-    const wallet = url.searchParams.get('wallet');
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
     if (!wallet) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    const user = await ledgerService.getUserByWallet(wallet);
+    if (!isWalletVerified(wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    const user = await ledger!.getUserByWallet(wallet);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ user }));
     return;
@@ -179,19 +282,24 @@ const server = createServer((req, res) => {
 
   if (url.pathname === '/api/user/ledger' && req.method === 'GET') {
     setCorsHeaders(res, origin);
-    if (!ledgerService) {
+    if (!chain) {
       res.writeHead(503);
       res.end(JSON.stringify({ error: "Database not configured" }));
       return;
     }
-    const wallet = url.searchParams.get('wallet');
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
     const limit = Number(url.searchParams.get('limit') || 20);
     if (!wallet) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    const entries = await ledgerService.getLedgerForWallet(wallet, Number.isFinite(limit) ? limit : 20);
+    if (!isWalletVerified(wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    const entries = await ledger!.getLedgerForWallet(wallet, Number.isFinite(limit) ? limit : 20);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ entries }));
     return;
@@ -199,39 +307,60 @@ const server = createServer((req, res) => {
 
   if (url.pathname === '/api/user/claim' && req.method === 'POST') {
     setCorsHeaders(res, origin);
-    if (!ledgerService) {
+    if (!ledger) {
       res.writeHead(503);
       res.end(JSON.stringify({ error: "Database not configured" }));
       return;
     }
-    const wallet = url.searchParams.get('wallet');
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
     if (!wallet) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    const result = await ledgerService.claimFreeCoins(wallet);
-    if (!result.ok) {
+    if (!isWalletVerified(wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    if (!checkRateLimit(`${wallet}:claim`, 20)) {
       res.writeHead(429);
-      res.end(JSON.stringify({ error: "cooldown", nextAvailableInMs: result.nextAvailableInMs }));
+      res.end(JSON.stringify({ error: "rate limited" }));
+      return;
+    }
+    const result = await chain.claim(wallet);
+    const payload: any = result.payload;
+    if (payload && payload.ok === false) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "cooldown", nextAvailableInMs: payload.nextAvailableInMs }));
       return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ balance: result.account, nextAvailableInMs: result.nextAvailableInMs }));
+    res.end(JSON.stringify(payload));
     return;
   }
 
   if (url.pathname === '/api/user/convert' && req.method === 'POST') {
     setCorsHeaders(res, origin);
-    if (!ledgerService) {
+    if (!ledger) {
       res.writeHead(503);
       res.end(JSON.stringify({ error: "Database not configured" }));
       return;
     }
-    const wallet = url.searchParams.get('wallet');
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
     if (!wallet) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "wallet param required" }));
+      return;
+    }
+    if (!isWalletVerified(wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    if (!checkRateLimit(`${wallet}:convert`, 60)) {
+      res.writeHead(429);
+      res.end(JSON.stringify({ error: "rate limited" }));
       return;
     }
     let body = '';
@@ -244,9 +373,9 @@ const server = createServer((req, res) => {
         if (!["ticket_x", "ticket_y", "ticket_z"].includes(tier)) throw new Error("invalid tier");
         const qty = Math.max(0, Math.floor(Number(amount) || 0));
         if (qty <= 0) throw new Error("invalid amount");
-        const updated = await ledgerService.convert(wallet, direction, tier, qty);
+        const receipt = await chain.convert(wallet, direction, tier, qty);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ balance: updated }));
+        res.end(JSON.stringify(receipt.payload));
       } catch (err) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: err instanceof Error ? err.message : "invalid request" }));
@@ -257,15 +386,20 @@ const server = createServer((req, res) => {
 
   if (url.pathname === '/api/user/email' && req.method === 'POST') {
     setCorsHeaders(res, origin);
-    if (!ledgerService) {
+    if (!ledger) {
       res.writeHead(503);
       res.end(JSON.stringify({ error: "Database not configured" }));
       return;
     }
-    const wallet = url.searchParams.get('wallet');
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
     if (!wallet) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: "wallet param required" }));
+      return;
+    }
+    if (!verifiedWallets.has(wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
     }
     let body = '';
@@ -275,7 +409,7 @@ const server = createServer((req, res) => {
         const parsed = JSON.parse(body || '{}');
         const email = String(parsed.email || '').trim();
         if (!email) throw new Error("email required");
-        const user = await ledgerService.updateEmail(wallet, email);
+        const user = await ledger!.updateEmail(wallet, email);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ user }));
       } catch (err) {
@@ -304,7 +438,7 @@ const wss = new WebSocketServer({
   maxPayload: env.wsMaxPayload,
 });
 const sessions = new SessionManager();
-const bridge = new WebSocketFSMBridge(sessions);
+const bridge = new WebSocketFSMBridge(sessions, ledger);
 const botManager = new BotManager();
 bridge.setBotManager(botManager);
 const tournamentManager = new TournamentManager(loadTournamentDefinitions(), prisma);
@@ -314,11 +448,11 @@ const tournamentOrchestrator = new TournamentOrchestrator(
   undefined,
   broadcastAll,
   async (tournamentId, payouts) => {
-    if (!ledgerService) return;
+    if (!ledger) return;
     for (const p of payouts) {
       const asset = p.currency === "tickets" ? Asset.TICKET_X : Asset.COINS;
       try {
-        await ledgerService.payout(p.playerId, tournamentId, asset, p.amount, p.position);
+        await ledger.payout(p.playerId, tournamentId, asset, p.amount, p.position);
       } catch (err) {
         logger.warn(`Payout ledger failed for ${p.playerId}`, err);
       }
@@ -330,6 +464,9 @@ bridge.setBustHandler((tableId, playerId) => {
   logger.info(`💥 Detected bust: ${playerId} on ${tableId}`);
   tournamentOrchestrator.handleBust(tableId, playerId);
 });
+
+// Kick off scheduled tournament checks every minute
+setInterval(() => tournamentOrchestrator.checkScheduled(), 60_000);
 
 // Local helper to avoid leaking frontend utilities into server path
 function shortAddr(id?: string): string | undefined {
@@ -354,7 +491,7 @@ type Command = ClientCommand | TournamentClientCommand;
  * Create persistent tables on startup
  */
 function createPersistentTables(): void {
-  TABLES.forEach((tableConfig) => {
+  listTableConfigs().forEach((tableConfig) => {
     const engine = bridge.getEngine(
       tableConfig.id, 
       tableConfig.blinds.small, 
@@ -364,7 +501,8 @@ function createPersistentTables(): void {
     logger.info(`🎯 Created table: ${tableConfig.name} (${tableConfig.blinds.small}/${tableConfig.blinds.big}) - Buy-in: ${tableConfig.buyIn.min}-${tableConfig.buyIn.max} chips [${tableConfig.stakeLevel}]`);
   });
   
-  logger.info(`✅ Created ${TABLES.length} persistent tables across ${new Set(TABLES.map(t => t.stakeLevel)).size} stake levels`);
+  const configs = listTableConfigs();
+  logger.info(`✅ Created ${configs.length} persistent tables across ${new Set(configs.map(t => t.stakeLevel)).size} stake levels`);
 }
 
 /**
@@ -625,11 +763,11 @@ ws.on("message", async (data) => {
         }
         case "TOURNAMENT_STATUS": {
           const tournament = tournamentManager.get(command.tournamentId);
-          if (!tournament) {
-            ws.send(JSON.stringify({
-              tableId: "",
-              type: "ERROR",
-              code: "TOURNAMENT_NOT_FOUND",
+  if (!tournament) {
+    ws.send(JSON.stringify({
+      tableId: "",
+      type: "ERROR",
+      code: "TOURNAMENT_NOT_FOUND",
               msg: `Tournament ${command.tournamentId} not found`,
             } satisfies ServerEvent));
             break;
@@ -654,10 +792,10 @@ ws.on("message", async (data) => {
             break;
           }
           const state = tournamentManager.getState(command.tournamentId);
-          if (ledgerService && state) {
+          if (ledger && state) {
             try {
               const asset = state.buyIn.currency === "tickets" ? Asset.TICKET_X : Asset.COINS;
-              await ledgerService.buyIn(playerId, command.tournamentId, asset, state.buyIn.amount);
+              await ledger.buyIn(playerId, command.tournamentId, asset, state.buyIn.amount);
             } catch (err) {
               tournamentManager.unregisterPlayer(command.tournamentId, playerId);
               ws.send(JSON.stringify({
@@ -703,10 +841,10 @@ ws.on("message", async (data) => {
             break;
           }
           const state = tournamentManager.getState(command.tournamentId);
-          if (ledgerService && state) {
+          if (ledger && state) {
             try {
               const asset = state.buyIn.currency === "tickets" ? Asset.TICKET_X : Asset.COINS;
-              await ledgerService.refund(playerId, command.tournamentId, asset, state.buyIn.amount);
+              await ledger.refund(playerId, command.tournamentId, asset, state.buyIn.amount);
             } catch (err) {
               logger.warn("Refund failed", err);
             }

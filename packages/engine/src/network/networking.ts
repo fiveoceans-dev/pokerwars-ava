@@ -8,6 +8,12 @@ export interface LobbyTable {
   maxPlayers: number;
   smallBlind: number;
   bigBlind: number;
+  stakeLevel?: string;
+  buyIn?: {
+    min: number;
+    max: number;
+    default: number;
+  };
 }
 
 export type BlindType = "SMALL" | "BIG";
@@ -27,10 +33,9 @@ export type ServerEvent =
       tournament: any;
     }
   | {
-      tableId: "";
+      tableId: string;
       type: "TOURNAMENT_SEAT";
       tournamentId: string;
-      tableId: string;
       seatIndex: number;
       playerId: string;
     }

@@ -94,9 +94,6 @@ export const Header = () => {
             TICKETS X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
           </Link>
           <WalletConnectButton />
-          {walletSyncError && (
-            <span className="text-xs text-red-400 max-w-xs">{walletSyncError}</span>
-          )}
         </div>
       </div>
     </header>

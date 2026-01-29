@@ -1340,7 +1340,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       }
     },
 
-    joinSeat: async (seatIdx: number, tableId?: string) => {
+    joinSeat: async (seatIdx: number, tableId?: string, chips?: number) => {
       const currentTableId = tableId || get().tableId;
       console.log(
         `🪑 Attempting to join seat ${seatIdx} at table ${currentTableId}`,
@@ -1379,14 +1379,14 @@ export const useGameStore = create<GameStoreState>((set, get) => {
           type: "SIT",
           tableId: currentTableId,
           seat: seatIdx,
-          buyIn: 10000, // Always $10k per seat
+          chips,
           playerId: currentWalletId, // Send client wallet as authoritative
           nickname: shortAddress(currentWalletId), // Provide display name
         } as ClientCommand;
         console.log("📤 Sending SIT command:", {
           tableId: currentTableId,
           seat: seatIdx,
-          buyIn: 10000,
+          chips,
           playerId: currentWalletId?.slice(0, 10) + "...",
         });
         socket.send(JSON.stringify(cmd));

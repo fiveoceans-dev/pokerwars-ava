@@ -14,6 +14,7 @@ fi
 : "${REGION:?Missing REGION}"
 : "${REPO_NAME:?Missing REPO_NAME}"
 : "${WEB_SERVICE_NAME:?Missing WEB_SERVICE_NAME}"
+: "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID}"
 
 if [[ -z "${NEXT_PUBLIC_APP_URL:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
   NEXT_PUBLIC_APP_URL="$WEB_PUBLIC_URL"
@@ -45,11 +46,8 @@ ENV_VARS=(
   "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}"
   "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
   "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
+  "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
 )
-
-if [[ -n "${WALLETCONNECT_PROJECT_ID:-}" ]]; then
-  ENV_VARS+=("WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}")
-fi
 
 join_env_vars() {
   local IFS=';'
@@ -73,6 +71,7 @@ gcloud run deploy "$WEB_SERVICE_NAME" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
+  --timeout=1800 \
   --set-env-vars="^;^$(join_env_vars)"
 
 echo "Deployed web service: $WEB_SERVICE_NAME"

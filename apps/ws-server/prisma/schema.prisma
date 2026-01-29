@@ -72,12 +72,18 @@ enum AccountOwnerType {
   TOURNAMENT
 }
 
+enum GameTemplateType {
+  CASH
+  SNG
+  MTT
+}
+
 model User {
-  id             String   @id @default(cuid())
-  walletAddress  String?  @unique
-  email          String?  @unique
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  walletAddress String?  @unique
+  email         String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Account {
@@ -91,6 +97,10 @@ model Account {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
+  ledgerFrom LedgerTransaction[] @relation("LedgerFrom")
+  ledgerTo   LedgerTransaction[] @relation("LedgerTo")
+  escrow     TournamentEscrow?
+
   @@unique([ownerType, ownerId])
 }
 
@@ -102,6 +112,8 @@ model LedgerTransaction {
   type          LedgerType
   fromAccountId String?
   toAccountId   String?
+  fromAccount   Account?   @relation("LedgerFrom", fields: [fromAccountId], references: [id])
+  toAccount     Account?   @relation("LedgerTo", fields: [toAccountId], references: [id])
   asset         Asset
   amount        Int
   referenceType String
@@ -115,70 +127,71 @@ model LedgerTransaction {
 }
 
 model Treasury {
-  id                   String   @id
-  coin_supply_total    BigInt
+  id                    String   @id
+  coin_supply_total     BigInt
   coin_supply_remaining BigInt
-  ticket_x_issued      Int      @default(0)
-  ticket_y_issued      Int      @default(0)
-  ticket_z_issued      Int      @default(0)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  ticket_x_issued       Int      @default(0)
+  ticket_y_issued       Int      @default(0)
+  ticket_z_issued       Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model TournamentEscrow {
   tournamentId String   @id
   accountId    String   @unique
+  account      Account  @relation(fields: [accountId], references: [id])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
 
 model Tournament {
-  id              String              @id
-  name            String
-  type            TournamentType
-  startMode       TournamentStartMode
-  startAt         DateTime?
-  lateRegMinutes  Int?
-  status          TournamentStatus    @default(REGISTERING)
-  maxPlayers      Int
-  startingStack   Int
-  blindScheduleId String
-  buyInCurrency   BuyInCurrency
-  buyInAmount     Int
-  payoutMode      PayoutMode
-  payoutTopX      Int?
+  id                String              @id
+  name              String
+  type              TournamentType
+  startMode         TournamentStartMode
+  startAt           DateTime?
+  lateRegMinutes    Int?
+  status            TournamentStatus    @default(REGISTERING)
+  maxPlayers        Int
+  startingStack     Int
+  blindScheduleId   String
+  buyInCurrency     BuyInCurrency
+  buyInAmount       Int
+  payoutMode        PayoutMode
+  payoutTopX        Int?
   payoutTicketCount Int?
-  tableConfigId   String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  tableConfigId     String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
-  levels          TournamentLevel[]
-  registrations   TournamentRegistration[]
-  tables          TournamentTable[]
-  events          TournamentEvent[]
-  payouts         TournamentPayout[]
+  levels        TournamentLevel[]
+  registrations TournamentRegistration[]
+  tables        TournamentTable[]
+  events        TournamentEvent[]
+  payouts       TournamentPayout[]
 }
 
 model TournamentLevel {
-  id               String    @id @default(cuid())
-  tournament       Tournament @relation(fields: [tournamentId], references: [id])
-  tournamentId     String
-  levelIndex       Int
-  smallBlind       Int
-  bigBlind         Int
-  ante             Int       @default(0)
-  durationSeconds  Int
+  id              String     @id @default(cuid())
+  tournament      Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId    String
+  levelIndex      Int
+  smallBlind      Int
+  bigBlind        Int
+  ante            Int        @default(0)
+  durationSeconds Int
 
   @@unique([tournamentId, levelIndex])
 }
 
 model TournamentRegistration {
-  id           String              @id @default(cuid())
-  tournament   Tournament          @relation(fields: [tournamentId], references: [id])
+  id           String             @id @default(cuid())
+  tournament   Tournament         @relation(fields: [tournamentId], references: [id])
   tournamentId String
   playerId     String
-  status       RegistrationStatus  @default(REGISTERED)
-  registeredAt DateTime            @default(now())
+  status       RegistrationStatus @default(REGISTERED)
+  registeredAt DateTime           @default(now())
   tableId      String?
   seatIndex    Int?
   stack        Int?
@@ -189,29 +202,52 @@ model TournamentRegistration {
 
 model TournamentTable {
   id            String     @id @default(cuid())
-  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
+  tournament    Tournament @relation(fields: [tournamentId], references: [id])
   tournamentId  String
-  engineTableId String      @unique // ID used by the EventEngine
-  status        String      @default("ACTIVE")
-  createdAt     DateTime    @default(now())
+  engineTableId String     @unique // ID used by the EventEngine
+  status        String     @default("ACTIVE")
+  createdAt     DateTime   @default(now())
   closedAt      DateTime?
 }
 
 model TournamentEvent {
-  id            String     @id @default(cuid())
-  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
-  tournamentId  String
-  type          String
-  payload       Json
-  createdAt     DateTime    @default(now())
+  id           String     @id @default(cuid())
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  type         String
+  payload      Json
+  createdAt    DateTime   @default(now())
 }
 
 model TournamentPayout {
-  id            String     @id @default(cuid())
-  tournament    Tournament  @relation(fields: [tournamentId], references: [id])
-  tournamentId  String
-  playerId      String
-  amount        Int
-  currency      BuyInCurrency
-  createdAt     DateTime    @default(now())
+  id           String        @id @default(cuid())
+  tournament   Tournament    @relation(fields: [tournamentId], references: [id])
+  tournamentId String
+  playerId     String
+  amount       Int
+  currency     BuyInCurrency
+  createdAt    DateTime      @default(now())
+}
+
+model GameTemplate {
+  id                String               @id
+  name              String
+  type              GameTemplateType
+  maxPlayers        Int
+  smallBlind        Int
+  bigBlind          Int
+  minBuyIn          Int
+  maxBuyIn          Int
+  defaultBuyIn      Int
+  currency          Asset                @default(COINS)
+  startMode         TournamentStartMode?
+  startAt           DateTime?
+  lateRegMinutes    Int?
+  startingStack     Int?
+  blindScheduleId   String?
+  payoutMode        PayoutMode?
+  payoutTopX        Int?
+  payoutTicketCount Int?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 }

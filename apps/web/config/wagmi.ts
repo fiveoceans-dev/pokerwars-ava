@@ -3,10 +3,13 @@ import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { defineChain, http, type Chain } from "viem";
 import { createConfig, cookieStorage, createStorage } from "wagmi";
 
-const walletConnectProjectId =
+export const walletConnectProjectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
   process.env.WALLETCONNECT_PROJECT_ID ||
-  "demo-placeholder-project-id";
+  "";
+
+export const isWalletConnectConfigured =
+  !!walletConnectProjectId && walletConnectProjectId !== "demo-placeholder-project-id";
 
 const metadata = {
   name: "PokerWars",
@@ -136,6 +139,10 @@ const globalScope = globalThis as typeof globalThis & Web3ModalGlobalState;
 
 export function ensureAppKitReady(): AppKit | null {
   if (typeof window === "undefined") return;
+  if (!isWalletConnectConfigured) {
+    console.warn("WalletConnect project ID missing; AppKit disabled.");
+    return null;
+  }
   if (globalScope.__hyperPokerWeb3ModalReady__ && globalScope.__hyperPokerAppKit__) {
     return globalScope.__hyperPokerAppKit__;
   }

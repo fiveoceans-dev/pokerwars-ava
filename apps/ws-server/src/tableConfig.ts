@@ -18,142 +18,83 @@ export interface TableConfig {
     max: number; // In chips  
     default: number; // In chips
   };
-  stakeLevel: 'micro' | 'low' | 'mid' | 'high' | 'whale';
+  stakeLevel: 'micro' | 'low' | 'mid' | 'high' | 'whale' | 'custom';
 }
 
 const DEFAULT_MAX_PLAYERS = 9;
 
 /**
- * Calculate buy-in limits based on big blind
- * Standard poker buy-in rules:
- * - Minimum: 20 BB
- * - Maximum: 200 BB
- * - Default: Maximum allowed for competitive play
+ * Cash-table buy-in policy (aligned with common online rooms: ~40–100 BB)
+ * - Minimum: 40 BB (prevents ultra-short stacks)
+ * - Maximum: 100 BB (standard full stack)
+ * - Default: Max (encourages full-stack play)
  */
 export function calculateBuyInLimits(bigBlind: number): { min: number; max: number; default: number } {
-  const min = bigBlind * 20;  // 20 BB minimum
-  const max = bigBlind * 200; // 200 BB maximum
-  const defaultBuyIn = max;   // Start with max for competitive play
-  
-  return { min, max, default: defaultBuyIn };
+  const min = bigBlind * 40;
+  const max = bigBlind * 100;
+  return { min, max, default: max };
 }
 
 /**
  * All available table configurations
  */
 export const TABLES: TableConfig[] = [
-  // Micro Stakes - Perfect for learning and casual play
   {
-    id: "micro-1",
-    name: "Micro Stakes 1",
+    id: "cash-1-2",
+    name: "1/2 NLH",
     blinds: { small: 1, big: 2 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(2), // 40-400 chips
-    stakeLevel: 'micro'
+    buyIn: calculateBuyInLimits(2), // 80–200 chips
+    stakeLevel: "low",
   },
   {
-    id: "micro-2", 
-    name: "Micro Stakes 2",
-    blinds: { small: 1, big: 2 },
+    id: "cash-2-5",
+    name: "2/5 NLH",
+    blinds: { small: 2, big: 5 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(2),
-    stakeLevel: 'micro'
+    buyIn: calculateBuyInLimits(5), // 200–500 chips
+    stakeLevel: "mid",
   },
-  
-  // Low Stakes - Standard entry level
   {
-    id: "low-1",
-    name: "Low Stakes 1", 
+    id: "cash-5-10",
+    name: "5/10 NLH",
     blinds: { small: 5, big: 10 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(10), // 200-2,000 chips
-    stakeLevel: 'low'
+    buyIn: calculateBuyInLimits(10), // 400–1,000 chips
+    stakeLevel: "high",
   },
   {
-    id: "low-2",
-    name: "Low Stakes 2",
-    blinds: { small: 5, big: 10 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(10),
-    stakeLevel: 'low'
-  },
-  {
-    id: "low-6max-1",
-    name: "Low Stakes 6-Max",
-    blinds: { small: 5, big: 10 },
-    maxPlayers: 6,
-    buyIn: calculateBuyInLimits(10),
-    stakeLevel: 'low'
-  },
-  {
-    id: "low-hu-1",
-    name: "Low Stakes Heads-Up",
-    blinds: { small: 5, big: 10 },
-    maxPlayers: 2,
-    buyIn: calculateBuyInLimits(10),
-    stakeLevel: 'low'
-  },
-  
-  // Mid Stakes - Serious players
-  {
-    id: "mid-1",
-    name: "Mid Stakes 1",
-    blinds: { small: 25, big: 50 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(50), // 1,000-10,000 chips
-    stakeLevel: 'mid'
-  },
-  {
-    id: "mid-2", 
-    name: "Mid Stakes 2", 
-    blinds: { small: 25, big: 50 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(50),
-    stakeLevel: 'mid'
-  },
-  
-  // High Stakes - Experienced players
-  {
-    id: "high-1",
-    name: "High Stakes 1",
+    id: "cash-50-100",
+    name: "50/100 NLH",
     blinds: { small: 50, big: 100 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(100), // 2,000-20,000 chips  
-    stakeLevel: 'high'
+    buyIn: calculateBuyInLimits(100), // 4,000–10,000 chips
+    stakeLevel: "whale",
   },
-  {
-    id: "high-2",
-    name: "High Stakes 2",
-    blinds: { small: 50, big: 100 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(100),
-    stakeLevel: 'high'
-  },
-  
-  // High Roller - Elite level
-  {
-    id: "whale-1",
-    name: "👑 Whale 1",
-    blinds: { small: 1000, big: 2000 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(2000), // 40,000-400,000 chips
-    stakeLevel: 'whale'
-  },
-  {
-    id: "whale-2", 
-    name: "👑 Whale 2",
-    blinds: { small: 1000, big: 2000 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(2000),
-    stakeLevel: 'whale'
-  }
 ];
+
+let runtimeTables: TableConfig[] = TABLES;
+
+/**
+ * Override runtime table configs (e.g., load from DB)
+ */
+export function setTableConfigs(configs: TableConfig[]) {
+  runtimeTables = configs;
+}
+
+export function listTableConfigs(): TableConfig[] {
+  return runtimeTables;
+}
 
 /**
  * Get table configuration by ID
  */
 export function getTableConfig(tableId: string): TableConfig | undefined {
-  return TABLES.find(table => table.id === tableId);
+  // Support dynamic/replicated tables by matching prefix before trailing instance suffix (e.g., "-n")
+  const direct = runtimeTables.find((table) => table.id === tableId);
+  if (direct) return direct;
+  const baseId = tableId.replace(/-[0-9]+$/, "");
+  return runtimeTables.find((table) => table.id === baseId);
 }
 
 /**

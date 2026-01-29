@@ -16,6 +16,9 @@ export function WalletConnectButton() {
   const [isMounted, setIsMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuContainer, setMenuContainer] = useState<HTMLDivElement | null>(null);
+  const isConfigured = typeof process !== "undefined"
+    ? Boolean(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || process.env.WALLETCONNECT_PROJECT_ID)
+    : true;
 
   useEffect(() => {
     setIsMounted(true);
@@ -79,6 +82,7 @@ export function WalletConnectButton() {
           aria-expanded={menuOpen}
           aria-haspopup="menu"
           disabled={isConnecting}
+          aria-disabled={!isConfigured}
         >
           {isConnecting ? "Confirm…" : label}
         </button>

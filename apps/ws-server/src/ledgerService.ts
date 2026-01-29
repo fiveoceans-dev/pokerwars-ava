@@ -3,8 +3,8 @@ import crypto from "crypto";
 
 const TREASURY_ID = "TREASURY";
 const COIN_SUPPLY_TOTAL = 5_000_000_000n;
-const FREE_CLAIM_AMOUNT = 500;
-const FREE_CLAIM_COOLDOWN_MS = 5 * 60 * 1000;
+const FREE_CLAIM_AMOUNT = 1_000;
+const FREE_CLAIM_COOLDOWN_MS = 10 * 60 * 60 * 1000; // 10 hours
 const BUY_RATE = 250;  // coins per ticket (buy)
 const SELL_RATE = 220; // coins per ticket (sell)
 
@@ -287,69 +287,84 @@ export class LedgerService {
     referenceId: string;
     metadata?: Record<string, any>;
   }) {
-    return this.prisma.$transaction(async (tx) => {
-      const last = await tx.ledgerTransaction.findFirst({ orderBy: { seq: "desc" } });
-      const seq = (last?.seq ?? 0) + 1;
-      const prevHash = last?.hash ?? null;
-      const hash = computeHash({
-        seq,
-        prevHash,
-        ...params,
-      });
-
-      let fromAccount = null;
-      let toAccount = null;
-
-      if (params.fromAccountId) {
-        fromAccount = await tx.account.findUnique({ where: { id: params.fromAccountId } });
-        if (!fromAccount) throw new Error("from account missing");
-        const field = assetToField(params.asset);
-        if ((fromAccount as any)[field] < params.amount) {
-          throw new Error("insufficient balance");
-        }
-        fromAccount = await tx.account.update({
-          where: { id: params.fromAccountId },
-          data: { [field]: { decrement: params.amount } } as any,
-        });
-      }
-
-      if (params.toAccountId) {
-        toAccount = await tx.account.update({
-          where: { id: params.toAccountId },
-          data: { [assetToField(params.asset)]: { increment: params.amount } } as any,
-        });
-      }
-
-      const entry = await tx.ledgerTransaction.create({
-        data: {
-          seq,
-          prevHash,
-          hash,
-          type: params.type,
-          fromAccountId: params.fromAccountId,
-          toAccountId: params.toAccountId,
-          asset: params.asset,
-          amount: params.amount,
-          referenceType: params.referenceType,
-          referenceId: params.referenceId,
-          metadata: params.metadata ?? {},
-        },
-      });
-
-      if (params.asset === Asset.COINS) {
-        const treasuryAccount = await tx.account.findUnique({
-          where: { ownerType_ownerId: { ownerType: AccountOwnerType.TREASURY, ownerId: TREASURY_ID } },
-        });
-        if (treasuryAccount) {
-          await tx.treasury.update({
-            where: { id: TREASURY_ID },
-            data: { coin_supply_remaining: BigInt(treasuryAccount.coins) },
+    const maxRetries = 3;
+    let attempt = 0;
+    while (true) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const last = await tx.ledgerTransaction.findFirst({
+            orderBy: { seq: "desc" },
+            select: { seq: true, hash: true },
           });
-        }
-      }
+          const seq = (last?.seq ?? 0) + 1;
+          const prevHash = last?.hash ?? null;
+          const hash = computeHash({
+            seq,
+            prevHash,
+            ...params,
+          });
 
-      return { entry, from: fromAccount, to: toAccount };
-    });
+          let fromAccount = null;
+          let toAccount = null;
+
+          if (params.fromAccountId) {
+            fromAccount = await tx.account.findUnique({ where: { id: params.fromAccountId } });
+            if (!fromAccount) throw new Error("from account missing");
+            const field = assetToField(params.asset);
+            if ((fromAccount as any)[field] < params.amount) {
+              throw new Error("insufficient balance");
+            }
+            fromAccount = await tx.account.update({
+              where: { id: params.fromAccountId },
+              data: { [field]: { decrement: params.amount } } as any,
+            });
+          }
+
+          if (params.toAccountId) {
+            toAccount = await tx.account.update({
+              where: { id: params.toAccountId },
+              data: { [assetToField(params.asset)]: { increment: params.amount } } as any,
+            });
+          }
+
+          const entry = await tx.ledgerTransaction.create({
+            data: {
+              seq,
+              prevHash,
+              hash,
+              type: params.type,
+              fromAccountId: params.fromAccountId,
+              toAccountId: params.toAccountId,
+              asset: params.asset,
+              amount: params.amount,
+              referenceType: params.referenceType,
+              referenceId: params.referenceId,
+              metadata: params.metadata ?? {},
+            },
+          });
+
+          if (params.asset === Asset.COINS) {
+            const treasuryAccount = await tx.account.findUnique({
+              where: { ownerType_ownerId: { ownerType: AccountOwnerType.TREASURY, ownerId: TREASURY_ID } },
+            });
+            if (treasuryAccount) {
+              await tx.treasury.update({
+                where: { id: TREASURY_ID },
+                data: { coin_supply_remaining: BigInt(treasuryAccount.coins) },
+              });
+            }
+          }
+
+          return { entry, from: fromAccount, to: toAccount };
+        });
+      } catch (err: any) {
+        if (err?.code === "P2002" && String(err?.meta?.target || "").includes("seq") && attempt < maxRetries) {
+          attempt += 1;
+          continue; // retry on seq unique constraint
+        }
+        throw err;
+      }
+    }
   }
 }
 

@@ -9,7 +9,7 @@ import {
   type NetworkConfig,
   type SupportedNetworkId,
 } from "~~/config/networks";
-import { ensureAppKitReady } from "~~/config/wagmi";
+import { ensureAppKitReady, isWalletConnectConfigured } from "~~/config/wagmi";
 import { shortAddress } from "~~/utils/address";
 
 const STORAGE_KEYS = {
@@ -79,7 +79,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { disconnectAsync } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
   const appKit = typeof window !== "undefined" ? ensureAppKitReady() : null;
-  const open = appKit?.open ?? (async () => {});
+  const open = useCallback(async () => {
+    if (!appKit) {
+      setError("Wallet connect unavailable. Missing project ID?");
+      return;
+    }
+    try {
+      await appKit.open();
+    } catch (err) {
+      console.error("Wallet connect failed", err);
+      setError("Wallet connect failed. Check network and project ID.");
+    }
+  }, [appKit]);
 
   const [mode, setMode] = useState<WalletMode>(() => {
     if (typeof window === "undefined") return null;
@@ -135,6 +146,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     resetError();
+    if (!isWalletConnectConfigured) {
+      setError("Wallet connect unavailable: set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.");
+      return;
+    }
     try {
       await open({ view: "Connect" });
     } catch (err) {

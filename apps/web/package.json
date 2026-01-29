@@ -9,7 +9,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check-types": "tsc --noEmit --incremental",
-    "postinstall": "shx cp -n .env.example .env",
+    "postinstall": "shx test -f .env.example && shx cp -n .env.example .env || true",
     "vercel": "vercel",
     "ws-server": "ts-node server/index.ts"
   },

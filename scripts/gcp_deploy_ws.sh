@@ -3,27 +3,21 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.gcp}"
-ALT_ENV_FILES=("$ROOT_DIR/.env" "$ROOT_DIR/apps/web/.env")
+ENV_FILES=(
+  "$ROOT_DIR/apps/web/.env"
+  "$ROOT_DIR/.env.gcp"
+  "$ENV_FILE"
+  "$ROOT_DIR/.env"
+)
 
-load_env() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
+for f in "${ENV_FILES[@]}"; do
+  if [[ -f "$f" ]]; then
     set -a
-    . "$file"
+    . "$f"
     set +a
-    echo "Loaded env from $file"
-    return 0
+    echo "Loaded env from $f"
   fi
-  return 1
-}
-
-if ! load_env "$ENV_FILE"; then
-  for f in "${ALT_ENV_FILES[@]}"; do
-    if load_env "$f"; then
-      break
-    fi
-  done
-fi
+done
 
 : "${PROJECT_ID:?Missing PROJECT_ID}"
 : "${REGION:?Missing REGION}"
@@ -37,6 +31,19 @@ if [[ -z "${ALLOWED_WS_ORIGINS:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
 fi
 
 : "${ALLOWED_WS_ORIGINS:?Missing ALLOWED_WS_ORIGINS or WEB_PUBLIC_URL}"
+
+# Normalize comma-separated origins (take first entry)
+if [[ "${ALLOWED_WS_ORIGINS}" == *","* ]]; then
+  ALLOWED_WS_ORIGINS="${ALLOWED_WS_ORIGINS%%,*}"
+fi
+
+# Normalize comma-separated Next.js URLs if present (from web env)
+if [[ "${NEXT_PUBLIC_WS_URL:-}" == *","* ]]; then
+  NEXT_PUBLIC_WS_URL="${NEXT_PUBLIC_WS_URL%%,*}"
+fi
+if [[ "${NEXT_PUBLIC_API_URL:-}" == *","* ]]; then
+  NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL%%,*}"
+fi
 
 WS_PORT="${WS_PORT:-8080}"
 
@@ -75,7 +82,9 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
-gcloud builds submit "$ROOT_DIR" --tag "$IMAGE_URI"
+gcloud builds submit "$ROOT_DIR" \
+  --config "$ROOT_DIR/cloudbuild.yaml" \
+  --substitutions=_IMAGE_URI="$IMAGE_URI",_NEXT_PUBLIC_APP_URL="$NEXT_PUBLIC_APP_URL",_NEXT_PUBLIC_WS_URL="$NEXT_PUBLIC_WS_URL",_NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL",_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID",_WALLETCONNECT_PROJECT_ID="$WALLETCONNECT_PROJECT_ID"
 
 gcloud run deploy "$WS_SERVICE_NAME" \
   --image "$IMAGE_URI" \

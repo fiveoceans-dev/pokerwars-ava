@@ -39,56 +39,7 @@ function deriveApiBase(): string {
   return "http://localhost:8099";
 }
 
-const FALLBACK_TOURNAMENTS: Tournament[] = [
-  {
-    id: "mtt-headsup-20",
-    name: "Evening Heads-Up MTT",
-    type: "mtt",
-    startMode: "scheduled",
-    startAt: "2099-01-01T19:00:00Z",
-    buyIn: { currency: "chips", amount: 2000 },
-    lateRegMinutes: 60,
-    maxPlayers: 64,
-    registeredCount: 0,
-    startingStack: 10000,
-    status: "scheduled",
-  },
-  {
-    id: "mtt-fullring-21",
-    name: "Evening Full Ring MTT",
-    type: "mtt",
-    startMode: "scheduled",
-    startAt: "2099-01-01T21:00:00Z",
-    buyIn: { currency: "chips", amount: 5000 },
-    lateRegMinutes: 120,
-    maxPlayers: 540,
-    registeredCount: 0,
-    startingStack: 15000,
-    status: "scheduled",
-  },
-  {
-    id: "stt-9max",
-    name: "Sit & Go (9-max)",
-    type: "stt",
-    startMode: "full",
-    buyIn: { currency: "chips", amount: 100 },
-    maxPlayers: 9,
-    registeredCount: 0,
-    startingStack: 5000,
-    status: "registering",
-  },
-  {
-    id: "stt-6max",
-    name: "Sit & Go (6-max)",
-    type: "stt",
-    startMode: "full",
-    buyIn: { currency: "chips", amount: 100 },
-    maxPlayers: 6,
-    registeredCount: 0,
-    startingStack: 5000,
-    status: "registering",
-  },
-];
+const FALLBACK_TOURNAMENTS: Tournament[] = [];
 
 export function useTournaments() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -112,18 +63,18 @@ export function useTournaments() {
         const list: Tournament[] = Array.isArray(json.tournaments)
           ? json.tournaments
           : [];
-        setTournaments(list.length > 0 ? list : FALLBACK_TOURNAMENTS);
+        setTournaments(list);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           return;
         }
         if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
-          setTournaments(FALLBACK_TOURNAMENTS);
+          setTournaments([]);
           return;
         }
         console.error("Failed to load tournaments", err);
         setError(err instanceof Error ? err.message : "Failed to load tournaments");
-        setTournaments(FALLBACK_TOURNAMENTS);
+        setTournaments([]);
       } finally {
         setLoading(false);
       }

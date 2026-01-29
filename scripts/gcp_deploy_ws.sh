@@ -73,7 +73,16 @@ join_env_vars() {
 }
 
 sanitize() {
-  echo "$1" | tr -d '"\r\n'
+  echo "$1" | tr -d "\"'\r\n"
+}
+
+ensure_nonempty() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    echo "Missing required value for $name" >&2
+    exit 1
+  fi
 }
 
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
@@ -86,7 +95,26 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
-SUBS="_IMAGE_URI=$(sanitize "$IMAGE_URI"),_BUILD_TARGET=ws-server,_NEXT_PUBLIC_APP_URL=$(sanitize "$NEXT_PUBLIC_APP_URL"),_NEXT_PUBLIC_WS_URL=$(sanitize "$NEXT_PUBLIC_WS_URL"),_NEXT_PUBLIC_API_URL=$(sanitize "$NEXT_PUBLIC_API_URL"),_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=$(sanitize "$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID"),_WALLETCONNECT_PROJECT_ID=$(sanitize "$WALLETCONNECT_PROJECT_ID")"
+SAN_APP_URL="$(sanitize "$NEXT_PUBLIC_APP_URL")"
+SAN_WS_URL="$(sanitize "$NEXT_PUBLIC_WS_URL")"
+SAN_API_URL="$(sanitize "$NEXT_PUBLIC_API_URL")"
+SAN_WC_PUBLIC="$(sanitize "$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID")"
+SAN_WC="$(sanitize "$WALLETCONNECT_PROJECT_ID")"
+
+# Resolve variable references like $WEB_PUBLIC_URL in env (basic replacement)
+if [[ "${SAN_APP_URL}" == *"\$WEB_PUBLIC_URL"* ]]; then
+  SAN_APP_URL="${SAN_APP_URL/\$WEB_PUBLIC_URL/${WEB_PUBLIC_URL%%,*}}"
+fi
+if [[ "${SAN_API_URL}" == *"\$WS_PUBLIC_URL"* ]]; then
+  SAN_API_URL="${SAN_API_URL/\$WS_PUBLIC_URL/${WS_PUBLIC_URL%%,*}}"
+fi
+
+ensure_nonempty "_NEXT_PUBLIC_APP_URL" "$SAN_APP_URL"
+ensure_nonempty "_NEXT_PUBLIC_WS_URL" "$SAN_WS_URL"
+ensure_nonempty "_NEXT_PUBLIC_API_URL" "$SAN_API_URL"
+ensure_nonempty "_WALLETCONNECT_PROJECT_ID" "$SAN_WC"
+
+SUBS="_IMAGE_URI=$(sanitize "$IMAGE_URI"),_BUILD_TARGET=ws-server,_NEXT_PUBLIC_APP_URL=$SAN_APP_URL,_NEXT_PUBLIC_WS_URL=$SAN_WS_URL,_NEXT_PUBLIC_API_URL=$SAN_API_URL,_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=$SAN_WC_PUBLIC,_WALLETCONNECT_PROJECT_ID=$SAN_WC"
 
 gcloud builds submit "$ROOT_DIR" \
   --config "$ROOT_DIR/cloudbuild.yaml" \

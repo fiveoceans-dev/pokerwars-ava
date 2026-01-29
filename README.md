@@ -75,7 +75,7 @@ docker compose -f docker-compose.prod.yml up --build
 ```
 
 Defaults:
-- Web: http://localhost:8080
+- Web: http://localhost:8090
 - WS: ws://localhost:8099
 
 Override with environment variables if needed (e.g. `NEXT_PUBLIC_WS_URL`, `ALLOWED_WS_ORIGINS`).
@@ -87,25 +87,25 @@ We deploy both services from the same image (root `Dockerfile`) and select the r
 1) Copy the template and fill values:
 
 ```bash
-cp .env.gcp.example .env.gcp
+cp .env.example .env
 ```
 
 2) Deploy the WebSocket server first (sets long timeout for WS):
 
 ```bash
-./scripts/deploy/gcp/gcp_deploy_ws.sh
+./scripts/gcp_deploy_ws.sh
 ```
 
 3) Deploy the web app:
 
 ```bash
-./scripts/deploy/gcp/gcp_deploy_web.sh
+./scripts/gcp_deploy_web.sh
 ```
 
 Notes:
 - `ALLOWED_WS_ORIGINS` must include the web app URL.
 - `NEXT_PUBLIC_WS_URL` should use `wss://` and `NEXT_PUBLIC_API_URL` should use `https://.../api`.
-- Cloud Run injects `PORT=8080`; the scripts set it explicitly for both services.
+- Cloud Run injects `PORT=8080`; the scripts do not set `PORT` (reserved by Cloud Run).
 
 ## Build and run
 
@@ -134,7 +134,7 @@ SERVICE=ws-server npm start
 
 - Ledger + accounts + treasury act as a “vanilla blockchain” (see `docs/vanilla-blockchain.md`).
 - Treasury total supply: 5,000,000,000 coins. Tickets: `ticket_x`, `ticket_y`, `ticket_z`.
-- Free claim: 500 coins every 5 minutes (`POST /api/user/claim`).
+- Free claim: 1,000 coins every 10 hours (`POST /api/user/claim`).
 - Conversions: coins ↔ tickets with buy/sell rates (server enforced).
 - Buy-ins, refunds, payouts flow through tournament escrow accounts and are recorded in the ledger.
 
@@ -154,9 +154,9 @@ Details in `docs/mtt_stt.md` and `docs/vanilla-blockchain.md`.
 
 ## GCP deploy (main repo)
 
-- Use root `scripts/deploy/gcp/gcp_deploy_ws.sh` and `gcp_deploy_web.sh`.
+- Use root `scripts/gcp_deploy_ws.sh` and `scripts/gcp_deploy_web.sh`.
 - Required env: `PROJECT_ID`, `REGION`, `REPO_NAME`, `WS_SERVICE_NAME`, `WEB_SERVICE_NAME`, `DATABASE_URL`, `ALLOWED_WS_ORIGINS` (or `WEB_PUBLIC_URL`), plus `NEXT_PUBLIC_*` for the web.
 - Both services build from the root `Dockerfile`; select service via `SERVICE` env at runtime.
-- See `.env.gcp.example` for a filled template.
+- See `.env.example` for a template.
 
 `gcp-project/` contains a separate minimal template (Next.js + Fastify) for reference only; production deploys should use the root scripts above.

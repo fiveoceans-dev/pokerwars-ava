@@ -59,6 +59,17 @@ export NEXT_PUBLIC_WS_URL="${NEXT_PUBLIC_WS_URL:-ws://localhost:8099}"
 export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:8099/api}"
 export ALLOWED_WS_ORIGINS="${ALLOWED_WS_ORIGINS:-http://localhost:8090}"
 
+# Normalize comma-separated URLs to first entry for build args
+if [[ "${NEXT_PUBLIC_APP_URL}" == *","* ]]; then
+  NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL%%,*}"
+fi
+if [[ "${NEXT_PUBLIC_WS_URL}" == *","* ]]; then
+  NEXT_PUBLIC_WS_URL="${NEXT_PUBLIC_WS_URL%%,*}"
+fi
+if [[ "${NEXT_PUBLIC_API_URL}" == *","* ]]; then
+  NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL%%,*}"
+fi
+
 echo "Using compose file: $COMPOSE_FILE"
 echo "Starting containers (docker compose up --build ${DETACH_FLAG[*]-})..."
 

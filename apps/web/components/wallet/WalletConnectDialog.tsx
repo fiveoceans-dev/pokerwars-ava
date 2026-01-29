@@ -323,7 +323,7 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
       modalId="connect-modal"
       open={open}
       onClose={closeModal}
-      className="bg-black/80 text-white border border-white/10"
+      className="bg-black text-white border border-white/10"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-xl text-white">Connect</h3>

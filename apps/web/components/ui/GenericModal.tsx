@@ -49,7 +49,7 @@ export default function GenericModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${modalId}-title`}
-      className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm px-4 py-6"
+      className="fixed inset-0 z-50 grid place-items-center bg-black px-4 py-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();

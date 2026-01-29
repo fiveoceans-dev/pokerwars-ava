@@ -30,7 +30,7 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
   const totalPrize = item.totalPrize ?? item.price * item.registered;
   const distribution = calculatePrizeDistribution(item.price, item.registered);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
       <div className="bg-primary p-4 rounded-md w-96 max-w-full space-y-4 relative">
         <button
           aria-label="Close"

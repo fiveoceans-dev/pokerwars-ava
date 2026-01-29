@@ -2,27 +2,21 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.gcp}"
-ENV_FILES=(
-  "$ROOT_DIR/apps/web/.env"
-  "$ROOT_DIR/.env.gcp"
-  "$ENV_FILE"
-  "$ROOT_DIR/.env"
-)
+ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 
-for f in "${ENV_FILES[@]}"; do
-  if [[ -f "$f" ]]; then
-    set -a
-    . "$f"
-    set +a
-    echo "Loaded env from $f"
-  fi
-done
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  . "$ENV_FILE"
+  set +a
+  echo "Loaded env from $ENV_FILE"
+fi
 
 : "${PROJECT_ID:?Missing PROJECT_ID}"
 : "${REGION:?Missing REGION}"
 : "${REPO_NAME:?Missing REPO_NAME}"
-: "${DATABASE_URL:?Missing DATABASE_URL}"
+DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
+: "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL (or DATABASE_URL_CLOUD)}"
+: "${DB_INSTANCE:?Missing DB_INSTANCE (Cloud SQL instance name)}"
 
 JOB_NAME="${JOB_NAME:-pokerwars-prisma-migrate}"
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
@@ -35,14 +29,40 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
-gcloud builds submit "$ROOT_DIR" --tag "$IMAGE_URI"
+# Build only ws-server + engine (no web build)
+gcloud builds submit "$ROOT_DIR" \
+  --config "$ROOT_DIR/cloudbuild.prisma.yaml" \
+  --substitutions=_IMAGE_URI="$IMAGE_URI"
 
-gcloud run jobs create "$JOB_NAME" \
-  --image "$IMAGE_URI" \
-  --region "$REGION" \
-  --set-env-vars="^;^SERVICE=ws-server;NODE_ENV=production;DATABASE_URL=${DATABASE_URL}" \
-  --command="npm" \
-  --args="run,prisma:migrate,-w,apps/ws-server"
+JOB_EXISTS=false
+if gcloud run jobs describe "$JOB_NAME" --region "$REGION" >/dev/null 2>&1; then
+  JOB_EXISTS=true
+fi
+
+CLOUDSQL_CONN="${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+ENV_VARS="^;^NODE_ENV=production;DATABASE_URL=${DATABASE_URL_EFFECTIVE}"
+
+JOB_ARGS=(
+  --image "$IMAGE_URI"
+  --region "$REGION"
+  --set-env-vars="$ENV_VARS"
+  --add-cloudsql-instances "$CLOUDSQL_CONN"
+  --command "npm"
+  --args "run,prisma:migrate:deploy,-w,apps/ws-server"
+)
+
+if [[ "${USE_VPC_CONNECTOR:-}" == "true" && -n "${VPC_CONNECTOR:-}" ]]; then
+  JOB_ARGS+=(--vpc-connector "$VPC_CONNECTOR")
+  if [[ -n "${VPC_EGRESS:-}" ]]; then
+    JOB_ARGS+=(--vpc-egress "$VPC_EGRESS")
+  fi
+fi
+
+if [[ "$JOB_EXISTS" == "true" ]]; then
+  gcloud run jobs update "$JOB_NAME" "${JOB_ARGS[@]}"
+else
+  gcloud run jobs create "$JOB_NAME" "${JOB_ARGS[@]}"
+fi
 
 gcloud run jobs execute "$JOB_NAME" --region "$REGION"
 

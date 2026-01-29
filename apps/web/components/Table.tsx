@@ -458,7 +458,7 @@ export default function Table({ timer }: { timer?: number | null }) {
       )}
 
       {buyInModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4">
           <div className="w-full max-w-md rounded-lg bg-black p-5 shadow-xl border border-white/10">
             <h3 className="text-lg font-semibold mb-2">Choose Buy-in</h3>
             <p className="text-sm text-white/70 mb-4">

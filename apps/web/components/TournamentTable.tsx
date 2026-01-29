@@ -243,7 +243,7 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
       </div>
 
       {modalOpen && selected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4">
           <div className="w-full max-w-md space-y-3 rounded-lg bg-black p-5 border border-white/10 shadow-xl">
             <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">
               Confirm Buy-in

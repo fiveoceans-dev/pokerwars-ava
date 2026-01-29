@@ -72,6 +72,10 @@ join_env_vars() {
   echo "${ENV_VARS[*]}"
 }
 
+sanitize() {
+  echo "$1" | tr -d '"\r\n'
+}
+
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
 IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$WS_SERVICE_NAME:$IMAGE_TAG"
 
@@ -82,9 +86,11 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
+SUBS="_IMAGE_URI=$(sanitize "$IMAGE_URI"),_BUILD_TARGET=ws-server,_NEXT_PUBLIC_APP_URL=$(sanitize "$NEXT_PUBLIC_APP_URL"),_NEXT_PUBLIC_WS_URL=$(sanitize "$NEXT_PUBLIC_WS_URL"),_NEXT_PUBLIC_API_URL=$(sanitize "$NEXT_PUBLIC_API_URL"),_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=$(sanitize "$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID"),_WALLETCONNECT_PROJECT_ID=$(sanitize "$WALLETCONNECT_PROJECT_ID")"
+
 gcloud builds submit "$ROOT_DIR" \
   --config "$ROOT_DIR/cloudbuild.yaml" \
-  --substitutions=_IMAGE_URI="$IMAGE_URI",_NEXT_PUBLIC_APP_URL="$NEXT_PUBLIC_APP_URL",_NEXT_PUBLIC_WS_URL="$NEXT_PUBLIC_WS_URL",_NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL",_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID",_WALLETCONNECT_PROJECT_ID="$WALLETCONNECT_PROJECT_ID"
+  --substitutions="$SUBS"
 
 gcloud run deploy "$WS_SERVICE_NAME" \
   --image "$IMAGE_URI" \

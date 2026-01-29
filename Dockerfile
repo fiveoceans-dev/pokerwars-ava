@@ -5,17 +5,25 @@ ARG NODE_VERSION=20-alpine
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /repo
 ENV NODE_ENV=development
+ARG BUILD_TARGET=all
 RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 COPY tsconfig.json tsconfig.packages.json ./
 COPY apps ./apps
 COPY packages ./packages
-RUN npm install --workspaces --include-workspace-root
+RUN if [ "$BUILD_TARGET" = "ws-server" ]; then \
+      npm install --workspaces --include-workspace-root --workspace apps/ws-server --workspace packages/engine; \
+    elif [ "$BUILD_TARGET" = "web" ]; then \
+      npm install --workspaces --include-workspace-root --workspace apps/web --workspace packages/engine; \
+    else \
+      npm install --workspaces --include-workspace-root; \
+    fi
 
 FROM node:${NODE_VERSION} AS build
 WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_SKIP_LOCKFILE_CHECK=true
+ARG BUILD_TARGET=all
 # Build-time envs for Next.js (required during static generation)
 ARG NEXT_PUBLIC_APP_URL
 ARG NEXT_PUBLIC_WS_URL
@@ -31,9 +39,13 @@ ENV WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}
 RUN mkdir -p /tmp/env-inject && \
   printf 'window.__NEXT_PUBLIC_WS_URL = "%s";\n' "${NEXT_PUBLIC_WS_URL:-}" > /tmp/env-inject/ws.js
 COPY --from=deps /repo .
-RUN npm run build:packages \
-  && npm run build -w apps/web \
-  && npm run build -w apps/ws-server
+RUN if [ "$BUILD_TARGET" = "ws-server" ]; then \
+      npm run build:packages && npm run build -w apps/ws-server; \
+    elif [ "$BUILD_TARGET" = "web" ]; then \
+      npm run build:packages && npm run build -w apps/web; \
+    else \
+      npm run build:packages && npm run build -w apps/web && npm run build -w apps/ws-server; \
+    fi
 
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app

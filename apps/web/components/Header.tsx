@@ -25,6 +25,24 @@ const shuffleChars = (target: string, intensity = 0.5) => {
     .join("");
 };
 
+const NAV_ANIM_COOKIE = "nav_free_shuffle_at";
+const NAV_ANIM_DURATION_MS = 5 * 60 * 1000;
+const NAV_ANIM_INTERVAL_MS = 30 * 1000;
+const NAV_ANIM_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+const getCookieValue = (name: string) => {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${name.replace(/([$?*|{}()\\[\\]\\\\\\/\\+^])/g, "\\$1")}=([^;]*)`),
+  );
+  return match ? decodeURIComponent(match[1]) : "";
+};
+
+const setCookieValue = (name: string, value: string, maxAgeSeconds: number) => {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}`;
+};
+
 const AnimatedNavLabel = () => {
   const [text, setText] = useState("FREE");
   useEffect(() => {
@@ -32,7 +50,14 @@ const AnimatedNavLabel = () => {
     let stage = 0;
     let shuffleTimer: number | undefined;
     let holdTimer: number | undefined;
-    const targets = ["FREE", "COINS"];
+    const targets = ["FREE", "FREE"];
+    const lastPlayedRaw = getCookieValue(NAV_ANIM_COOKIE);
+    const lastPlayed = lastPlayedRaw ? Number.parseInt(lastPlayedRaw, 10) : 0;
+    if (lastPlayed && !Number.isNaN(lastPlayed)) {
+      if (Date.now() - lastPlayed < NAV_ANIM_COOLDOWN_MS) {
+        return;
+      }
+    }
 
     const runShuffle = (nextTarget: string) => {
       let steps = 0;
@@ -56,14 +81,21 @@ const AnimatedNavLabel = () => {
       stage = (stage + 1) % targets.length;
       const nextTarget = targets[stage];
       runShuffle(nextTarget);
-      holdTimer = window.setTimeout(cycle, 1600);
+      holdTimer = window.setTimeout(cycle, NAV_ANIM_INTERVAL_MS);
     };
 
-    holdTimer = window.setTimeout(cycle, 1600);
+    const stopTimer = window.setTimeout(() => {
+      setCookieValue(NAV_ANIM_COOKIE, String(Date.now()), Math.floor(NAV_ANIM_COOLDOWN_MS / 1000));
+      if (holdTimer) window.clearTimeout(holdTimer);
+      if (shuffleTimer) window.clearTimeout(shuffleTimer);
+    }, NAV_ANIM_DURATION_MS);
+
+    holdTimer = window.setTimeout(cycle, NAV_ANIM_INTERVAL_MS);
     return () => {
       mounted = false;
       if (shuffleTimer) window.clearTimeout(shuffleTimer);
       if (holdTimer) window.clearTimeout(holdTimer);
+      window.clearTimeout(stopTimer);
     };
   }, []);
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { readPublicEnv } from "~~/utils/public-env";
 
 export type TournamentType = "stt" | "mtt";
 export type TournamentStartMode = "full" | "scheduled";
@@ -26,7 +27,7 @@ export type Tournament = {
 };
 
 function deriveApiBase(): string {
-  const env = process.env.NEXT_PUBLIC_WS_URL?.split(",")?.[0]?.trim();
+  const env = readPublicEnv("NEXT_PUBLIC_WS_URL").split(",")?.[0]?.trim();
   if (env) {
     try {
       const url = new URL(env);

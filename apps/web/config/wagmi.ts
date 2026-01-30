@@ -2,9 +2,10 @@ import { createAppKit, type AppKit } from "@reown/appkit";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { defineChain, http, type Chain } from "viem";
 import { createConfig, cookieStorage, createStorage } from "wagmi";
+import { readPublicEnv } from "~~/utils/public-env";
 
 export const walletConnectProjectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
+  readPublicEnv("NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID") ||
   process.env.WALLETCONNECT_PROJECT_ID ||
   "";
 
@@ -14,7 +15,7 @@ export const isWalletConnectConfigured =
 const metadata = {
   name: "PokerWars",
   description: "PokerWars tournaments on Hyperliquid",
-  url: process.env.NEXT_PUBLIC_APP_URL || "https://pokerwars.app",
+  url: readPublicEnv("NEXT_PUBLIC_APP_URL") || "https://pokerwars.app",
   icons: ["https://avatars.githubusercontent.com/u/37784886?s=200&v=4"],
 };
 
@@ -25,24 +26,24 @@ function buildHyperliquidChain(
     symbol: string;
   },
 ): Chain | null {
-  const chainIdRaw = process.env[`NEXT_PUBLIC_${envPrefix}_CHAIN_ID`];
-  const rpcUrl = process.env[`NEXT_PUBLIC_${envPrefix}_RPC_URL`];
+  const chainIdRaw = readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CHAIN_ID`);
+  const rpcUrl = readPublicEnv(`NEXT_PUBLIC_${envPrefix}_RPC_URL`);
   if (!chainIdRaw || !rpcUrl) return null;
 
   const chainId = Number.parseInt(chainIdRaw, 10);
   if (Number.isNaN(chainId)) return null;
 
   const chainName =
-    process.env[`NEXT_PUBLIC_${envPrefix}_CHAIN_NAME`] ?? defaults.name;
+    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CHAIN_NAME`) || defaults.name;
   const currencyName =
-    process.env[`NEXT_PUBLIC_${envPrefix}_CURRENCY_NAME`] ?? defaults.name;
+    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CURRENCY_NAME`) || defaults.name;
   const currencySymbol =
-    process.env[`NEXT_PUBLIC_${envPrefix}_CURRENCY_SYMBOL`] ?? defaults.symbol;
+    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CURRENCY_SYMBOL`) || defaults.symbol;
   const currencyDecimals = Number.parseInt(
-    process.env[`NEXT_PUBLIC_${envPrefix}_CURRENCY_DECIMALS`] ?? "18",
+    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CURRENCY_DECIMALS`) || "18",
     10,
   );
-  const explorer = process.env[`NEXT_PUBLIC_${envPrefix}_EXPLORER_URL`];
+  const explorer = readPublicEnv(`NEXT_PUBLIC_${envPrefix}_EXPLORER_URL`);
 
   return defineChain({
     id: chainId,

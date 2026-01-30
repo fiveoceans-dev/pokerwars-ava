@@ -1,3 +1,5 @@
+import { readPublicEnv, readPublicEnvOptional } from "~~/utils/public-env";
+
 export type SupportedNetworkId = "hyperliquid-mainnet" | "hyperliquid-testnet";
 
 export type NetworkKind = "evm";
@@ -44,15 +46,15 @@ const NETWORKS: NetworkConfig[] = [
     shortLabel: "Hyperliquid",
     kind: "evm",
     description: "Hyperliquid production network for PokerWars tables.",
-    chainId: parseChainId(process.env.NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID),
-    chainName: process.env.NEXT_PUBLIC_HYPERLIQUID_CHAIN_NAME ?? "Hyperliquid",
-    rpcUrls: cleanUrls([process.env.NEXT_PUBLIC_HYPERLIQUID_RPC_URL]),
+    chainId: parseChainId(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID")),
+    chainName: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CHAIN_NAME") || "Hyperliquid",
+    rpcUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_RPC_URL")]),
     nativeCurrency: {
-      name: process.env.NEXT_PUBLIC_HYPERLIQUID_CURRENCY_NAME ?? "HYPE",
-      symbol: process.env.NEXT_PUBLIC_HYPERLIQUID_CURRENCY_SYMBOL ?? "HYPE",
-      decimals: parseDecimals(process.env.NEXT_PUBLIC_HYPERLIQUID_CURRENCY_DECIMALS, 18),
+      name: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CURRENCY_NAME") || "HYPE",
+      symbol: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CURRENCY_SYMBOL") || "HYPE",
+      decimals: parseDecimals(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CURRENCY_DECIMALS"), 18),
     },
-    blockExplorerUrls: cleanUrls([process.env.NEXT_PUBLIC_HYPERLIQUID_EXPLORER_URL]),
+    blockExplorerUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_EXPLORER_URL")]),
   },
   {
     id: "hyperliquid-testnet",
@@ -60,15 +62,15 @@ const NETWORKS: NetworkConfig[] = [
     shortLabel: "Hyperliquid Test",
     kind: "evm",
     description: "Hyperliquid testnet for staging and QA.",
-    chainId: parseChainId(process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_ID),
-    chainName: process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_NAME ?? "Hyperliquid Testnet",
-    rpcUrls: cleanUrls([process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_RPC_URL]),
+    chainId: parseChainId(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_ID")),
+    chainName: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_NAME") || "Hyperliquid Testnet",
+    rpcUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_RPC_URL")]),
     nativeCurrency: {
-      name: process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_NAME ?? "HYPE",
-      symbol: process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL ?? "tHYPE",
-      decimals: parseDecimals(process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS, 18),
+      name: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_NAME") || "HYPE",
+      symbol: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL") || "tHYPE",
+      decimals: parseDecimals(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS"), 18),
     },
-    blockExplorerUrls: cleanUrls([process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_EXPLORER_URL]),
+    blockExplorerUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_EXPLORER_URL")]),
     isTestnet: true,
   },
 ];
@@ -82,7 +84,7 @@ export const PRIMARY_NETWORKS: NetworkConfig[] = NETWORKS.filter(
 const DEFAULT_NETWORK_FALLBACK: SupportedNetworkId = "hyperliquid-mainnet";
 
 export const DEFAULT_NETWORK_ID: SupportedNetworkId = (
-  process.env.NEXT_PUBLIC_DEFAULT_NETWORK as SupportedNetworkId | undefined
+  readPublicEnvOptional("NEXT_PUBLIC_DEFAULT_NETWORK") as SupportedNetworkId | undefined
 ) ?? DEFAULT_NETWORK_FALLBACK;
 
 export function getNetworkConfig(id: SupportedNetworkId): NetworkConfig {

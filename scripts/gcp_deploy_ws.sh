@@ -40,8 +40,30 @@ escape_subs() {
   echo "$value"
 }
 
-DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
-: "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL or DATABASE_URL_CLOUD}"
+urlencode() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$1" <<'PY'
+import sys, urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+    return
+  fi
+  if command -v node >/dev/null 2>&1; then
+    node -e 'console.log(encodeURIComponent(process.argv[1]))' "$1"
+    return
+  fi
+  echo "$1"
+}
+
+if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" && -n "${DB_INSTANCE:-}" ]]; then
+  ENCODED_USER="$(urlencode "$DB_USER")"
+  ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
+  DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+else
+  DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
+fi
+
+: "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL or DATABASE_URL_CLOUD/DB_*}"
 
 if [[ -z "${ALLOWED_WS_ORIGINS:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
   ALLOWED_WS_ORIGINS="$WEB_PUBLIC_URL"
@@ -117,33 +139,15 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
-SAN_APP_URL="$(sanitize "$NEXT_PUBLIC_APP_URL")"
-SAN_WS_URL="$(sanitize "$NEXT_PUBLIC_WS_URL")"
-SAN_API_URL="$(sanitize "$NEXT_PUBLIC_API_URL")"
-SAN_WC_PUBLIC="$(sanitize "$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID")"
-SAN_WC="$(sanitize "$WALLETCONNECT_PROJECT_ID")"
-
-SAN_APP_URL="$(first_csv "$SAN_APP_URL")"
-SAN_WS_URL="$(first_csv "$SAN_WS_URL")"
-SAN_API_URL="$(first_csv "$SAN_API_URL")"
-
-if [[ -z "$SAN_APP_URL" || -z "$SAN_WS_URL" || -z "$SAN_API_URL" ]]; then
-  echo "Missing NEXT_PUBLIC_* URLs for build. Set NEXT_PUBLIC_APP_URL/NEXT_PUBLIC_WS_URL/NEXT_PUBLIC_API_URL or WEB_PUBLIC_URL/WS_PUBLIC_URL." >&2
-  exit 1
-fi
-
-echo "Substitutions:"
-echo "_NEXT_PUBLIC_APP_URL=$SAN_APP_URL"
-echo "_NEXT_PUBLIC_WS_URL=$SAN_WS_URL"
-echo "_NEXT_PUBLIC_API_URL=$SAN_API_URL"
-echo "_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=$SAN_WC_PUBLIC"
-echo "_WALLETCONNECT_PROJECT_ID=$SAN_WC"
-
-SUBS="_IMAGE_URI=$(escape_subs "$IMAGE_URI"),_BUILD_TARGET=ws-server,_NEXT_PUBLIC_APP_URL=$(escape_subs "$SAN_APP_URL"),_NEXT_PUBLIC_WS_URL=$(escape_subs "$SAN_WS_URL"),_NEXT_PUBLIC_API_URL=$(escape_subs "$SAN_API_URL"),_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=$(escape_subs "$SAN_WC_PUBLIC"),_WALLETCONNECT_PROJECT_ID=$(escape_subs "$SAN_WC")"
+SUBS="_IMAGE_URI=$(escape_subs "$IMAGE_URI"),_BUILD_TARGET=ws-server"
 
 gcloud builds submit "$ROOT_DIR" \
   --config "$ROOT_DIR/cloudbuild.yaml" \
   --substitutions="$SUBS"
+
+ENV_OUT_DIR="${ENV_OUT_DIR:-$ROOT_DIR/.env.generated}"
+"$ROOT_DIR/scripts/build_cloudrun_env.sh"
+WS_ENV_FILE="$ENV_OUT_DIR/env.ws.yaml"
 
 DEPLOY_ARGS=(
   --image "$IMAGE_URI"
@@ -151,7 +155,7 @@ DEPLOY_ARGS=(
   --platform managed
   --allow-unauthenticated
   --timeout=3600
-  --set-env-vars="^;^$(join_env_vars)"
+  --env-vars-file="$WS_ENV_FILE"
 )
 
 if [[ -n "${DB_INSTANCE:-}" ]]; then

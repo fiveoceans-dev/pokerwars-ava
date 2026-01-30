@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG NODE_VERSION=20-bookworm-slim
+ARG CACHEBUST=0
 
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /repo
@@ -17,5 +18,8 @@ RUN npm install --workspaces --include-workspace-root --workspace apps/ws-server
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /repo ./
 CMD ["npm", "run", "prisma:migrate:deploy", "-w", "apps/ws-server"]

@@ -69,20 +69,9 @@ NEXT_PUBLIC_API_URL="$(first_csv "${NEXT_PUBLIC_API_URL:-}")"
 
 WEB_PORT="${WEB_PORT:-8080}"
 
-ENV_VARS=(
-  "SERVICE=web"
-  "NODE_ENV=production"
-  "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}"
-  "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
-  "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
-  "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
-  "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID}"
-)
-
-join_env_vars() {
-  local IFS=';'
-  echo "${ENV_VARS[*]}"
-}
+ENV_OUT_DIR="${ENV_OUT_DIR:-$ROOT_DIR/.env.generated}"
+"$ROOT_DIR/scripts/build_cloudrun_env.sh"
+WEB_ENV_FILE="$ENV_OUT_DIR/env.web.yaml"
 
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
 IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$WEB_SERVICE_NAME:$IMAGE_TAG"
@@ -95,13 +84,7 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
 fi
 
 # Build with explicit Next.js envs (sanitized)
-SAN_APP_URL="$(first_csv "$NEXT_PUBLIC_APP_URL")"
-SAN_WS_URL="$(first_csv "$NEXT_PUBLIC_WS_URL")"
-SAN_API_URL="$(first_csv "$NEXT_PUBLIC_API_URL")"
-SAN_WC_PUBLIC="$(sanitize "$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID")"
-SAN_WC="$(sanitize "$WALLETCONNECT_PROJECT_ID")"
-
-SUBS="_IMAGE_URI=$(escape_subs "$IMAGE_URI"),_BUILD_TARGET=web,_NEXT_PUBLIC_APP_URL=$(escape_subs "$SAN_APP_URL"),_NEXT_PUBLIC_WS_URL=$(escape_subs "$SAN_WS_URL"),_NEXT_PUBLIC_API_URL=$(escape_subs "$SAN_API_URL"),_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=$(escape_subs "$SAN_WC_PUBLIC"),_WALLETCONNECT_PROJECT_ID=$(escape_subs "$SAN_WC")"
+SUBS="_IMAGE_URI=$(escape_subs "$IMAGE_URI"),_BUILD_TARGET=web"
 
 gcloud builds submit "$ROOT_DIR" \
   --config "$ROOT_DIR/cloudbuild.yaml" \
@@ -113,6 +96,6 @@ gcloud run deploy "$WEB_SERVICE_NAME" \
   --platform managed \
   --allow-unauthenticated \
   --timeout=1800 \
-  --set-env-vars="^;^$(join_env_vars)"
+  --env-vars-file="$WEB_ENV_FILE"
 
 echo "Deployed web service: $WEB_SERVICE_NAME"

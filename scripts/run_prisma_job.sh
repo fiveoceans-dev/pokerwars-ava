@@ -14,9 +14,32 @@ fi
 : "${PROJECT_ID:?Missing PROJECT_ID}"
 : "${REGION:?Missing REGION}"
 : "${REPO_NAME:?Missing REPO_NAME}"
-DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
-: "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL (or DATABASE_URL_CLOUD)}"
 : "${DB_INSTANCE:?Missing DB_INSTANCE (Cloud SQL instance name)}"
+
+urlencode() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$1" <<'PY'
+import sys, urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+    return
+  fi
+  if command -v node >/dev/null 2>&1; then
+    node -e 'console.log(encodeURIComponent(process.argv[1]))' "$1"
+    return
+  fi
+  echo "$1"
+}
+
+if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" ]]; then
+  ENCODED_USER="$(urlencode "$DB_USER")"
+  ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
+  DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+else
+  DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
+fi
+
+: "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL (or DATABASE_URL_CLOUD/DB_*)}"
 
 JOB_NAME="${JOB_NAME:-pokerwars-prisma-migrate}"
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
@@ -40,7 +63,10 @@ if gcloud run jobs describe "$JOB_NAME" --region "$REGION" >/dev/null 2>&1; then
 fi
 
 CLOUDSQL_CONN="${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
-ENV_VARS="^;^NODE_ENV=production;DATABASE_URL=${DATABASE_URL_EFFECTIVE}"
+ENV_OUT_DIR="${ENV_OUT_DIR:-$ROOT_DIR/.env.generated}"
+"$ROOT_DIR/scripts/build_cloudrun_env.sh"
+PRISMA_ENV_FILE="$ENV_OUT_DIR/env.prisma.env"
+ENV_VARS="^;^$(tr '\n' ';' < "$PRISMA_ENV_FILE" | sed 's/;*$//')"
 
 JOB_ARGS=(
   --image "$IMAGE_URI"

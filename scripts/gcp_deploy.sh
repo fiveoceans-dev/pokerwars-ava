@@ -40,6 +40,21 @@ escape_subs() {
   echo "$value"
 }
 
+urlencode() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$1" <<'PY'
+import sys, urllib.parse
+print(urllib.parse.quote(sys.argv[1], safe=""))
+PY
+    return
+  fi
+  if command -v node >/dev/null 2>&1; then
+    node -e 'console.log(encodeURIComponent(process.argv[1]))' "$1"
+    return
+  fi
+  echo "$1"
+}
+
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com sqladmin.googleapis.com >/dev/null
 
@@ -95,47 +110,33 @@ NEXT_PUBLIC_APP_URL="$(first_csv "${NEXT_PUBLIC_APP_URL:-}")"
 NEXT_PUBLIC_WS_URL="$(first_csv "${NEXT_PUBLIC_WS_URL:-}")"
 NEXT_PUBLIC_API_URL="$(first_csv "${NEXT_PUBLIC_API_URL:-}")"
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-$WALLETCONNECT_PROJECT_ID}"
+NEXT_PUBLIC_DEFAULT_NETWORK="${NEXT_PUBLIC_DEFAULT_NETWORK:-}"
 
-if [[ -z "$NEXT_PUBLIC_APP_URL" || -z "$NEXT_PUBLIC_WS_URL" || -z "$NEXT_PUBLIC_API_URL" ]]; then
-  echo "Missing NEXT_PUBLIC_* URLs for build. Set NEXT_PUBLIC_APP_URL/NEXT_PUBLIC_WS_URL/NEXT_PUBLIC_API_URL or WEB_PUBLIC_URL/WS_PUBLIC_URL." >&2
-  exit 1
+if [[ "$SERVICE_TYPE" == "web" ]]; then
+  if [[ -z "$NEXT_PUBLIC_APP_URL" || -z "$NEXT_PUBLIC_WS_URL" || -z "$NEXT_PUBLIC_API_URL" ]]; then
+    echo "Missing NEXT_PUBLIC_* URLs for web deploy. Set NEXT_PUBLIC_APP_URL/NEXT_PUBLIC_WS_URL/NEXT_PUBLIC_API_URL or WEB_PUBLIC_URL/WS_PUBLIC_URL." >&2
+    exit 1
+  fi
 fi
 
 gcloud builds submit "$ROOT_DIR" \
   --config "$ROOT_DIR/cloudbuild.yaml" \
-  --substitutions=_IMAGE_URI="$(escape_subs "$IMAGE_URI")",_BUILD_TARGET="$(escape_subs "$SERVICE_TYPE")",_NEXT_PUBLIC_APP_URL="$(escape_subs "$NEXT_PUBLIC_APP_URL")",_NEXT_PUBLIC_WS_URL="$(escape_subs "$NEXT_PUBLIC_WS_URL")",_NEXT_PUBLIC_API_URL="$(escape_subs "$NEXT_PUBLIC_API_URL")",_NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="$(escape_subs "$NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID")",_WALLETCONNECT_PROJECT_ID="$(escape_subs "$WALLETCONNECT_PROJECT_ID")"
+  --substitutions=_IMAGE_URI="$(escape_subs "$IMAGE_URI")",_BUILD_TARGET="$(escape_subs "$SERVICE_TYPE")"
 
 # Deploy
-ENV_VARS=(
-  "SERVICE=${SERVICE_TYPE}"
-  "NODE_ENV=production"
-  "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
-)
-if [[ "$SERVICE_TYPE" == "web" ]]; then
-  ENV_VARS+=(
-    "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}"
-    "NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}"
-    "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
-    "NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID}"
-  )
-else
-  DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
-  : "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL or DATABASE_URL_CLOUD}"
-  : "${ALLOWED_WS_ORIGINS:?Missing ALLOWED_WS_ORIGINS}"
-  ENV_VARS+=(
-    "DATABASE_URL=${DATABASE_URL_EFFECTIVE}"
-    "ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}"
-  )
+ENV_OUT_DIR="${ENV_OUT_DIR:-$ROOT_DIR/.env.generated}"
+"$ROOT_DIR/scripts/build_cloudrun_env.sh"
+ENV_FILE_PATH="$ENV_OUT_DIR/env.web.yaml"
+if [[ "$SERVICE_TYPE" == "ws-server" ]]; then
+  ENV_FILE_PATH="$ENV_OUT_DIR/env.ws.yaml"
 fi
-
-join_env_vars() { local IFS=';'; echo "${ENV_VARS[*]}"; }
 
 DEPLOY_ARGS=(
   --image "$IMAGE_URI"
   --region "$REGION"
   --platform managed
   --allow-unauthenticated
-  --set-env-vars="^;^$(join_env_vars)"
+  --env-vars-file="$ENV_FILE_PATH"
 )
 
 if [[ -n "${VPC_CONNECTOR:-}" ]]; then

@@ -1,5 +1,15 @@
 steps:
   - name: "gcr.io/cloud-builders/docker"
-    args: ["build", "-t", "${_IMAGE_URI}", "-f", "Dockerfile.prisma", "."]
+    args:
+      [
+        "build",
+        "-t",
+        "${_IMAGE_URI}",
+        "--build-arg",
+        "CACHEBUST=${BUILD_ID}",
+        "-f",
+        "Dockerfile.prisma",
+        ".",
+      ]
 images:
   - "${_IMAGE_URI}"

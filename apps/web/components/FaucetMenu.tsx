@@ -1,9 +1,10 @@
 "use client";
 import { DropdownMenu, Button } from "@radix-ui/themes";
 import { CaretDownIcon } from "@radix-ui/react-icons";
+import { readPublicEnv } from "~~/utils/public-env";
 
 export default function FaucetMenu() {
-  const faucetUrl = process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL;
+  const faucetUrl = readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL");
 
   if (!faucetUrl) {
     return null;

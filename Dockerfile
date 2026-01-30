@@ -26,20 +26,7 @@ WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_SKIP_LOCKFILE_CHECK=true
 ARG BUILD_TARGET=all
-# Build-time envs for Next.js (required during static generation)
-ARG NEXT_PUBLIC_APP_URL
-ARG NEXT_PUBLIC_WS_URL
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
-ARG WALLETCONNECT_PROJECT_ID
-ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
-ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
-ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-ENV NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID}
-ENV WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}
-# Carry env placeholders so runtime values survive static bundling
-RUN mkdir -p /tmp/env-inject && \
-  printf 'window.__NEXT_PUBLIC_WS_URL = "%s";\n' "${NEXT_PUBLIC_WS_URL:-}" > /tmp/env-inject/ws.js
+# Runtime envs are injected on Cloud Run; no build-time NEXT_PUBLIC_* required.
 COPY --from=deps /repo .
 RUN if [ "$BUILD_TARGET" = "ws-server" ]; then \
       npm run build:packages && npm run build -w apps/ws-server; \

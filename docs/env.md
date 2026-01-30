@@ -73,6 +73,10 @@ WEB_SERVICE_NAME=poker-web
 WS_SERVICE_NAME=poker-ws
 WALLETCONNECT_PROJECT_ID=...
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
+DB_NAME=pokerwars-db
+DB_USER=pokerwars-admin
+DB_PASSWORD=your-password
+DB_INSTANCE=your-cloudsql-instance
 DATABASE_URL_CLOUD=postgresql://user:pass@/pokerwars?host=/cloudsql/PROJECT:REGION:INSTANCE
 DB_INSTANCE=your-cloudsql-instance
 ALLOWED_WS_ORIGINS=https://your-web-domain
@@ -81,8 +85,11 @@ WS_PUBLIC_URL=https://your-ws-domain
 AUTO_MIGRATE=true
 ```
 
+Notes:
+- If your DB password includes special characters (like `@`), prefer `DB_USER`/`DB_PASSWORD`/`DB_NAME` and let the deploy scripts build an encoded URL.
+
 ### Cloud Run service envs
-These are set by `scripts/gcp_deploy_web.sh` and `scripts/gcp_deploy_ws.sh`:
+These are set by `scripts/gcp_deploy_web.sh` and `scripts/gcp_deploy_ws.sh` using generated env files:
 - Web: `NEXT_PUBLIC_*`, `WALLETCONNECT_PROJECT_ID`
 - WS: `DATABASE_URL`, `ALLOWED_WS_ORIGINS`, `REDIS_URL` (optional)
 

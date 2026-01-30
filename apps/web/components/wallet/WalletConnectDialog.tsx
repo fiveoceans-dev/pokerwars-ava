@@ -337,7 +337,7 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
         </button>
       </div>
       <p className="mt-2 text-sm text-white/70">
-        Pick a Hyperliquid network, then connect a wallet or explore instantly as a demo player.
+        Connect a wallet or explore instantly as a demo player.
       </p>
 
       <div className="mt-4 space-y-4">
@@ -366,7 +366,7 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
           </div>
           {!networkConfigured ? (
             <p className="text-xs text-white/60">
-              Add Hyperliquid RPC and chain ID environment variables before connecting.
+              &#9828; &#9825; &#9831; &#9826;
             </p>
           ) : null}
         </div>

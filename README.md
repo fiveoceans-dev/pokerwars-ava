@@ -78,6 +78,10 @@ WebSocket server (`apps/ws-server/.env`):
 - Configure `PORT` if you need a different public port.
 
 See `docs/env.md` for a full env matrix (local, docker, and Cloud Run).
+You can sync root `.env` into app-specific files with:
+```bash
+./scripts/sync_env.sh
+```
 
 ## Production parity (local)
 
@@ -141,6 +145,7 @@ Notes:
 Notes:
 - Uses `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WS_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
 - Cloud Run sets `PORT=8080`; scripts don’t override it.
+- The deploy script will also pass through `NEXT_PUBLIC_HYPERLIQUID_*` and `NEXT_PUBLIC_HYPERLIQUID_TESTNET_*` if set.
 
 ### Verify
 - Cloud Run services: `gcloud run services list`

@@ -13,7 +13,10 @@ const readEnv = (
 ): string => {
   const value = process.env[key]?.trim();
   if (value) return value;
-  if (options?.requiredInProd && process.env.NODE_ENV === "production") {
+  const isBuildPhase =
+    process.env.NEXT_PHASE === "phase-production-build" ||
+    process.env.NEXT_PHASE === "phase-export";
+  if (options?.requiredInProd && process.env.NODE_ENV === "production" && !isBuildPhase) {
     throw new Error(`${key} must be set in production`);
   }
   return options?.fallback ?? "";

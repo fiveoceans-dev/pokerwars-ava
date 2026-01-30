@@ -44,6 +44,7 @@ export default function AccountClient() {
   useEffect(() => {
     if (!address) return;
     const ws = resolveWebSocketUrl();
+    if (!ws) return;
     const base = new URL(ws);
     base.protocol = base.protocol === "wss:" ? "https:" : "http:";
     fetch(`${base.origin}/api/user/profile?wallet=${address}`)
@@ -63,6 +64,7 @@ export default function AccountClient() {
   const handleSaveEmail = async () => {
     if (!address) return;
     const ws = resolveWebSocketUrl();
+    if (!ws) return;
     const base = new URL(ws);
     base.protocol = base.protocol === "wss:" ? "https:" : "http:";
     await fetch(`${base.origin}/api/user/email?wallet=${address}`, {
@@ -77,6 +79,7 @@ export default function AccountClient() {
   useEffect(() => {
     if (!address) return;
     const ws = resolveWebSocketUrl();
+    if (!ws) return;
     const base = new URL(ws);
     base.protocol = base.protocol === "wss:" ? "https:" : "http:";
     fetch(`${base.origin}/api/user/ledger?wallet=${address}&limit=50`)

@@ -80,5 +80,8 @@ export const resolveWebSocketUrl = (): string => {
     return candidate;
   }
 
+  if (typeof window !== "undefined") {
+    return "";
+  }
   throw new Error("NEXT_PUBLIC_WS_URL must be defined before initializing the client");
 };

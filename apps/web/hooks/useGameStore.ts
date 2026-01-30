@@ -362,6 +362,10 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     }
 
     const wsUrl = resolveWebSocketUrl();
+    if (!wsUrl) {
+      set({ connectionState: "disconnected", connectionError: "WebSocket URL not configured" });
+      return;
+    }
     console.log(
       `🔗 Connecting to WebSocket: ${wsUrl} (attempt ${reconnectAttempts + 1})`,
     );

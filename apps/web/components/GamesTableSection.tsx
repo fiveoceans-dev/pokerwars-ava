@@ -14,6 +14,7 @@ export default function GamesTableSection() {
   useEffect(() => {
     if (typeof window === "undefined" || !window.WebSocket) return;
     const wsUrl = resolveWebSocketUrl();
+    if (!wsUrl) return;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {

@@ -30,6 +30,17 @@ npx prisma migrate dev -n ledger_blockchain
 npx prisma generate
 ```
 
+For a one-shot local bootstrap (migrate + generate + optional seed), run:
+
+```bash
+AUTO_MIGRATE=true ./scripts/docker_up.sh
+```
+
+Optional seed:
+```bash
+SEED_GAMES=true AUTO_MIGRATE=true ./scripts/docker_up.sh
+```
+
 ### Local run checklist (full stack)
 
 1) Postgres: start locally (example)
@@ -48,7 +59,7 @@ npx prisma generate
    ```
 5) Start web app (in another shell):
    ```bash
-   npm run dev      # http://localhost:8080 with NEXT_PUBLIC_WS_URL=http://localhost:8099/api set in apps/web/.env.local
+   npm run dev      # http://localhost:8080 with NEXT_PUBLIC_API_URL=http://localhost:8099/api set in apps/web/.env.local
    ```
 
 ## Environment setup
@@ -65,6 +76,8 @@ WebSocket server (`apps/ws-server/.env`):
 - Copy `apps/ws-server/.env.example` to `.env`.
 - Set `ALLOWED_WS_ORIGINS` for production and `DEV_ALLOWED_WS_ORIGINS` for local development.
 - Configure `PORT` if you need a different public port.
+
+See `docs/env.md` for a full env matrix (local, docker, and Cloud Run).
 
 ## Production parity (local)
 
@@ -83,11 +96,13 @@ Override with environment variables if needed (e.g. `NEXT_PUBLIC_WS_URL`, `ALLOW
 ## GCP deployment (Cloud Run)
 
 We deploy both services from the same image (root `Dockerfile`) and select the runtime via `SERVICE`.
+The runtime image uses Debian (bookworm-slim) so Prisma engines target OpenSSL 3 and are compatible with Cloud Run.
 
 ### Prereqs
 - gcloud CLI installed and authenticated.
 - `.env` filled with: `PROJECT_ID`, `REGION`, `REPO_NAME`, `WEB_SERVICE_NAME`, `WS_SERVICE_NAME`, `DATABASE_URL` (and `DATABASE_URL_CLOUD` for Cloud SQL), `ALLOWED_WS_ORIGINS`, `NEXT_PUBLIC_*`, `WALLETCONNECT_PROJECT_ID`.
 - Cloud SQL instance created (if you want persistent DB) and reachable from Cloud Run (public IP or private + VPC connector).
+  - Postgres 15 is supported; Prisma uses `DATABASE_URL`/`DATABASE_URL_CLOUD` to connect.
 
 ### One-time setup
 1) Copy env template and edit:
@@ -117,6 +132,7 @@ We deploy both services from the same image (root `Dockerfile`) and select the r
 Notes:
 - Requires `DATABASE_URL`/`DATABASE_URL_CLOUD`, `ALLOWED_WS_ORIGINS`.
 - Will add Cloud SQL connection if `DB_INSTANCE` is set.
+- To auto-run migrations before deploy, set `AUTO_MIGRATE=true` (requires `DB_INSTANCE` and `DATABASE_URL`/`DATABASE_URL_CLOUD`).
 
 ### Deploy Web
 ```bash
@@ -176,11 +192,6 @@ See `docs/bot-guide.md`.
 - Learn page has 5 authored lessons; Free page offers timed coin claims; Account page uses DB-backed balances and convert modal.
 Details in `docs/mtt_stt.md` and `docs/vanilla-blockchain.md`.
 
-## GCP deploy (main repo)
-
-- Use root `scripts/gcp_deploy_ws.sh` and `scripts/gcp_deploy_web.sh`.
-- Required env: `PROJECT_ID`, `REGION`, `REPO_NAME`, `WS_SERVICE_NAME`, `WEB_SERVICE_NAME`, `DATABASE_URL`, `ALLOWED_WS_ORIGINS` (or `WEB_PUBLIC_URL`), plus `NEXT_PUBLIC_*` for the web.
-- Both services build from the root `Dockerfile`; select service via `SERVICE` env at runtime.
-- See `.env.example` for a template.
+## Template note
 
 `gcp-project/` contains a separate minimal template (Next.js + Fastify) for reference only; production deploys should use the root scripts above.

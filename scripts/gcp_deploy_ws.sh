@@ -49,6 +49,11 @@ fi
 
 : "${ALLOWED_WS_ORIGINS:?Missing ALLOWED_WS_ORIGINS or WEB_PUBLIC_URL}"
 
+# Optional auto-migrate step (Cloud Run Job) before deploy
+if [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
+  "$ROOT_DIR/scripts/run_prisma_job.sh"
+fi
+
 # Normalize comma-separated origins (take first entry)
 if [[ "${ALLOWED_WS_ORIGINS}" == *","* ]]; then
   ALLOWED_WS_ORIGINS="${ALLOWED_WS_ORIGINS%%,*}"

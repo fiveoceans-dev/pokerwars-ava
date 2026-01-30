@@ -10,8 +10,8 @@ const WalletConnectDialog = dynamic(
   { ssr: false },
 );
 
-export function WalletConnectButton() {
-  const { address, status, disconnect } = useWallet();
+export function WalletConnectButton({ showButton = true }: { showButton?: boolean }) {
+  const { address, status } = useWallet();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -65,51 +65,53 @@ export function WalletConnectButton() {
 
   return (
     <>
-      <div
-        className="relative"
-        ref={setMenuContainer}
-      >
-        <button
-          type="button"
-          className={`tbtn text-xs uppercase tracking-wide ${isConnecting ? "opacity-60" : ""}`}
-          onClick={handleButtonClick}
-          onMouseEnter={() => setIsDialogOpen(false)}
-          onBlur={(e) => {
-            if (!menuContainer?.contains(e.relatedTarget as Node)) {
-              setMenuOpen(false);
-            }
-          }}
-          aria-expanded={menuOpen}
-          aria-haspopup="menu"
-          disabled={isConnecting}
-          aria-disabled={!isConfigured}
+      {showButton ? (
+        <div
+          className="relative"
+          ref={setMenuContainer}
         >
-          {isConnecting ? "Confirm…" : label}
-        </button>
-        {showMenu && menuOpen ? (
-          <div className="pointer-events-auto absolute left-0 top-full mt-1 min-w-full space-y-2 text-xs">
-            <Link
-              href="/account"
-              className="tbtn"
-              onClick={() => setMenuOpen(false)}
-              tabIndex={0}
-            >
-              Account
-            </Link>
-            <button
-              type="button"
-              onClick={async () => {
-                await disconnect();
+          <button
+            type="button"
+            className={`tbtn tbtn-tight nav-btn ${isConnecting ? "opacity-60" : ""}`}
+            onClick={handleButtonClick}
+            onMouseEnter={() => setIsDialogOpen(false)}
+            onBlur={(e) => {
+              if (!menuContainer?.contains(e.relatedTarget as Node)) {
                 setMenuOpen(false);
-              }}
-              className="tbtn"
-              tabIndex={0}
-            >
-              Disconnect
-            </button>
-          </div>
-        ) : null}
-      </div>
+              }
+            }}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            disabled={isConnecting}
+            aria-disabled={!isConfigured}
+          >
+            {isConnecting ? "Confirm…" : label}
+          </button>
+          {showMenu && menuOpen ? (
+            <div className="pointer-events-auto absolute left-0 top-full mt-1 min-w-full space-y-1 text-xs">
+              <Link
+                href="/account"
+                className="tbtn tbtn-tight nav-btn"
+                onClick={() => setMenuOpen(false)}
+                tabIndex={0}
+              >
+                Account
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  window.dispatchEvent(new Event("open-wallet-disconnect"));
+                }}
+                className="tbtn tbtn-tight nav-btn"
+                tabIndex={0}
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <WalletConnectDialog
         open={isDialogOpen}
         onClose={() => setIsDialogOpen(false)}

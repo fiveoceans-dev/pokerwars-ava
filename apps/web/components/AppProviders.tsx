@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "~~/components/ThemeProvider";
+import { WalletConnectButton } from "~~/components/WalletConnectButton";
+import { WalletDisconnectConfirmHost } from "~~/components/WalletDisconnectConfirm";
 import { WalletProvider } from "~~/components/providers/WalletProvider";
 import { useGameStore } from "~~/hooks/useGameStore";
 import { notifyError } from "~~/utils/notifications";
@@ -136,6 +138,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
             {children}
             <GameStoreErrorWatcher />
             {enableConsoleForwarder ? <ConsoleErrorForwarder /> : null}
+            <WalletConnectButton showButton={false} />
+            <WalletDisconnectConfirmHost />
             <Toaster position="bottom-right" />
           </ThemeProvider>
         </WalletProvider>

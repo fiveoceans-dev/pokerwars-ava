@@ -27,7 +27,7 @@
   },
   {
     "id": "mtt-prime-1",
-    "name": "Prime Time MTT",
+    "name": "Prime MTT",
     "type": "mtt",
     "startMode": "scheduled",
     "startAt": "2099-01-01T20:00:00.000Z",

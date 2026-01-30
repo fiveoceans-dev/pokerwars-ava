@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { useBalances } from "~~/hooks/useBalances";
 import GenericModal from "~~/components/ui/GenericModal";
+import { WalletDisconnectConfirm } from "~~/components/WalletDisconnectConfirm";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 
 type GameHistoryRow = {
@@ -160,35 +161,48 @@ export default function AccountClient() {
           </div>
           <div className="rule" aria-hidden="true" />
           <div className="space-y-3 text-sm text-white/70">
-            <div className="grid grid-cols-[1.5fr_1fr_auto] items-center gap-2">
-              <span className="text-white">{formatAddress(address)}</span>
-              <span className="text-white/60">Connected</span>
-              <button className="tbtn text-xs" onClick={() => setConfirmDisconnect(true)}>
-                Disconnect
-              </button>
-              <span className="text-[11px] uppercase tracking-[0.4em] text-white/50 col-span-3">
-                EMAIL
-              </span>
-              <div className="col-span-3 flex items-center gap-3">
-                <span className="text-white min-w-[120px]">{storedEmail || "Not set"}</span>
-                <input
-                  type="email"
-                  value={emailDraft || storedEmail}
-                  onChange={(e) => setEmailDraft(e.target.value)}
-                  placeholder={storedEmail ? storedEmail : "Add your email"}
-                  className="flex-1 rounded border border-white/10 bg-black px-3 py-2 text-sm text-white"
-                />
-                <button
-                  className="tbtn text-xs"
-                  onClick={() => {
-                    setEmailDraft(emailDraft || storedEmail || "");
-                    setEmailModalOpen(true);
-                  }}
-                >
-                  Save
-                </button>
-              </div>
-            </div>
+            <table className="w-full border-separate border-spacing-y-2">
+              <tbody>
+                <tr className="align-middle">
+                  <td className="text-white/70 min-w-[120px]">Wallet</td>
+                  <td className="text-white truncate" title={address}>
+                    {formatAddress(address)}
+                  </td>
+                  <td className="text-white/60 min-w-[140px] text-right">Connected</td>
+                  <td className="text-right min-w-[100px]">
+                    <button className="tbtn text-xs" onClick={() => setConfirmDisconnect(true)}>
+                      Disconnect
+                    </button>
+                  </td>
+                </tr>
+                <tr className="align-middle">
+                  <td className="text-white/70 min-w-[120px]">Email</td>
+                  <td className="align-middle">
+                    <input
+                      type="email"
+                      value={emailDraft || storedEmail}
+                      onChange={(e) => setEmailDraft(e.target.value)}
+                      placeholder="Enter email"
+                      className="w-full max-w-[260px] rounded border border-white/10 bg-black px-3 py-2 text-sm text-white"
+                    />
+                  </td>
+                  <td className="text-white/60 min-w-[140px] text-right">
+                    {storedEmail ? "Saved" : "Not connected"}
+                  </td>
+                  <td className="text-right min-w-[100px]">
+                    <button
+                      className="tbtn text-xs"
+                      onClick={() => {
+                        setEmailDraft(emailDraft || storedEmail || "");
+                        setEmailModalOpen(true);
+                      }}
+                    >
+                      Save
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -451,33 +465,10 @@ export default function AccountClient() {
         </GenericModal>
       ) : null}
 
-      {confirmDisconnect ? (
-        <GenericModal
-          modalId="disconnect-confirm"
-          open={confirmDisconnect}
-          onClose={() => setConfirmDisconnect(false)}
-          className="bg-black text-white border border-white/10"
-        >
-          <div className="space-y-3 text-sm text-white/80">
-            <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Confirm</div>
-            <p>Disconnect wallet?</p>
-            <div className="flex justify-end gap-2 text-xs">
-              <button className="tbtn-secondary" onClick={() => setConfirmDisconnect(false)}>
-                Cancel
-              </button>
-              <button
-                className="tbtn"
-                onClick={() => {
-                  setConfirmDisconnect(false);
-                  disconnect();
-                }}
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-        </GenericModal>
-      ) : null}
+      <WalletDisconnectConfirm
+        open={confirmDisconnect}
+        onClose={() => setConfirmDisconnect(false)}
+      />
     </main>
   );
 }

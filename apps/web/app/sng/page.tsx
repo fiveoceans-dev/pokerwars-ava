@@ -6,7 +6,7 @@ import { useTournaments } from "~~/hooks/useTournaments";
 import { useTournamentStream } from "~~/hooks/useTournamentStream";
 import { useGameStore } from "~~/hooks/useGameStore";
 
-export default function SnrPage() {
+export default function SngPage() {
   const { stt, loading, setTournaments } = useTournaments();
   const currentWalletId = useGameStore((s) => s.currentWalletId);
   const openedTables = useRef<Set<string>>(new Set());

@@ -73,4 +73,8 @@ fi
 echo "Using compose file: $COMPOSE_FILE"
 echo "Starting containers (docker compose up --build ${DETACH_FLAG[*]-})..."
 
-exec docker compose -f "$COMPOSE_FILE" up --build ${DETACH_FLAG[@]+"${DETACH_FLAG[@]}"} "$@"
+docker compose -f "$COMPOSE_FILE" up --build ${DETACH_FLAG[@]+"${DETACH_FLAG[@]}"} "$@"
+
+if [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
+  "$ROOT_DIR/scripts/db_bootstrap.sh"
+fi

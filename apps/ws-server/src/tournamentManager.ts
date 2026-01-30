@@ -93,7 +93,7 @@ const defaultTournaments: TournamentDefinition[] = [
   },
   {
     id: "mtt-prime-1",
-    name: "Prime Time MTT",
+    name: "Prime MTT",
     type: "mtt",
     startMode: "scheduled",
     startAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),

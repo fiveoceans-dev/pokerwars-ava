@@ -45,7 +45,7 @@ const sngTemplates = [
 const mttTemplates = [
   {
     id: "mtt-prime",
-    name: "Prime Time MTT",
+    name: "Prime MTT",
     maxPlayers: 540,
     buyIn: 5000,
     blindScheduleId: "default-mtt",

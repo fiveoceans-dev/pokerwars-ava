@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1
 
-ARG NODE_VERSION=20-alpine
+ARG NODE_VERSION=20-bookworm-slim
 
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /repo
 ENV NODE_ENV=development
 ARG BUILD_TARGET=all
-RUN apk add --no-cache python3 make g++
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  python3 make g++ openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 COPY tsconfig.json tsconfig.packages.json ./
 COPY apps ./apps
@@ -52,6 +54,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV SERVICE=web
 ENV PORT=8090
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /repo/apps ./apps
 COPY --from=build /repo/packages ./packages
 COPY --from=deps /repo/node_modules ./node_modules

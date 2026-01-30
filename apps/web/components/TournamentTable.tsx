@@ -11,6 +11,7 @@ type Props = {
   tournaments: Tournament[];
   title?: string;
   showStartColumn?: boolean;
+  showPayouts?: boolean;
 };
 
 const headerBase = "px-2 py-2 text-left text-[11px] uppercase tracking-wide cursor-pointer select-none";
@@ -66,7 +67,18 @@ function formatPayouts(t: Tournament): string {
     .join(" · ");
 }
 
-export function TournamentTable({ tournaments, title, showStartColumn = true }: Props) {
+function formatBuyIn(t: Tournament): string {
+  if (!t.buyIn) return "—";
+  if (t.buyIn.currency === "tickets") return `${t.buyIn.amount} ticket`;
+  return `${t.buyIn.amount.toLocaleString()} Coins`;
+}
+
+export function TournamentTable({
+  tournaments,
+  title,
+  showStartColumn = true,
+  showPayouts = true,
+}: Props) {
   const { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds } = useTournamentActions();
   const { balances, hydrated, canAfford, refreshBalances } = useBalances();
   const [selected, setSelected] = useState<Tournament | null>(null);
@@ -159,7 +171,7 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
               <th className={headerBase} onClick={() => toggleSort("buyIn")}>Buy-in</th>
               <th className={headerBase} onClick={() => toggleSort("level")}>Level</th>
               <th className={headerBase} onClick={() => toggleSort("prize")}>Prize</th>
-              <th className={headerBase}>Payouts</th>
+              {showPayouts ? <th className={headerBase}>Payouts</th> : null}
               <th className={headerBase}>Status</th>
               {showStartColumn ? <th className={headerBase}>Start</th> : null}
             </tr>
@@ -173,7 +185,7 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
                   {t.registeredCount}/{t.maxPlayers}
                 </td>
                 <td className={cellBase}>
-                  {t.buyIn?.currency === "tickets" ? `${t.buyIn.amount} ticket` : `${t.buyIn?.amount ?? 0} chips`}
+                  {formatBuyIn(t)}
                 </td>
                 <td className={cellBase}>
                   <div className="flex flex-col leading-tight">
@@ -182,13 +194,15 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
                   </div>
                 </td>
                 <td className={cellBase}>{estimatePrizePool(t).toLocaleString()}</td>
-                <td className={cellBase}>
-                  {formatPayouts(t) ? (
-                    <span className="text-xs text-white/80">{formatPayouts(t)}</span>
-                  ) : (
-                    <span className="text-xs text-white/50">—</span>
-                  )}
-                </td>
+                {showPayouts ? (
+                  <td className={cellBase}>
+                    {formatPayouts(t) ? (
+                      <span className="text-xs text-white/80">{formatPayouts(t)}</span>
+                    ) : (
+                      <span className="text-xs text-white/50">—</span>
+                    )}
+                  </td>
+                ) : null}
                 <td className={cellBase}>
                   {(() => {
                     const isRegistered = registeredIds.has(t.id);
@@ -233,7 +247,14 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
             ))}
             {sorted.length === 0 ? (
               <tr>
-                <td className="px-2 py-3 text-sm text-white/60" colSpan={showStartColumn ? 9 : 8}>
+                <td
+                  className="px-2 py-3 text-sm text-white/60"
+                  colSpan={(() => {
+                    let cols = showStartColumn ? 9 : 8;
+                    if (!showPayouts) cols -= 1;
+                    return cols;
+                  })()}
+                >
                   No tournaments available.
                 </td>
               </tr>
@@ -243,8 +264,18 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
       </div>
 
       {modalOpen && selected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4">
-          <div className="w-full max-w-md space-y-3 rounded-lg bg-black p-5 border border-white/10 shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md space-y-3 rounded-lg bg-black p-5 border border-white/10 shadow-xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
             <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">
               Confirm Buy-in
             </div>
@@ -253,7 +284,7 @@ export function TournamentTable({ tournaments, title, showStartColumn = true }: 
               Join <span className="text-white">{selected.name}</span> with buy-in{" "}
               {selected.buyIn.currency === "tickets"
                 ? `${selected.buyIn.amount} ticket(s)`
-                : `${selected.buyIn.amount} chips`}
+                : `${selected.buyIn.amount.toLocaleString()} Coins`}
               .
             </p>
             <div className="text-xs text-white/70 space-y-1">

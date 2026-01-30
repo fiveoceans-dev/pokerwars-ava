@@ -63,7 +63,7 @@ export default function MttPage() {
         {loading ? (
           <p className="text-sm text-white/60">Loading tournaments…</p>
         ) : (
-          <TournamentTable tournaments={mtt} showStartColumn={false} />
+          <TournamentTable tournaments={mtt} showStartColumn={false} showPayouts={false} />
         )}
       </div>
     </main>

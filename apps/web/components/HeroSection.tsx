@@ -14,7 +14,7 @@ const slides = [
   },
   {
     id: 1,
-    title: "SnG games",
+    title: "SNG games",
     subtitle: "Join Sit & Go tournaments and win big.",
     image: "/carousel/pokerwars1.png",
     href: "/snr",

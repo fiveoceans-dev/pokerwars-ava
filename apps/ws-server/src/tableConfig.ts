@@ -24,13 +24,13 @@ export interface TableConfig {
 const DEFAULT_MAX_PLAYERS = 9;
 
 /**
- * Cash-table buy-in policy (aligned with common online rooms: ~40–100 BB)
- * - Minimum: 40 BB (prevents ultra-short stacks)
+ * Cash-table buy-in policy (aligned with common online rooms: 30–100 BB)
+ * - Minimum: 30 BB (prevents ultra-short stacks)
  * - Maximum: 100 BB (standard full stack)
  * - Default: Max (encourages full-stack play)
  */
 export function calculateBuyInLimits(bigBlind: number): { min: number; max: number; default: number } {
-  const min = bigBlind * 40;
+  const min = bigBlind * 30;
   const max = bigBlind * 100;
   return { min, max, default: max };
 }
@@ -44,7 +44,7 @@ export const TABLES: TableConfig[] = [
     name: "1/2 NLH",
     blinds: { small: 1, big: 2 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(2), // 80–200 chips
+    buyIn: calculateBuyInLimits(2), // 60–200 chips
     stakeLevel: "low",
   },
   {
@@ -52,7 +52,7 @@ export const TABLES: TableConfig[] = [
     name: "2/5 NLH",
     blinds: { small: 2, big: 5 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(5), // 200–500 chips
+    buyIn: calculateBuyInLimits(5), // 150–500 chips
     stakeLevel: "mid",
   },
   {
@@ -60,7 +60,7 @@ export const TABLES: TableConfig[] = [
     name: "5/10 NLH",
     blinds: { small: 5, big: 10 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(10), // 400–1,000 chips
+    buyIn: calculateBuyInLimits(10), // 300–1,000 chips
     stakeLevel: "high",
   },
   {
@@ -68,7 +68,7 @@ export const TABLES: TableConfig[] = [
     name: "50/100 NLH",
     blinds: { small: 50, big: 100 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(100), // 4,000–10,000 chips
+    buyIn: calculateBuyInLimits(100), // 3,000–10,000 chips
     stakeLevel: "whale",
   },
 ];
@@ -112,11 +112,13 @@ export function validateBuyIn(tableId: string, chips: number): { valid: boolean;
   if (!config) {
     return { valid: false, error: 'Table not found' };
   }
+  const minBB = Math.round(config.buyIn.min / config.blinds.big);
+  const maxBB = Math.round(config.buyIn.max / config.blinds.big);
   
   if (chips < config.buyIn.min) {
     return { 
       valid: false, 
-      error: `Buy-in too small (minimum: ${config.buyIn.min} chips)`,
+      error: `Buy-in too small (minimum: ${minBB} BB)`,
       suggested: config.buyIn.min
     };
   }
@@ -124,7 +126,7 @@ export function validateBuyIn(tableId: string, chips: number): { valid: boolean;
   if (chips > config.buyIn.max) {
     return {
       valid: false,
-      error: `Buy-in too large (maximum: ${config.buyIn.max} chips)`, 
+      error: `Buy-in too large (maximum: ${maxBB} BB)`, 
       suggested: config.buyIn.max
     };
   }

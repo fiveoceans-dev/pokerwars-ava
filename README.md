@@ -84,28 +84,52 @@ Override with environment variables if needed (e.g. `NEXT_PUBLIC_WS_URL`, `ALLOW
 
 We deploy both services from the same image (root `Dockerfile`) and select the runtime via `SERVICE`.
 
-1) Copy the template and fill values:
+### Prereqs
+- gcloud CLI installed and authenticated.
+- `.env` filled with: `PROJECT_ID`, `REGION`, `REPO_NAME`, `WEB_SERVICE_NAME`, `WS_SERVICE_NAME`, `DATABASE_URL` (and `DATABASE_URL_CLOUD` for Cloud SQL), `ALLOWED_WS_ORIGINS`, `NEXT_PUBLIC_*`, `WALLETCONNECT_PROJECT_ID`.
+- Cloud SQL instance created (if you want persistent DB) and reachable from Cloud Run (public IP or private + VPC connector).
 
-```bash
-cp .env.example .env
-```
+### One-time setup
+1) Copy env template and edit:
+   ```bash
+   cp .env.example .env
+   ```
+2) Authenticate and set gcloud defaults from `.env`:
+   ```bash
+   gcloud auth login
+   ./scripts/gcp_use_env.sh
+   ```
+3) (Optional) Create Cloud SQL instance/db/user and set `DATABASE_URL_CLOUD` accordingly.
+4) Generate/apply Prisma migrations (once you have migrations checked in):
+   - Build-and-run via Cloud Run Job (recommended for Cloud SQL):
+     ```bash
+     ./scripts/run_prisma_job.sh
+     ```
+   - Or from your shell (needs DB access):
+     ```bash
+     ./scripts/prisma_deploy_cloudsql.sh
+     ```
 
-2) Deploy the WebSocket server first (sets long timeout for WS):
-
+### Deploy WS (backend API + WebSocket)
 ```bash
 ./scripts/gcp_deploy_ws.sh
 ```
+Notes:
+- Requires `DATABASE_URL`/`DATABASE_URL_CLOUD`, `ALLOWED_WS_ORIGINS`.
+- Will add Cloud SQL connection if `DB_INSTANCE` is set.
 
-3) Deploy the web app:
-
+### Deploy Web
 ```bash
 ./scripts/gcp_deploy_web.sh
 ```
-
 Notes:
-- `ALLOWED_WS_ORIGINS` must include the web app URL.
-- `NEXT_PUBLIC_WS_URL` should use `wss://` and `NEXT_PUBLIC_API_URL` should use `https://.../api`.
-- Cloud Run injects `PORT=8080`; the scripts do not set `PORT` (reserved by Cloud Run).
+- Uses `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WS_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
+- Cloud Run sets `PORT=8080`; scripts don’t override it.
+
+### Verify
+- Cloud Run services: `gcloud run services list`
+- Cloud Run Jobs (prisma): `gcloud run jobs executions list`
+- Logs: `gcloud logs read --project $PROJECT_ID --limit 100`
 
 ## Build and run
 

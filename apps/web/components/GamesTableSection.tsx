@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LobbyTable } from "~~/game-engine";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 
 export default function GamesTableSection() {
   const [tables, setTables] = useState<LobbyTable[]>([]);
+  const visibleTables = useMemo(() => {
+    return tables.filter((t) => !/^mtt-|^stt-/i.test(t.id));
+  }, [tables]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.WebSocket) return;
@@ -52,7 +55,7 @@ export default function GamesTableSection() {
             </tr>
           </thead>
           <tbody>
-            {tables.map((t) => (
+            {visibleTables.map((t) => (
               <tr key={t.id} className="border-b border-white/10">
                 <td className="px-2 py-2">{t.name}</td>
                 <td className="px-2 py-2">{t.gameType}</td>
@@ -60,10 +63,14 @@ export default function GamesTableSection() {
                   {t.playerCount}/{t.maxPlayers}
                 </td>
                 <td className="px-2 py-2 text-center">
-                  {t.buyIn ? `${t.buyIn.min}-${t.buyIn.max} chips` : "—"}
+                  {t.buyIn
+                    ? `${Math.round(t.buyIn.min / t.bigBlind)}-${Math.round(
+                        t.buyIn.max / t.bigBlind,
+                      )} BB`
+                    : "—"}
                 </td>
                 <td className="px-2 py-2 text-center">
-                  ${t.smallBlind}/{t.bigBlind}
+                  {t.smallBlind}/{t.bigBlind}
                 </td>
                 <td className="px-2 py-2 text-center">
                   {t.prizePool ? `${t.prizePool}` : "—"}
@@ -75,7 +82,7 @@ export default function GamesTableSection() {
                 </td>
               </tr>
             ))}
-            {tables.length === 0 ? (
+            {visibleTables.length === 0 ? (
               <tr>
                 <td className="px-2 py-3 text-sm text-white/60" colSpan={7}>
                   No tables available.

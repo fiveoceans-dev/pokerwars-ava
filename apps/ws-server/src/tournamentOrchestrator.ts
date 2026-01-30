@@ -11,7 +11,7 @@ import { TournamentPayoutEntry } from "./tournamentTypes";
 import { calculatePayouts } from "./tournamentPayouts";
 
 /**
- * TournamentOrchestrator manages table creation and start triggers for S&G/MTT.
+ * TournamentOrchestrator manages table creation and start triggers for SNG/MTT.
  * This is an initial implementation that starts tournaments and allocates tables;
  * seating/balancing hooks will be expanded as engine integrations allow.
  */
@@ -49,9 +49,9 @@ export class TournamentOrchestrator {
       };
       const state = this.manager.createTournament(def);
       this.broadcastTournamentUpdate(state.id);
-      logger.info(`🆕 Spawned new S&G ${state.id} (replacement for ${template.id})`);
+      logger.info(`🆕 Spawned new SNG ${state.id} (replacement for ${template.id})`);
     } catch (err) {
-      logger.error(`❌ Failed to spawn replacement S&G for ${template.id}`, err);
+      logger.error(`❌ Failed to spawn replacement SNG for ${template.id}`, err);
     }
   }
 
@@ -110,7 +110,7 @@ export class TournamentOrchestrator {
   startSitAndGoWithBots(tournamentId: string): { ok: boolean; message?: string } {
     const t = this.manager.getState(tournamentId);
     if (!t) return { ok: false, message: "Tournament not found" };
-    if (t.type !== "stt") return { ok: false, message: "Bots only allowed for S&G" };
+    if (t.type !== "stt") return { ok: false, message: "Bots only allowed for SNG" };
     if (t.status === "running") return { ok: false, message: "Tournament already running" };
     if (t.registered.size === 0) return { ok: false, message: "Need at least one human to start" };
 
@@ -122,7 +122,7 @@ export class TournamentOrchestrator {
   }
 
   private startSitAndGo(t: TournamentState, extraPlayers: string[] = []) {
-    logger.info(`🎬 Starting S&G ${t.id}${extraPlayers.length ? ` with ${extraPlayers.length} bot(s)` : ""}`);
+    logger.info(`🎬 Starting SNG ${t.id}${extraPlayers.length ? ` with ${extraPlayers.length} bot(s)` : ""}`);
     const updated: TournamentState =
       extraPlayers.length > 0
         ? { ...t, registered: new Set([...t.registered, ...extraPlayers]) }
@@ -145,6 +145,29 @@ export class TournamentOrchestrator {
   }
 
   private startMtt(t: TournamentState) {
+    if (t.registered.size === 0) {
+      logger.info(`🛑 Cancelling MTT ${t.id} (no registrations at start time)`);
+      void (async () => {
+        const cancelled = await this.manager.cancelTournament(t.id);
+        if (cancelled) {
+          this.broadcastAll({
+            tableId: "",
+            type: "TOURNAMENT_UPDATED",
+            tournament: this.manager.toPublic(cancelled),
+          });
+        }
+        const created = this.manager.ensureDailyMttSchedule();
+        created.forEach((next) => {
+          this.broadcastAll({
+            tableId: "",
+            type: "TOURNAMENT_UPDATED",
+            tournament: this.manager.toPublic(next),
+          });
+        });
+      })();
+      return;
+    }
+
     logger.info(`🎬 Starting MTT ${t.id}`);
     const level = getFirstLevel(t.blindScheduleId);
     const initialTableId = this.createTournamentTable(t.id, level?.sb, level?.bb);
@@ -163,6 +186,7 @@ export class TournamentOrchestrator {
     this.seatAndBroadcast(t, initialTableId, Array.from(t.registered));
     this.balanceIfNeeded(t);
     this.levels.start(t);
+    this.broadcastTournamentUpdate(t.id);
   }
 
   private configureBotStyle(tableId: string) {

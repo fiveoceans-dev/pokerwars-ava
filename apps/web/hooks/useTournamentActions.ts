@@ -100,7 +100,7 @@ export function useTournamentActions() {
         socket.send(JSON.stringify({ type: "START_SNG_WITH_BOTS", tournamentId }));
         return true;
       } catch (err) {
-        console.error("Failed to start S&G with bots", err);
+        console.error("Failed to start SNG with bots", err);
         setStartLoadingId(null);
         setPendingStart(null);
         callbacks?.onError?.();

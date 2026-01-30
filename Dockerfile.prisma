@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG NODE_VERSION=20-bookworm-slim
+ARG NODE_VERSION=20-bullseye-slim
 
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /repo

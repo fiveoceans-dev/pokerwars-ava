@@ -64,9 +64,10 @@ export default function Table({ timer }: { timer?: number | null }) {
   const seats = seatStore((state) => state.seats);
   const [buyInModal, setBuyInModal] = useState<{
     seat: number;
-    amount: number;
-    min: number;
-    max: number;
+    bbAmount: number;
+    bbMin: number;
+    bbMax: number;
+    bigBlind: number;
   } | null>(null);
 
   // Ensure arrays are always defined
@@ -154,11 +155,11 @@ export default function Table({ timer }: { timer?: number | null }) {
       "with address:",
       address.slice(0, 10) + "...",
     );
-    // Compute buy-in bounds from blind level (40–100 BB policy)
-    const min = bigBlind * 40;
-    const max = bigBlind * 100;
-    const recommended = Math.min(Math.max(min, bigBlind * 100), max);
-    setBuyInModal({ seat: idx, amount: recommended, min, max });
+    // Compute buy-in bounds from blind level (30–100 BB policy)
+    const bbMin = 30;
+    const bbMax = 100;
+    const recommendedBB = bbMax;
+    setBuyInModal({ seat: idx, bbAmount: recommendedBB, bbMin, bbMax, bigBlind });
   };
 
   // The table is always visible; wallet connections are handled elsewhere.
@@ -458,23 +459,32 @@ export default function Table({ timer }: { timer?: number | null }) {
       )}
 
       {buyInModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4">
-          <div className="w-full max-w-md rounded-lg bg-black p-5 shadow-xl border border-white/10">
-            <h3 className="text-lg font-semibold mb-2">Choose Buy-in</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setBuyInModal(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-black p-5 shadow-xl border border-white/10"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Buy-in</h3>
             <p className="text-sm text-white/70 mb-4">
-              Min {buyInModal.min.toLocaleString()} · Max{" "}
-              {buyInModal.max.toLocaleString()} chips
+              Min {buyInModal.bbMin} BB · Max {buyInModal.bbMax} BB
             </p>
             <div className="space-y-3">
               <input
                 type="range"
-                min={buyInModal.min}
-                max={buyInModal.max}
-                step={bigBlind}
-                value={buyInModal.amount}
+                min={buyInModal.bbMin}
+                max={buyInModal.bbMax}
+                step={1}
+                value={buyInModal.bbAmount}
                 onChange={(e) =>
                   setBuyInModal((prev) =>
-                    prev ? { ...prev, amount: Number(e.target.value) } : prev,
+                    prev ? { ...prev, bbAmount: Number(e.target.value) } : prev,
                   )
                 }
                 className="w-full"
@@ -483,26 +493,26 @@ export default function Table({ timer }: { timer?: number | null }) {
                 <input
                   type="number"
                   className="w-full rounded bg-black border border-white/10 px-3 py-2"
-                  min={buyInModal.min}
-                  max={buyInModal.max}
-                  step={bigBlind}
-                  value={buyInModal.amount}
+                  min={buyInModal.bbMin}
+                  max={buyInModal.bbMax}
+                  step={1}
+                  value={buyInModal.bbAmount}
                   onChange={(e) => {
                     const v = Number(e.target.value);
                     setBuyInModal((prev) =>
                       prev
                         ? {
                             ...prev,
-                            amount: Math.min(
-                              buyInModal.max,
-                              Math.max(buyInModal.min, v),
+                            bbAmount: Math.min(
+                              buyInModal.bbMax,
+                              Math.max(buyInModal.bbMin, v),
                             ),
                           }
                         : prev,
                     );
                   }}
                 />
-                <span className="text-white/60 text-sm">chips</span>
+                <span className="text-white/60 text-sm">BB</span>
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -515,7 +525,9 @@ export default function Table({ timer }: { timer?: number | null }) {
                   className="tbtn px-4 py-2 text-sm"
                   onClick={() => {
                     const seat = buyInModal.seat;
-                    const amount = buyInModal.amount;
+                    const amount = Math.round(
+                      buyInModal.bbAmount * buyInModal.bigBlind,
+                    );
                     setBuyInModal(null);
                     joinSeat(seat, undefined, amount);
                   }}

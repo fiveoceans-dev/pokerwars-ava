@@ -1,4 +1,4 @@
-// Default blind schedules for S&G (STT) and MTT.
+// Default blind schedules for SNG (STT) and MTT.
 // Durations are in seconds; ante optional.
 
 export type BlindLevel = {

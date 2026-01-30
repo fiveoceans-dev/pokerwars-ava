@@ -55,7 +55,7 @@ export default function SnrPage() {
     <main className="min-h-screen pb-16 pt-10">
       <div className="content-wrap space-y-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-2xl md:text-3xl">S&amp;G</h1>
+          <h1 className="text-2xl md:text-3xl">SNG</h1>
           <span className="text-[11px] uppercase tracking-[0.4em] text-white/50">
             Sit &amp; Go
           </span>
@@ -63,7 +63,7 @@ export default function SnrPage() {
         {loading ? (
           <p className="text-sm text-white/60">Loading tournaments…</p>
         ) : (
-          <TournamentTable tournaments={stt} />
+          <TournamentTable tournaments={stt} showPayouts={false} />
         )}
       </div>
     </main>

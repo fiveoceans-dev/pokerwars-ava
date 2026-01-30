@@ -1,7 +1,7 @@
 [
   {
     "id": "stt-daily-1",
-    "name": "Daily Sit & Go",
+    "name": "Daily SNG",
     "type": "stt",
     "startMode": "full",
     "buyIn": { "currency": "chips", "amount": 100 },
@@ -14,7 +14,7 @@
   },
   {
     "id": "stt-daily-6max",
-    "name": "Daily Sit & Go (6-max)",
+    "name": "Daily SNG (6-max)",
     "type": "stt",
     "startMode": "full",
     "buyIn": { "currency": "chips", "amount": 100 },
@@ -23,7 +23,7 @@
     "blindScheduleId": "default-stt",
     "payout": { "mode": "top_x_split", "topX": 2 },
     "tableConfigId": "mid",
-    "description": "6-max S&G starts when full."
+    "description": "6-max SNG starts when full."
   },
   {
     "id": "mtt-prime-1",

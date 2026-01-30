@@ -823,7 +823,7 @@ ws.on("message", async (data) => {
               tableId: "",
               type: "ERROR",
               code: "START_FAILED",
-              msg: result.message || "Failed to start S&G with bots",
+              msg: result.message || "Failed to start SNG with bots",
             } satisfies ServerEvent));
           }
           break;

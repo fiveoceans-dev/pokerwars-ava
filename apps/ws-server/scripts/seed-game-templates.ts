@@ -18,7 +18,7 @@ const cashTemplates = [
 const sngTemplates = [
   {
     id: "sng-9max",
-    name: "S&G 9-Max",
+    name: "SNG 9-Max",
     maxPlayers: 9,
     buyIn: 100,
     blindScheduleId: "default-stt",
@@ -26,7 +26,7 @@ const sngTemplates = [
   },
   {
     id: "sng-6max",
-    name: "S&G 6-Max",
+    name: "SNG 6-Max",
     maxPlayers: 6,
     buyIn: 100,
     blindScheduleId: "default-stt",

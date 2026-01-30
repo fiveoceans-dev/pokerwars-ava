@@ -102,55 +102,62 @@ Override with environment variables if needed (e.g. `NEXT_PUBLIC_WS_URL`, `ALLOW
 We deploy both services from the same image (root `Dockerfile`) and select the runtime via `SERVICE`.
 The runtime image uses Debian (bookworm-slim) so Prisma engines target OpenSSL 3 and are compatible with Cloud Run.
 
-### Prereqs
-- gcloud CLI installed and authenticated.
-- `.env` filled with: `PROJECT_ID`, `REGION`, `REPO_NAME`, `WEB_SERVICE_NAME`, `WS_SERVICE_NAME`, `DATABASE_URL` (and `DATABASE_URL_CLOUD` for Cloud SQL), `ALLOWED_WS_ORIGINS`, `NEXT_PUBLIC_*`, `WALLETCONNECT_PROJECT_ID`.
-- Cloud SQL instance created (if you want persistent DB) and reachable from Cloud Run (public IP or private + VPC connector).
-  - Postgres 15 is supported; Prisma uses `DATABASE_URL`/`DATABASE_URL_CLOUD` to connect.
+### Step-by-step (production deploy)
 
-### One-time setup
-1) Copy env template and edit:
+1) **Prepare env**
    ```bash
    cp .env.example .env
    ```
-2) Authenticate and set gcloud defaults from `.env`:
+   Fill at minimum:
+   - `PROJECT_ID`, `REGION`, `REPO_NAME`
+   - `WEB_SERVICE_NAME`, `WS_SERVICE_NAME`
+   - `WEB_PUBLIC_URL`, `WS_PUBLIC_URL`
+   - `WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
+   - `ALLOWED_WS_ORIGINS`
+   - `DB_INSTANCE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (and optionally `DB_TIER`)
+   - `NEXT_PUBLIC_HYPERLIQUID_*` / `NEXT_PUBLIC_HYPERLIQUID_TESTNET_*`
+
+2) **Login + set gcloud defaults**
    ```bash
    gcloud auth login
    ./scripts/gcp_use_env.sh
    ```
-3) (Optional) Create Cloud SQL instance/db/user and set `DATABASE_URL_CLOUD` accordingly.
-4) Generate/apply Prisma migrations (once you have migrations checked in):
-   - Build-and-run via Cloud Run Job (recommended for Cloud SQL):
-     ```bash
-     ./scripts/run_prisma_job.sh
-     ```
-   - Or from your shell (needs DB access):
-     ```bash
-     ./scripts/prisma_deploy_cloudsql.sh
-     ```
 
-### Deploy WS (backend API + WebSocket)
-```bash
-./scripts/gcp_deploy_ws.sh
-```
-Notes:
-- Requires `DATABASE_URL`/`DATABASE_URL_CLOUD`, `ALLOWED_WS_ORIGINS`.
-- Will add Cloud SQL connection if `DB_INSTANCE` is set.
-- To auto-run migrations before deploy, set `AUTO_MIGRATE=true` (requires `DB_INSTANCE` and `DATABASE_URL`/`DATABASE_URL_CLOUD`).
+3) **Create Cloud SQL (optional, automated)**
+   ```bash
+   CREATE_CLOUDSQL=true ./scripts/gcp_deploy_ws.sh
+   ```
+   This creates the instance/db/user if missing, builds the image, and deploys WS.
 
-### Deploy Web
-```bash
-./scripts/gcp_deploy_web.sh
-```
-Notes:
-- Uses `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_WS_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`.
-- Cloud Run sets `PORT=8080`; scripts don’t override it.
-- The deploy script will also pass through `NEXT_PUBLIC_HYPERLIQUID_*` and `NEXT_PUBLIC_HYPERLIQUID_TESTNET_*` if set.
+4) **Run Prisma migrations**
+   ```bash
+   ./scripts/run_prisma_job.sh
+   ```
 
-### Verify
-- Cloud Run services: `gcloud run services list`
-- Cloud Run Jobs (prisma): `gcloud run jobs executions list`
-- Logs: `gcloud logs read --project $PROJECT_ID --limit 100`
+5) **Deploy WS**
+   ```bash
+   ./scripts/gcp_deploy_ws.sh
+   ```
+   Notes:
+   - Attaches Cloud SQL if `DB_INSTANCE` is set.
+   - Uses `.env` → generated env files for Cloud Run.
+
+6) **Deploy Web**
+   ```bash
+   ./scripts/gcp_deploy_web.sh
+   ```
+
+7) **Verify**
+   ```bash
+   gcloud run services list
+   gcloud run jobs executions list
+   gcloud logs read --project "$PROJECT_ID" --limit 100
+   ```
+
+### Notes
+- Postgres 15 is supported.
+- Env files for Cloud Run are generated under `.env.generated/`.
+- To auto-run migrations before WS deploy, set `AUTO_MIGRATE=true`.
 
 ## Build and run
 

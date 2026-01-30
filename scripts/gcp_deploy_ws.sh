@@ -139,6 +139,24 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
+# Optional Cloud SQL creation (safe, no-op if exists)
+if [[ "${CREATE_CLOUDSQL:-}" == "true" && -n "${DB_INSTANCE:-}" ]]; then
+  if ! gcloud sql instances describe "$DB_INSTANCE" >/dev/null 2>&1; then
+    gcloud sql instances create "$DB_INSTANCE" \
+      --region "$REGION" \
+      --database-version=POSTGRES_15 \
+      --tier "${DB_TIER:-db-f1-micro}"
+  fi
+  if [[ -n "${DB_NAME:-}" ]]; then
+    gcloud sql databases create "$DB_NAME" --instance "$DB_INSTANCE" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" ]]; then
+    if ! gcloud sql users list --instance "$DB_INSTANCE" --format="value(name)" | grep -q "^${DB_USER}\$"; then
+      gcloud sql users create "$DB_USER" --instance "$DB_INSTANCE" --password "$DB_PASSWORD"
+    fi
+  fi
+fi
+
 SUBS="_IMAGE_URI=$(escape_subs "$IMAGE_URI"),_BUILD_TARGET=ws-server"
 
 gcloud builds submit "$ROOT_DIR" \

@@ -137,6 +137,19 @@ NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS: $(yaml_escape "${NEXT_PUBLIC_
 NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL: $(yaml_escape "${NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL:-}")
 EOF
 
+if [[ -z "${NEXT_PUBLIC_APP_URL:-}" || -z "${NEXT_PUBLIC_WS_URL:-}" || -z "${NEXT_PUBLIC_API_URL:-}" ]]; then
+  echo "Warning: Missing NEXT_PUBLIC_* web URLs. Cloud Run web will not work until these are set." >&2
+fi
+if [[ -z "${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}" && -z "${WALLETCONNECT_PROJECT_ID:-}" ]]; then
+  echo "Warning: Missing WalletConnect project ID. Wallet connect will be disabled." >&2
+fi
+if [[ -z "${NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID:-}" || -z "${NEXT_PUBLIC_HYPERLIQUID_RPC_URL:-}" ]]; then
+  echo "Warning: Missing Hyperliquid mainnet vars. Chain config will be incomplete." >&2
+fi
+if [[ -z "${NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_ID:-}" || -z "${NEXT_PUBLIC_HYPERLIQUID_TESTNET_RPC_URL:-}" ]]; then
+  echo "Warning: Missing Hyperliquid testnet vars. Testnet config will be incomplete." >&2
+fi
+
 cat >"$WS_ENV_YAML" <<EOF
 SERVICE: $(yaml_escape "ws-server")
 NODE_ENV: $(yaml_escape "production")

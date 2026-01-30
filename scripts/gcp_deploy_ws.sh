@@ -55,15 +55,7 @@ PY
   echo "$1"
 }
 
-if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" && -n "${DB_INSTANCE:-}" ]]; then
-  ENCODED_USER="$(urlencode "$DB_USER")"
-  ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
-  DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
-else
-  DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
-fi
-
-: "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL or DATABASE_URL_CLOUD/DB_*}"
+# DATABASE_URL is derived in build_cloudrun_env.sh (env.ws.yaml)
 
 if [[ -z "${ALLOWED_WS_ORIGINS:-}" && -n "${WEB_PUBLIC_URL:-}" ]]; then
   ALLOWED_WS_ORIGINS="$WEB_PUBLIC_URL"
@@ -104,31 +96,6 @@ NEXT_PUBLIC_API_URL="$(first_csv "${NEXT_PUBLIC_API_URL:-}")"
 
 WS_PORT="${WS_PORT:-8080}"
 
-ENV_VARS=(
-  "SERVICE=ws-server"
-  "NODE_ENV=production"
-  "ALLOWED_WS_ORIGINS=${ALLOWED_WS_ORIGINS}"
-  "DATABASE_URL=${DATABASE_URL_EFFECTIVE}"
-  "WALLETCONNECT_PROJECT_ID=${WALLETCONNECT_PROJECT_ID}"
-)
-
-if [[ -n "${REDIS_URL:-}" ]]; then
-  ENV_VARS+=("REDIS_URL=${REDIS_URL}")
-fi
-
-if [[ -n "${RECONNECT_GRACE_SECONDS:-}" ]]; then
-  ENV_VARS+=("RECONNECT_GRACE_SECONDS=${RECONNECT_GRACE_SECONDS}")
-fi
-
-if [[ -n "${WS_MAX_PAYLOAD:-}" ]]; then
-  ENV_VARS+=("WS_MAX_PAYLOAD=${WS_MAX_PAYLOAD}")
-fi
-
-join_env_vars() {
-  local IFS=';'
-  echo "${ENV_VARS[*]}"
-}
-
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
 IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$WS_SERVICE_NAME:$IMAGE_TAG"
 
@@ -153,6 +120,8 @@ if [[ "${CREATE_CLOUDSQL:-}" == "true" && -n "${DB_INSTANCE:-}" ]]; then
   if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" ]]; then
     if ! gcloud sql users list --instance "$DB_INSTANCE" --format="value(name)" | grep -q "^${DB_USER}\$"; then
       gcloud sql users create "$DB_USER" --instance "$DB_INSTANCE" --password "$DB_PASSWORD"
+    elif [[ "${UPDATE_DB_PASSWORD:-}" == "true" || "${UPDATE_DB_PASSWORD:-}" == "1" ]]; then
+      gcloud sql users set-password "$DB_USER" --instance "$DB_INSTANCE" --password "$DB_PASSWORD"
     fi
   fi
 fi

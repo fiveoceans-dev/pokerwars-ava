@@ -81,7 +81,8 @@ export const resolveWebSocketUrl = (): string => {
   }
 
   if (typeof window !== "undefined") {
+    console.warn("NEXT_PUBLIC_WS_URL is not set; skipping WebSocket initialization.");
     return "";
   }
-  throw new Error("NEXT_PUBLIC_WS_URL must be defined before initializing the client");
+  return "";
 };

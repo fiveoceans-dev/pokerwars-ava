@@ -48,6 +48,14 @@ IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$JOB_NAME:$IMAGE_TAG"
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com >/dev/null
 
+# Ensure the job service account can access Cloud SQL.
+if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/cloudsql.client" \
+    >/dev/null 2>&1 || true
+fi
+
 if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/dev/null 2>&1; then
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
@@ -76,6 +84,10 @@ JOB_ARGS=(
   --command "npm"
   --args "run,prisma:migrate:deploy,-w,apps/ws-server"
 )
+
+if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+  JOB_ARGS+=(--service-account "$SERVICE_ACCOUNT")
+fi
 
 if [[ "${USE_VPC_CONNECTOR:-}" == "true" && -n "${VPC_CONNECTOR:-}" ]]; then
   JOB_ARGS+=(--vpc-connector "$VPC_CONNECTOR")

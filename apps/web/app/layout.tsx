@@ -37,6 +37,9 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

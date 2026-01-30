@@ -13,6 +13,63 @@ type HeaderMenuLink = {
   href: string;
 };
 
+const shuffleChars = (target: string, intensity = 0.5) => {
+  const pool = "ABCDEFGHIJKLMNOPQRSTUVWXYZ$";
+  return target
+    .split("")
+    .map((ch) => {
+      if (ch === " ") return ch;
+      if (Math.random() > intensity) return ch;
+      return pool[Math.floor(Math.random() * pool.length)];
+    })
+    .join("");
+};
+
+const AnimatedNavLabel = () => {
+  const [text, setText] = useState("FREE");
+  useEffect(() => {
+    let mounted = true;
+    let stage = 0;
+    let shuffleTimer: number | undefined;
+    let holdTimer: number | undefined;
+    const targets = ["FREE", "COINS"];
+
+    const runShuffle = (nextTarget: string) => {
+      let steps = 0;
+      const totalSteps = 12;
+      const tick = () => {
+        if (!mounted) return;
+        steps += 1;
+        const intensity = Math.max(0.1, 1 - steps / totalSteps);
+        setText(shuffleChars(nextTarget, intensity));
+        if (steps < totalSteps) {
+          shuffleTimer = window.setTimeout(tick, 45);
+        } else {
+          setText(nextTarget);
+        }
+      };
+      tick();
+    };
+
+    const cycle = () => {
+      if (!mounted) return;
+      stage = (stage + 1) % targets.length;
+      const nextTarget = targets[stage];
+      runShuffle(nextTarget);
+      holdTimer = window.setTimeout(cycle, 1600);
+    };
+
+    holdTimer = window.setTimeout(cycle, 1600);
+    return () => {
+      mounted = false;
+      if (shuffleTimer) window.clearTimeout(shuffleTimer);
+      if (holdTimer) window.clearTimeout(holdTimer);
+    };
+  }, []);
+
+  return <span aria-hidden="true">{text}</span>;
+};
+
 export const menuLinks: HeaderMenuLink[] = [
   { label: "Home", href: "/" },
   { label: "Cash", href: "/cash" },
@@ -37,7 +94,7 @@ export const HeaderMenuLinks = () => {
               href={href}
               className={`tbtn tbtn-tight nav-btn ${isActive ? "nav-active" : ""}`}
             >
-              {label}
+              {label === "Free" ? <AnimatedNavLabel /> : label}
             </Link>
           </li>
         );

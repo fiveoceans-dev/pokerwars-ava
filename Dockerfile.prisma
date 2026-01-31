@@ -6,20 +6,30 @@ ARG CACHEBUST=0
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /repo
 ENV NODE_ENV=development
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
   python3 make g++ openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 COPY tsconfig.json tsconfig.packages.json ./
 COPY apps ./apps
 COPY packages ./packages
+
 RUN npm install --workspaces --include-workspace-root --workspace apps/ws-server
+
+# 🔥 THIS WAS MISSING
+RUN npx prisma generate --schema=apps/ws-server/prisma/schema.prisma
+
 
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
   openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
 COPY --from=deps /repo ./
+
 CMD ["npm", "run", "prisma:migrate:deploy", "-w", "apps/ws-server"]

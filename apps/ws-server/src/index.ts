@@ -12,6 +12,7 @@ import 'dotenv/config';
 import { createServer, type IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
+import { healthCheck } from './health.js';
 
 // Import pure FSM components (no legacy types)
 import { createEventEngine, EventEngine } from "@hyper-poker/engine";
@@ -125,19 +126,27 @@ const server = createServer(async (req, res) => {
   
   // Health check endpoint
   if (url.pathname === '/health') {
+    const dbHealth = await healthCheck();
+
     setCorsHeaders(res, origin);
-    res.writeHead(200, {
+    res.writeHead(dbHealth.status === 'healthy' ? 200 : 503, {
       'Content-Type': 'application/json',
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'no-referrer'
     });
-    res.end(JSON.stringify({ 
-      status: 'healthy', 
+
+    const response = {
+      status: dbHealth.status,
       timestamp: new Date().toISOString(),
-      connections: wss.clients.size,
-      tables: bridge.getTables().length
-    }));
+      websocket: {
+        connections: wss.clients.size,
+        tables: bridge.getTables().length
+      },
+      database: dbHealth.database
+    };
+
+    res.end(JSON.stringify(response));
     return;
   }
   

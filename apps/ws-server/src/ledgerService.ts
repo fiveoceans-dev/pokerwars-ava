@@ -1,19 +1,38 @@
-import { PrismaClient, AccountOwnerType, Asset, LedgerType } from "@prisma/client";
+import { PrismaClient, AccountOwnerType, Asset, LedgerType, Prisma } from "@prisma/client";
 import crypto from "crypto";
 
 const TREASURY_ID = "TREASURY";
-const COIN_SUPPLY_TOTAL = 5_000_000_000n;
-const FREE_CLAIM_AMOUNT = 1_000;
-const FREE_CLAIM_COOLDOWN_MS = 10 * 60 * 60 * 1000; // 10 hours
-const BUY_RATE = 250;  // coins per ticket (buy)
-const SELL_RATE = 220; // coins per ticket (sell)
+const DEFAULT_CONFIG = {
+  id: "DEFAULT",
+  coin_supply_total: 5_000_000_000n,
+  free_claim_amount: 1_000,
+  free_claim_cooldown_ms: 10 * 60 * 60 * 1000, // 10 hours
+  buy_rate: 250,  // coins per ticket (buy)
+  sell_rate: 220, // coins per ticket (sell)
+} as const;
 
 export type TicketTier = "ticket_x" | "ticket_y" | "ticket_z";
 
 export class LedgerService {
   constructor(private prisma: PrismaClient) {}
 
+  private async getConfig() {
+    return this.prisma.ledgerConfig.upsert({
+      where: { id: DEFAULT_CONFIG.id },
+      update: {},
+      create: {
+        id: DEFAULT_CONFIG.id,
+        coin_supply_total: DEFAULT_CONFIG.coin_supply_total,
+        free_claim_amount: DEFAULT_CONFIG.free_claim_amount,
+        free_claim_cooldown_ms: DEFAULT_CONFIG.free_claim_cooldown_ms,
+        buy_rate: DEFAULT_CONFIG.buy_rate,
+        sell_rate: DEFAULT_CONFIG.sell_rate,
+      },
+    });
+  }
+
   async ensureTreasury() {
+    const config = await this.getConfig();
     const existing = await this.prisma.treasury.findUnique({ where: { id: TREASURY_ID } });
     if (existing) {
       const treasuryAccount = await this.ensureAccount(AccountOwnerType.TREASURY, TREASURY_ID);
@@ -28,14 +47,14 @@ export class LedgerService {
     const treasury = await this.prisma.treasury.create({
       data: {
         id: TREASURY_ID,
-        coin_supply_total: COIN_SUPPLY_TOTAL,
-        coin_supply_remaining: COIN_SUPPLY_TOTAL,
+        coin_supply_total: config.coin_supply_total,
+        coin_supply_remaining: config.coin_supply_total,
       },
     });
     const treasuryAccount = await this.ensureAccount(AccountOwnerType.TREASURY, TREASURY_ID);
     await this.prisma.account.update({
       where: { id: treasuryAccount.id },
-      data: { coins: Number(COIN_SUPPLY_TOTAL) },
+      data: { coins: Number(config.coin_supply_total) },
     });
     return treasury;
   }
@@ -103,6 +122,7 @@ export class LedgerService {
   }
 
   async claimFreeCoins(wallet: string) {
+    const config = await this.getConfig();
     await this.ensureTreasury();
     const user = await this.getOrCreateUserByWallet(wallet);
     const treasuryAccount = await this.ensureAccount(AccountOwnerType.TREASURY, TREASURY_ID);
@@ -115,8 +135,8 @@ export class LedgerService {
     const now = Date.now();
     if (lastClaim) {
       const diff = now - new Date(lastClaim.createdAt).getTime();
-      if (diff < FREE_CLAIM_COOLDOWN_MS) {
-        return { ok: false, nextAvailableInMs: FREE_CLAIM_COOLDOWN_MS - diff };
+      if (diff < config.free_claim_cooldown_ms) {
+        return { ok: false, nextAvailableInMs: config.free_claim_cooldown_ms - diff };
       }
     }
 
@@ -125,24 +145,25 @@ export class LedgerService {
       fromAccountId: treasuryAccount.id,
       toAccountId: userAccount.id,
       asset: Asset.COINS,
-      amount: FREE_CLAIM_AMOUNT,
+      amount: config.free_claim_amount,
       referenceType: "USER",
       referenceId: user.id,
       metadata: { wallet },
     });
     await this.prisma.treasury.update({
       where: { id: TREASURY_ID },
-      data: { coin_supply_remaining: { decrement: BigInt(FREE_CLAIM_AMOUNT) } },
+      data: { coin_supply_remaining: { decrement: BigInt(config.free_claim_amount) } },
     });
     return { ok: true, account: updated.to };
   }
 
   async convert(wallet: string, direction: "coinsToTickets" | "ticketsToCoins", tier: TicketTier, amount: number) {
+    const config = await this.getConfig();
     await this.ensureTreasury();
     const user = await this.getOrCreateUserByWallet(wallet);
     const treasuryAccount = await this.ensureAccount(AccountOwnerType.TREASURY, TREASURY_ID);
     const userAccount = await this.ensureAccount(AccountOwnerType.USER, user.id);
-    const rate = direction === "coinsToTickets" ? BUY_RATE : SELL_RATE;
+    const rate = direction === "coinsToTickets" ? config.buy_rate : config.sell_rate;
     const coinsDelta = amount * rate;
 
     if (direction === "coinsToTickets") {
@@ -287,6 +308,9 @@ export class LedgerService {
     referenceId: string;
     metadata?: Record<string, any>;
   }) {
+    if (!Number.isFinite(params.amount) || params.amount <= 0) {
+      throw new Error("invalid amount");
+    }
     const maxRetries = 3;
     let attempt = 0;
     while (true) {
@@ -303,6 +327,7 @@ export class LedgerService {
             prevHash,
             ...params,
           });
+          const block = await ensureBlock(tx, { seq, hash, prevHash });
 
           let fromAccount = null;
           let toAccount = null;
@@ -332,6 +357,7 @@ export class LedgerService {
               seq,
               prevHash,
               hash,
+              blockId: block?.id ?? null,
               type: params.type,
               fromAccountId: params.fromAccountId,
               toAccountId: params.toAccountId,
@@ -358,14 +384,60 @@ export class LedgerService {
           return { entry, from: fromAccount, to: toAccount };
         });
       } catch (err: any) {
-        if (err?.code === "P2002" && String(err?.meta?.target || "").includes("seq") && attempt < maxRetries) {
-          attempt += 1;
-          continue; // retry on seq unique constraint
+        if (err?.code === "P2002" && attempt < maxRetries) {
+          const target = String(err?.meta?.target || "");
+          if (target.includes("seq") || target.includes("height")) {
+            attempt += 1;
+            continue; // retry on ledger tx seq or block height contention
+          }
         }
         throw err;
       }
     }
   }
+}
+
+async function ensureBlock(
+  tx: Prisma.TransactionClient,
+  payload: { seq: number; hash: string; prevHash: string | null },
+) {
+  const BLOCK_SIZE = 100;
+  const height = Math.ceil(payload.seq / BLOCK_SIZE);
+  const existing = await tx.ledgerBlock.findUnique({
+    where: { height },
+    select: { id: true, prevHash: true },
+  });
+  if (existing) {
+    const blockHash = computeHash({
+      height,
+      prevHash: existing.prevHash,
+      lastTxHash: payload.hash,
+      lastTxSeq: payload.seq,
+    });
+    await tx.ledgerBlock.update({
+      where: { id: existing.id },
+      data: { txCount: { increment: 1 }, hash: blockHash },
+    });
+    return existing;
+  }
+  const prevBlock = await tx.ledgerBlock.findFirst({
+    orderBy: { height: "desc" },
+    select: { hash: true },
+  });
+  const blockHash = computeHash({
+    height,
+    prevHash: prevBlock?.hash ?? null,
+    lastTxHash: payload.hash,
+    lastTxSeq: payload.seq,
+  });
+  return tx.ledgerBlock.create({
+    data: {
+      height,
+      prevHash: prevBlock?.hash ?? null,
+      hash: blockHash,
+      txCount: 1,
+    },
+  });
 }
 
 function tierToAsset(tier: TicketTier): Asset {

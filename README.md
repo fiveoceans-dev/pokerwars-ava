@@ -129,12 +129,34 @@ The runtime image uses Debian (bookworm-slim) so Prisma engines target OpenSSL 3
    ```
    This creates the instance/db/user if missing, builds the image, and deploys WS.
 
-4) **Run Prisma migrations**
+4) **Grant DB privileges (first-time only)**
+   If migrations fail with permission errors (P1010), grant privileges using an admin role:
+   ```bash
+   export DB_ADMIN_USER=postgres
+   export DB_ADMIN_PASSWORD=your-admin-password
+   ./scripts/db_grant.sh
+   ```
+   Or use a direct admin URL:
+   ```bash
+   export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-db"
+   ./scripts/db_grant.sh
+   ```
+
+5) **Run Prisma migrations**
    ```bash
    ./scripts/run_prisma_job.sh
    ```
+   Tip: you can fully automate grants + migrations by setting:
+   ```bash
+   export AUTO_GRANT_DB=true
+   export AUTO_MIGRATE=true
+   ```
+   Then run:
+   ```bash
+   ./scripts/gcp_deploy_ws.sh
+   ```
 
-5) **Deploy WS**
+6) **Deploy WS**
    ```bash
    ./scripts/gcp_deploy_ws.sh
    ```
@@ -142,22 +164,42 @@ The runtime image uses Debian (bookworm-slim) so Prisma engines target OpenSSL 3
    - Attaches Cloud SQL if `DB_INSTANCE` is set.
    - Uses `.env` → generated env files for Cloud Run.
 
-6) **Deploy Web**
+7) **Deploy Web**
    ```bash
    ./scripts/gcp_deploy_web.sh
    ```
 
-7) **Verify**
+8) **Verify**
    ```bash
    gcloud run services list
    gcloud run jobs executions list
    gcloud logs read --project "$PROJECT_ID" --limit 100
    ```
 
+### Fully automated deploy (copy/paste)
+```bash
+export AUTO_GRANT_DB=true
+export AUTO_MIGRATE=true
+export CREATE_CLOUDSQL=true
+export CREATE_VPC_CONNECTOR=true
+export USE_VPC_CONNECTOR=true
+
+./scripts/gcp_deploy_ws.sh
+./scripts/gcp_deploy_web.sh
+```
+
+### Optional single-service deploy script
+If you want a single generic deploy entrypoint:
+```bash
+SERVICE_NAME="$WEB_SERVICE_NAME" SERVICE_TYPE=web ./scripts/gcp_deploy.sh
+SERVICE_NAME="$WS_SERVICE_NAME" SERVICE_TYPE=ws-server ./scripts/gcp_deploy.sh
+```
+
 ### Notes
 - Postgres 15 is supported.
 - Env files for Cloud Run are generated under `.env.generated/`.
 - To auto-run migrations before WS deploy, set `AUTO_MIGRATE=true`.
+- Deploy scripts now fail fast if `DATABASE_URL` contains unresolved `$VARS` or if a production deploy uses a localhost URL.
 
 ## Build and run
 

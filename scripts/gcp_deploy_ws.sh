@@ -63,9 +63,9 @@ fi
 
 : "${ALLOWED_WS_ORIGINS:?Missing ALLOWED_WS_ORIGINS or WEB_PUBLIC_URL}"
 
-# Optional auto-migrate step (Cloud Run Job) before deploy
-if [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
-  "$ROOT_DIR/scripts/run_prisma_job.sh"
+if [[ -n "${DATABASE_URL:-}" && "${DATABASE_URL}" == *"\$"* ]]; then
+  echo "DATABASE_URL contains unresolved variables: ${DATABASE_URL}" >&2
+  exit 1
 fi
 
 # Normalize comma-separated origins (take first entry)
@@ -106,6 +106,16 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
+# Optional VPC connector creation for private IP connectivity
+if [[ "${CREATE_VPC_CONNECTOR:-}" == "true" ]]; then
+  CONNECTOR_NAME="${VPC_CONNECTOR:-pokerwars-vpc-connector}"
+  if ! gcloud compute networks vpc-access connectors describe "$CONNECTOR_NAME" --region "$REGION" >/dev/null 2>&1; then
+    gcloud compute networks vpc-access connectors create "$CONNECTOR_NAME" \
+      --region "$REGION" \
+      --network "${VPC_NETWORK:-default}" \
+      --range "${VPC_RANGE:-10.8.0.0/28}"
+  fi
+fi
 # Optional Cloud SQL creation (safe, no-op if exists)
 if [[ "${CREATE_CLOUDSQL:-}" == "true" && -n "${DB_INSTANCE:-}" ]]; then
   if ! gcloud sql instances describe "$DB_INSTANCE" >/dev/null 2>&1; then
@@ -136,6 +146,20 @@ ENV_OUT_DIR="${ENV_OUT_DIR:-$ROOT_DIR/.env.generated}"
 "$ROOT_DIR/scripts/build_cloudrun_env.sh"
 WS_ENV_FILE="$ENV_OUT_DIR/env.ws.yaml"
 
+# Run migrations using the SAME image we just built
+if [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
+  echo "Running Prisma migrations via Cloud Run Job..."
+
+  if [[ "${AUTO_GRANT_DB:-}" == "1" || "${AUTO_GRANT_DB:-}" == "true" ]]; then
+    "$ROOT_DIR/scripts/db_grant.sh"
+  fi
+
+  IMAGE_FOR_JOB="$IMAGE_URI" \
+  ENV_FILE_FOR_JOB="$WS_ENV_FILE" \
+  "$ROOT_DIR/scripts/run_prisma_job.sh"
+fi
+
+
 DEPLOY_ARGS=(
   --image "$IMAGE_URI"
   --region "$REGION"
@@ -147,6 +171,13 @@ DEPLOY_ARGS=(
 
 if [[ -n "${DB_INSTANCE:-}" ]]; then
   DEPLOY_ARGS+=(--add-cloudsql-instances "${PROJECT_ID}:${REGION}:${DB_INSTANCE}")
+fi
+
+if [[ "${USE_VPC_CONNECTOR:-}" == "true" && -n "${VPC_CONNECTOR:-}" ]]; then
+  DEPLOY_ARGS+=(--vpc-connector "$VPC_CONNECTOR")
+  if [[ -n "${VPC_EGRESS:-}" ]]; then
+    DEPLOY_ARGS+=(--vpc-egress "$VPC_EGRESS")
+  fi
 fi
 
 gcloud run deploy "$WS_SERVICE_NAME" "${DEPLOY_ARGS[@]}"

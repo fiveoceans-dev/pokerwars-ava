@@ -88,6 +88,30 @@ AUTO_MIGRATE=true
 Notes:
 - If your DB password includes special characters (like `@`), prefer `DB_USER`/`DB_PASSWORD`/`DB_NAME` and let the deploy scripts build an encoded URL.
 
+### DB grants bootstrap (avoid Prisma P1010)
+If migrations fail with permission errors, run the grants script using an admin role:
+```
+export DB_ADMIN_USER=postgres
+export DB_ADMIN_PASSWORD=your-admin-password
+./scripts/db_grant.sh
+```
+
+Optional: use an explicit admin URL instead of user/pass:
+```
+export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-db"
+./scripts/db_grant.sh
+```
+
+If you need to grant a different role than `DB_USER`, set:
+```
+export GRANT_USER=some-other-user
+```
+
+To run grants automatically before Prisma migrations, set:
+```
+export AUTO_GRANT_DB=true
+```
+
 ### Cloud Run service envs
 These are set by `scripts/gcp_deploy_web.sh` and `scripts/gcp_deploy_ws.sh` using generated env files:
 - Web: `NEXT_PUBLIC_*`, `WALLETCONNECT_PROJECT_ID`

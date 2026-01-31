@@ -17,7 +17,8 @@ const readEnv = (
     process.env.NEXT_PHASE === "phase-production-build" ||
     process.env.NEXT_PHASE === "phase-export";
   if (options?.requiredInProd && process.env.NODE_ENV === "production" && !isBuildPhase) {
-    throw new Error(`${key} must be set in production`);
+    // Runtime envs are injected on Cloud Run; warn instead of crashing build/runtime.
+    console.warn(`${key} is not set; runtime injection must provide it.`);
   }
   return options?.fallback ?? "";
 };

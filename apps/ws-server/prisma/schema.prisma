@@ -108,8 +108,10 @@ model Account {
 model LedgerTransaction {
   id            String     @id @default(cuid())
   seq           Int        @unique
+  blockId       String?
+  block         LedgerBlock? @relation(fields: [blockId], references: [id])
   prevHash      String?
-  hash          String
+  hash          String     @unique
   type          LedgerType
   fromAccountId String?
   toAccountId   String?
@@ -125,6 +127,8 @@ model LedgerTransaction {
   @@index([createdAt])
   @@index([fromAccountId])
   @@index([toAccountId])
+  @@index([blockId])
+  @@index([referenceType, referenceId])
 }
 
 model Treasury {
@@ -136,6 +140,28 @@ model Treasury {
   ticket_z_issued       Int      @default(0)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model LedgerConfig {
+  id                    String   @id @default("DEFAULT")
+  coin_supply_total     BigInt   @default(5000000000)
+  free_claim_amount     Int      @default(1000)
+  free_claim_cooldown_ms Int     @default(36000000)
+  buy_rate              Int      @default(250)
+  sell_rate             Int      @default(220)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model LedgerBlock {
+  id        String   @id @default(cuid())
+  height    Int      @unique
+  prevHash  String?
+  hash      String
+  txCount   Int
+  createdAt DateTime @default(now())
+
+  transactions LedgerTransaction[]
 }
 
 model TournamentEscrow {

@@ -30,10 +30,12 @@ const NAV_ANIM_DURATION_MS = 5 * 60 * 1000;
 const NAV_ANIM_INTERVAL_MS = 30 * 1000;
 const NAV_ANIM_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const getCookieValue = (name: string) => {
   if (typeof document === "undefined") return "";
   const match = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/([$?*|{}()\\[\\]\\\\\\/\\+^])/g, "\\$1")}=([^;]*)`),
+    new RegExp(`(?:^|; )${escapeRegExp(name)}=([^;]*)`),
   );
   return match ? decodeURIComponent(match[1]) : "";
 };

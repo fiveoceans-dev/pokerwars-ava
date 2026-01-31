@@ -47,7 +47,12 @@ PY
   printf '"%s"' "$v"
 }
 
-if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" && -n "${DB_INSTANCE:-}" ]]; then
+if [[ -n "${DB_HOST:-}" && -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" ]]; then
+  ENCODED_USER="$(urlencode "$DB_USER")"
+  ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
+  DB_PORT_EFFECTIVE="${DB_PORT:-5432}"
+  DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@${DB_HOST}:${DB_PORT_EFFECTIVE}/${DB_NAME}?schema=public"
+elif [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" && -n "${DB_INSTANCE:-}" ]]; then
   ENCODED_USER="$(urlencode "$DB_USER")"
   ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
   DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@localhost/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
@@ -58,6 +63,18 @@ fi
 if [[ -z "${DATABASE_URL_EFFECTIVE:-}" ]]; then
   echo "Missing DATABASE_URL (or DATABASE_URL_CLOUD/DB_*)" >&2
   exit 1
+fi
+
+if [[ "${DATABASE_URL_EFFECTIVE}" == *"\$"* ]]; then
+  echo "DATABASE_URL contains unresolved variables: ${DATABASE_URL_EFFECTIVE}" >&2
+  exit 1
+fi
+
+if [[ "${NODE_ENV:-}" == "production" ]]; then
+  if [[ "${DATABASE_URL_EFFECTIVE}" == *"localhost"* || "${DATABASE_URL_EFFECTIVE}" == *"127.0.0.1"* || "${DATABASE_URL_EFFECTIVE}" == *"host.docker.internal"* ]]; then
+    echo "Refusing to use a localhost DATABASE_URL in production: ${DATABASE_URL_EFFECTIVE}" >&2
+    exit 1
+  fi
 fi
 
 WEB_ENV_FILE="$OUT_DIR/env.web.env"

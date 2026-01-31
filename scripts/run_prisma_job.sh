@@ -41,11 +41,22 @@ fi
 
 : "${DATABASE_URL_EFFECTIVE:?Missing DATABASE_URL (or DATABASE_URL_CLOUD/DB_*)}"
 
+if [[ "${DATABASE_URL_EFFECTIVE}" == *"\$"* ]]; then
+  echo "DATABASE_URL contains unresolved variables: ${DATABASE_URL_EFFECTIVE}" >&2
+  exit 1
+fi
+
+if [[ "${AUTO_GRANT_DB:-}" == "1" || "${AUTO_GRANT_DB:-}" == "true" ]]; then
+  "$ROOT_DIR/scripts/db_grant.sh"
+fi
+
 JOB_NAME="${JOB_NAME:-pokerwars-prisma-migrate}"
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
-IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$JOB_NAME:$IMAGE_TAG"
+DEFAULT_IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$JOB_NAME:$IMAGE_TAG"
 
+echo "Setting gcloud project..."
 gcloud config set project "$PROJECT_ID" >/dev/null
+echo "Ensuring required services are enabled (this can take a minute)..."
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com >/dev/null
 
 # Ensure the job service account can access Cloud SQL.
@@ -56,14 +67,35 @@ if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
     >/dev/null 2>&1 || true
 fi
 
+# Optional VPC connector creation for private IP connectivity
+if [[ "${CREATE_VPC_CONNECTOR:-}" == "true" ]]; then
+  CONNECTOR_NAME="${VPC_CONNECTOR:-pokerwars-vpc-connector}"
+  if ! gcloud compute networks vpc-access connectors describe "$CONNECTOR_NAME" --region "$REGION" >/dev/null 2>&1; then
+    gcloud compute networks vpc-access connectors create "$CONNECTOR_NAME" \
+      --region "$REGION" \
+      --network "${VPC_NETWORK:-default}" \
+      --range "${VPC_RANGE:-10.8.0.0/28}"
+  fi
+fi
+
 if ! gcloud artifacts repositories describe "$REPO_NAME" --location "$REGION" >/dev/null 2>&1; then
   gcloud artifacts repositories create "$REPO_NAME" --repository-format=docker --location "$REGION"
 fi
 
 # Build only ws-server + engine (no web build)
-gcloud builds submit "$ROOT_DIR" \
-  --config "$ROOT_DIR/cloudbuild.prisma.yaml" \
-  --substitutions=_IMAGE_URI="$IMAGE_URI"
+IMAGE_URI="${PRISMA_IMAGE_URI:-$DEFAULT_IMAGE_URI}"
+if [[ "${SKIP_PRISMA_BUILD:-}" == "true" || "${SKIP_PRISMA_BUILD:-}" == "1" ]]; then
+  if [[ -z "${PRISMA_IMAGE_URI:-}" ]]; then
+    echo "SKIP_PRISMA_BUILD=true but PRISMA_IMAGE_URI is not set." >&2
+    exit 1
+  fi
+  echo "Skipping build; using existing image: $IMAGE_URI"
+else
+  echo "Submitting Cloud Build for Prisma job image (this can take several minutes)..."
+  gcloud builds submit "$ROOT_DIR" \
+    --config "$ROOT_DIR/cloudbuild.prisma.yaml" \
+    --substitutions=_IMAGE_URI="$IMAGE_URI"
+fi
 
 JOB_EXISTS=false
 if gcloud run jobs describe "$JOB_NAME" --region "$REGION" >/dev/null 2>&1; then
@@ -81,8 +113,25 @@ JOB_ARGS=(
   --region "$REGION"
   --set-env-vars="$ENV_VARS"
   --add-cloudsql-instances "$CLOUDSQL_CONN"
-  --command "npm"
-  --args "run,prisma:migrate:deploy,-w,apps/ws-server"
+  # --command "npm"
+  # --args "run,prisma:migrate:deploy,-w,apps/ws-server"
+
+  --command "sh"
+  --args "-c,cat << 'EOF' > /tmp/run.sh
+  echo '=== DB DEBUG ==='
+  echo \$DATABASE_URL
+
+  psql \"\$DATABASE_URL\" -c \"SELECT current_user, session_user;\"
+  psql \"\$DATABASE_URL\" -c \"SELECT schema_name FROM information_schema.schemata WHERE schema_name='public';\"
+
+  echo '=== PRISMA SYNC ==='
+  cd apps/ws-server
+  npx prisma db push --schema=prisma/schema.prisma --accept-data-loss
+  npx prisma generate
+
+  echo '=== DONE ==='
+  EOF
+  sh /tmp/run.sh"
 )
 
 if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
@@ -97,11 +146,19 @@ if [[ "${USE_VPC_CONNECTOR:-}" == "true" && -n "${VPC_CONNECTOR:-}" ]]; then
 fi
 
 if [[ "$JOB_EXISTS" == "true" ]]; then
+  echo "Updating Cloud Run job $JOB_NAME..."
   gcloud run jobs update "$JOB_NAME" "${JOB_ARGS[@]}"
 else
+  echo "Creating Cloud Run job $JOB_NAME..."
   gcloud run jobs create "$JOB_NAME" "${JOB_ARGS[@]}"
 fi
 
-gcloud run jobs execute "$JOB_NAME" --region "$REGION"
+if [[ "${JOB_ASYNC:-}" == "true" || "${JOB_ASYNC:-}" == "1" ]]; then
+  echo "Executing job asynchronously (JOB_ASYNC=true)..."
+  gcloud run jobs execute "$JOB_NAME" --region "$REGION" --async
+else
+  echo "Executing job (waiting for completion)..."
+  gcloud run jobs execute "$JOB_NAME" --region "$REGION"
+fi
 
 echo "Prisma migrate job executed: $JOB_NAME"

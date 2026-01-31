@@ -2,6 +2,8 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LinkComponent = Link as any;
 import { usePathname } from "next/navigation";
 import { useWalletGameSync } from "~~/hooks/useWalletGameSync";
 import { useBalances } from "~~/hooks/useBalances";
@@ -124,12 +126,12 @@ export const HeaderMenuLinks = () => {
             : pathname === href || pathname.startsWith(`${href}/`);
         return (
           <li key={href}>
-            <Link
+            <LinkComponent
               href={href}
               className={`tbtn tbtn-tight nav-btn ${isActive ? "nav-active" : ""}`}
             >
               {label === "Free" ? <AnimatedNavLabel /> : label}
-            </Link>
+            </LinkComponent>
           </li>
         );
       })}
@@ -232,12 +234,12 @@ export const Header = () => {
       >
         {/* Left cluster: brand + nav links */} 
         <div ref={leftClusterRef} className={`flex items-center ${groupGap}`}>
-          <Link
+          <LinkComponent
             href="/"
             className="text-white text-[var(--btn-font-size)] tracking-[var(--btn-letter)] uppercase font-semibold leading-none"
           >
             {appName}
-          </Link>
+          </LinkComponent>
           {!compactNav && (
             <ul className="nav-list hidden sm:flex items-center">
               <HeaderMenuLinks />
@@ -273,12 +275,12 @@ export const Header = () => {
           ref={rightClusterRef}
           className={`${compactNav ? "hidden" : "hidden sm:flex"} items-center justify-end ${groupGap} text-white/70`}
         >
-          <Link href="/account" className="tbtn tbtn-tight nav-btn">
+          <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
             Coins {hydrated ? balances.coins : "—"}
-          </Link>
-          <Link href="/account" className="tbtn tbtn-tight nav-btn">
+          </LinkComponent>
+          <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
             Tickets X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
-          </Link>
+          </LinkComponent>
           <div className="dropdown" ref={walletMenuRef}>
             {isWalletConnected ? (
               <button
@@ -308,9 +310,9 @@ export const Header = () => {
                 onClick={() => setIsWalletMenuOpen(false)}
               >
                 <li>
-                  <Link href="/account" className="tbtn tbtn-tight nav-btn">
+                  <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
                     Account
-                  </Link>
+                  </LinkComponent>
                 </li>
                 <li>
                   <button
@@ -349,20 +351,20 @@ export const Header = () => {
               >
                 {isWalletConnected && (
                   <li>
-                    <Link href="/account" className="tbtn tbtn-tight nav-btn">
+                    <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
                       {addressLabel}
-                    </Link>
+                    </LinkComponent>
                   </li>
                 )}
                 <li>
-                  <Link href="/account" className="tbtn tbtn-tight nav-btn">
+                  <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
                     Coins {hydrated ? balances.coins : "—"}
-                  </Link>
+                  </LinkComponent>
                 </li>
                 <li>
-                  <Link href="/account" className="tbtn tbtn-tight nav-btn">
+                  <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
                     Tickets X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
-                  </Link>
+                  </LinkComponent>
                 </li>
                 <li>
                   {isWalletConnected ? (

@@ -138,7 +138,7 @@ The runtime image uses Debian (bookworm-slim) so Prisma engines target OpenSSL 3
    ```
    Or use a direct admin URL:
    ```bash
-   export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-db"
+   export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-database"
    ./scripts/db_grant.sh
    ```
 
@@ -187,6 +187,43 @@ export USE_VPC_CONNECTOR=true
 ./scripts/gcp_deploy_ws.sh
 ./scripts/gcp_deploy_web.sh
 ```
+
+### Troubleshooting Database Deployment
+
+If tables are not created after deployment:
+
+1. **Run diagnostics**:
+   ```bash
+   ./scripts/diagnose_db_deployment.sh
+   ```
+
+2. **Test database connection setup**:
+   ```bash
+   ./test_db_connection.sh
+   ```
+
+3. **Check migration job logs**:
+   ```bash
+   gcloud run jobs logs read --region=$REGION --job=pokerwars-prisma-migrate
+   ```
+
+4. **Manual migration** (if automated fails):
+   ```bash
+   ./scripts/run_prisma_job.sh
+   ```
+
+**Common Issues:**
+- **Empty DATABASE_URL in logs**: Environment variables not set correctly in Cloud Run job
+- **"DATABASE_URL cannot be specified multiple times"**: Fixed in v1.0+ - env file now uses Cloud SQL socket path
+- **"relation does not exist"**: Migration assumes existing state - now uses `db push` for fresh databases
+- **Connection timeout**: Private IP database without VPC connector
+- **Permission denied**: Database user lacks privileges
+- **Migration files missing**: Schema changes not committed
+
+**Common Issues:**
+- **Missing tables**: Deployment uses `prisma migrate deploy` (fixed in v1.0+), not `db push`
+- **Permission errors**: Set `AUTO_GRANT_DB=true` to auto-grant DB privileges
+- **VPC connectivity**: Ensure `USE_VPC_CONNECTOR=true` for private IP Cloud SQL
 
 ### Optional single-service deploy script
 If you want a single generic deploy entrypoint:

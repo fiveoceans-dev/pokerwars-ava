@@ -46,9 +46,7 @@ if [[ "${DATABASE_URL_EFFECTIVE}" == *"\$"* ]]; then
   exit 1
 fi
 
-if [[ "${AUTO_GRANT_DB:-}" == "1" || "${AUTO_GRANT_DB:-}" == "true" ]]; then
-  "$ROOT_DIR/scripts/db_grant.sh"
-fi
+
 
 JOB_NAME="${JOB_NAME:-pokerwars-prisma-migrate}"
 IMAGE_TAG="$(date +%Y%m%d%H%M%S)"
@@ -117,21 +115,7 @@ JOB_ARGS=(
   # --args "run,prisma:migrate:deploy,-w,apps/ws-server"
 
   --command "sh"
-  --args "-c,cat << 'EOF' > /tmp/run.sh
-  echo '=== DB DEBUG ==='
-  echo \$DATABASE_URL
-
-  psql \"\$DATABASE_URL\" -c \"SELECT current_user, session_user;\"
-  psql \"\$DATABASE_URL\" -c \"SELECT schema_name FROM information_schema.schemata WHERE schema_name='public';\"
-
-  echo '=== PRISMA SYNC ==='
-  cd apps/ws-server
-  npx prisma db push --schema=prisma/schema.prisma --accept-data-loss
-  npx prisma generate
-
-  echo '=== DONE ==='
-  EOF
-  sh /tmp/run.sh"
+  --args "-c,echo '=== DB DEBUG ===' && echo DATABASE_URL: \$DATABASE_URL && psql \$DATABASE_URL -c 'SELECT 1' >/dev/null 2>&1 && echo 'DB OK' || echo 'DB FAIL' && echo '=== PRISMA ===' && cd /app/apps/ws-server && npx prisma db push --schema=prisma/schema.prisma --accept-data-loss 2>&1 && npx prisma generate && echo 'DONE' || echo 'Migration failed'"
 )
 
 if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then

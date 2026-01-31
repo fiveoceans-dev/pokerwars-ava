@@ -47,15 +47,17 @@ PY
   printf '"%s"' "$v"
 }
 
-if [[ -n "${DB_HOST:-}" && -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" ]]; then
+# For Prisma jobs, prefer Cloud SQL socket path if DB_INSTANCE is available
+# This ensures Cloud Run jobs can connect via --add-cloudsql-instances
+if [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" && -n "${DB_INSTANCE:-}" ]]; then
+  ENCODED_USER="$(urlencode "$DB_USER")"
+  ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
+  DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@localhost/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+elif [[ -n "${DB_HOST:-}" && -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" ]]; then
   ENCODED_USER="$(urlencode "$DB_USER")"
   ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
   DB_PORT_EFFECTIVE="${DB_PORT:-5432}"
   DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@${DB_HOST}:${DB_PORT_EFFECTIVE}/${DB_NAME}?schema=public"
-elif [[ -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" && -n "${DB_NAME:-}" && -n "${DB_INSTANCE:-}" ]]; then
-  ENCODED_USER="$(urlencode "$DB_USER")"
-  ENCODED_PASS="$(urlencode "$DB_PASSWORD")"
-  DATABASE_URL_EFFECTIVE="postgresql://${ENCODED_USER}:${ENCODED_PASS}@localhost/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
 else
   DATABASE_URL_EFFECTIVE="${DATABASE_URL_CLOUD:-${DATABASE_URL:-}}"
 fi

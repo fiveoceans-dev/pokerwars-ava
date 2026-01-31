@@ -1,6 +1,6 @@
 SERVICE=ws-server
 NODE_ENV=production
-DATABASE_URL=postgresql://pokerwars-admin:%40Ubf875Fg8973ft6v7f36@/pokerwars-db?host=/cloudsql/beam-457011:us-central1:pokerwars-instance
+DATABASE_URL=postgresql://pokerwars-admin:%40Ubf875Fg8973ft6v7f36@/pokerwars-database?host=/cloudsql/beam-457011:us-central1:pokerwars-instance
 ALLOWED_WS_ORIGINS=https://pokerwars.xyz,https://www.pokerwars.xyz
 DEV_ALLOWED_WS_ORIGINS=http://localhost:8090
 REDIS_URL=

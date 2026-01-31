@@ -73,7 +73,7 @@ WEB_SERVICE_NAME=poker-web
 WS_SERVICE_NAME=poker-ws
 WALLETCONNECT_PROJECT_ID=...
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
-DB_NAME=pokerwars-db
+DB_NAME=pokerwars-database
 DB_USER=pokerwars-admin
 DB_PASSWORD=your-password
 DB_INSTANCE=your-cloudsql-instance
@@ -98,7 +98,7 @@ export DB_ADMIN_PASSWORD=your-admin-password
 
 Optional: use an explicit admin URL instead of user/pass:
 ```
-export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-db"
+export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-database"
 ./scripts/db_grant.sh
 ```
 

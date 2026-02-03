@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: webEnv.appName,
     description: webEnv.appDescription,
     metadataBase,
-    icons: ["/pokerwars_logo.svg"],
+    icons: ["/favicon.ico"],
     openGraph: {
       title: webEnv.appName,
       description: webEnv.appDescription,

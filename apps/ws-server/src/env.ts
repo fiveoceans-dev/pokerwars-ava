@@ -11,7 +11,13 @@ type ServerEnv = {
 
 export const normalizeOrigin = (value?: string | null): string => {
   if (!value) return "";
-  const trimmed = value.trim();
+  const trimmedRaw = value.trim();
+  if (!trimmedRaw) return "";
+  const trimmed =
+    (trimmedRaw.startsWith('"') && trimmedRaw.endsWith('"')) ||
+    (trimmedRaw.startsWith("'") && trimmedRaw.endsWith("'"))
+      ? trimmedRaw.slice(1, -1).trim()
+      : trimmedRaw;
   if (!trimmed) return "";
   try {
     const url = new URL(trimmed);
@@ -34,7 +40,14 @@ const parseOrigins = (value?: string | null): string[] =>
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
   if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
+  const trimmedRaw = value.trim();
+  const trimmed =
+    (trimmedRaw.startsWith('"') && trimmedRaw.endsWith('"')) ||
+    (trimmedRaw.startsWith("'") && trimmedRaw.endsWith("'"))
+      ? trimmedRaw.slice(1, -1).trim()
+      : trimmedRaw;
+  if (!trimmed) return fallback;
+  const parsed = Number.parseInt(trimmed, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
@@ -42,7 +55,13 @@ export const getServerEnv = (): ServerEnv => {
   const nodeEnv = process.env.NODE_ENV || "development";
   const isProduction = nodeEnv === "production";
 
-  const rawPort = process.env.PORT?.trim();
+  const rawPortValue = process.env.PORT?.trim();
+  const rawPort =
+    rawPortValue &&
+    ((rawPortValue.startsWith('"') && rawPortValue.endsWith('"')) ||
+    (rawPortValue.startsWith("'") && rawPortValue.endsWith("'")))
+      ? rawPortValue.slice(1, -1).trim()
+      : rawPortValue;
   let port: number | undefined;
   if (rawPort) {
     const parsed = Number.parseInt(rawPort, 10);

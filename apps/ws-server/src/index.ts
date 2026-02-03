@@ -38,7 +38,7 @@ import { LedgerPort } from "./ledgerPort";
 import { InMemoryLedger } from "./inMemoryLedger";
 import { ChainAdapter } from "./chainAdapter";
 import { Asset } from "@prisma/client";
-import { authNonces, verifiedWallets } from "./security";
+import { authNonces, verifiedWallets, issueAuthToken, verifyAuthToken } from "./security";
 import { ethers } from "ethers";
 import {
   saveSession,
@@ -56,9 +56,23 @@ const ledger: LedgerPort | null = prisma ? new LedgerService(prisma) : new InMem
 const chain = ledger ? new ChainAdapter(ledger) : null;
 const allowUnverifiedWallets = process.env.ALLOW_UNVERIFIED_WALLETS === "1";
 
-function isWalletVerified(wallet: string | undefined): boolean {
+function getBearerToken(req: IncomingMessage): string | null {
+  const header = req.headers.authorization || req.headers.Authorization;
+  if (typeof header !== "string") return null;
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : null;
+}
+
+function isWalletAuthorized(req: IncomingMessage, wallet: string | undefined): boolean {
   if (!wallet) return false;
   if (allowUnverifiedWallets) return true;
+  const token = getBearerToken(req);
+  if (token) {
+    const verified = verifyAuthToken(token);
+    if (verified && verified.wallet === wallet.toLowerCase()) {
+      return true;
+    }
+  }
   return verifiedWallets.has(wallet.toLowerCase());
 }
 
@@ -184,9 +198,10 @@ const server = createServer(async (req, res) => {
         const recovered = ethers.verifyMessage(message, signature).toLowerCase();
         if (recovered !== wallet) throw new Error("signature does not match wallet");
         verifiedWallets.add(wallet);
+        const token = issueAuthToken(wallet);
         authNonces.delete(wallet);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
+        res.end(JSON.stringify({ ok: true, token }));
       } catch (err) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: err instanceof Error ? err.message : "invalid request" }));
@@ -254,7 +269,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    if (!isWalletVerified(wallet)) {
+    if (!isWalletAuthorized(req, wallet)) {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
@@ -278,7 +293,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    if (!isWalletVerified(wallet)) {
+    if (!isWalletAuthorized(req, wallet)) {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
@@ -303,7 +318,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    if (!isWalletVerified(wallet)) {
+    if (!isWalletAuthorized(req, wallet)) {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
@@ -327,7 +342,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    if (!isWalletVerified(wallet)) {
+    if (!isWalletAuthorized(req, wallet)) {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
@@ -343,6 +358,9 @@ const server = createServer(async (req, res) => {
       res.writeHead(429);
       res.end(JSON.stringify({ error: "cooldown", nextAvailableInMs: payload.nextAvailableInMs }));
       return;
+    }
+    if (payload?.account && !payload?.balance) {
+      payload.balance = payload.account;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
@@ -362,7 +380,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    if (!isWalletVerified(wallet)) {
+    if (!isWalletAuthorized(req, wallet)) {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
@@ -383,8 +401,12 @@ const server = createServer(async (req, res) => {
         const qty = Math.max(0, Math.floor(Number(amount) || 0));
         if (qty <= 0) throw new Error("invalid amount");
         const receipt = await chain.convert(wallet, direction, tier, qty);
+        const payload: any = receipt.payload;
+        if (payload?.account && !payload?.balance) {
+          payload.balance = payload.account;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(receipt.payload));
+        res.end(JSON.stringify(payload));
       } catch (err) {
         res.writeHead(400);
         res.end(JSON.stringify({ error: err instanceof Error ? err.message : "invalid request" }));
@@ -406,7 +428,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet param required" }));
       return;
     }
-    if (!verifiedWallets.has(wallet)) {
+    if (!isWalletAuthorized(req, wallet)) {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;

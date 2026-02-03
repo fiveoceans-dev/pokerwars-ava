@@ -110,12 +110,13 @@ JOB_ARGS=(
   --image "$IMAGE_URI"
   --region "$REGION"
   --set-env-vars="$ENV_VARS"
+  --set-env-vars="AUTO_SEED=${AUTO_SEED:-}"
   --add-cloudsql-instances "$CLOUDSQL_CONN"
   # --command "npm"
   # --args "run,prisma:migrate:deploy,-w,apps/ws-server"
 
-  --command "sh"
-  --args "-c,echo '=== DB DEBUG ===' && echo DATABASE_URL: \$DATABASE_URL && psql \$DATABASE_URL -c 'SELECT 1' >/dev/null 2>&1 && echo 'DB OK' || echo 'DB FAIL' && echo '=== PRISMA ===' && cd /app/apps/ws-server && npx prisma db push --schema=prisma/schema.prisma --accept-data-loss 2>&1 && npx prisma generate && echo 'DONE' || echo 'Migration failed'"
+  --command "bash"
+  --args "-c,echo '=== DB DEBUG ===' && echo DATABASE_URL: \$DATABASE_URL && echo AUTO_SEED: \$AUTO_SEED && psql \$DATABASE_URL -c 'SELECT 1' >/dev/null 2>&1 && echo 'DB OK' || echo 'DB FAIL' && echo '=== PRISMA ===' && cd /app/apps/ws-server && npx prisma migrate deploy --schema=prisma/schema.prisma 2>&1 && npx prisma generate && if [[ \"\${AUTO_SEED:-}\" == \"1\" || \"\${AUTO_SEED:-}\" == \"true\" ]]; then echo '=== SEEDING ===' && echo 'Running npm run seed:all' && npm run seed:all && echo 'Seeding: SUCCESS' && psql \$DATABASE_URL -c 'SELECT COUNT(*) FROM \"Treasury\";' 2>/dev/null && echo 'Treasury seeded' || echo 'Treasury check failed'; else echo 'Seeding: SKIPPED (AUTO_SEED=false)'; fi && echo 'DONE' || echo 'Migration failed'"
 )
 
 if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then

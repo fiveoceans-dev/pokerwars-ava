@@ -89,10 +89,10 @@ export function WalletConnectButton({ showButton = true }: { showButton?: boolea
             {isConnecting ? "Confirm…" : label}
           </button>
           {showMenu && menuOpen ? (
-            <div className="pointer-events-auto absolute left-0 top-full mt-1 min-w-full space-y-1 text-xs">
+            <div className="wallet-menu pointer-events-auto text-xs">
               <Link
                 href="/account"
-                className="tbtn tbtn-tight nav-btn"
+                className="tbtn tbtn-tight nav-btn wallet-menu-item"
                 onClick={() => setMenuOpen(false)}
                 tabIndex={0}
               >
@@ -104,7 +104,7 @@ export function WalletConnectButton({ showButton = true }: { showButton?: boolea
                   setMenuOpen(false);
                   window.dispatchEvent(new Event("open-wallet-disconnect"));
                 }}
-                className="tbtn tbtn-tight nav-btn"
+                className="tbtn tbtn-tight nav-btn wallet-menu-item"
                 tabIndex={0}
               >
                 Disconnect

@@ -54,7 +54,7 @@ const AnimatedNavLabel = () => {
     let stage = 0;
     let shuffleTimer: number | undefined;
     let holdTimer: number | undefined;
-    const targets = ["FREE", "FREE"];
+    const targets = ["FREE", "COINS", "DAILY"];
     const lastPlayedRaw = getCookieValue(NAV_ANIM_COOKIE);
     const lastPlayed = lastPlayedRaw ? Number.parseInt(lastPlayedRaw, 10) : 0;
     if (lastPlayed && !Number.isNaN(lastPlayed)) {
@@ -306,7 +306,7 @@ export const Header = () => {
             {isWalletConnected && isWalletMenuOpen && (
               <ul
                 tabIndex={0}
-                className="nav-list menu menu-compact dropdown-content mt-3 p-2 w-52 bg-black/80 border border-white/10 right-0"
+                className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-52 bg-black/80 border border-white/10 left-0"
                 onClick={() => setIsWalletMenuOpen(false)}
               >
                 <li>
@@ -346,7 +346,7 @@ export const Header = () => {
             {isAccountMenuOpen && (
               <ul
                 tabIndex={0}
-                className="nav-list menu menu-compact dropdown-content mt-3 p-2 w-60 bg-black/80 border border-white/10 right-0"
+                className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-60 bg-black/80 border border-white/10 left-0"
                 onClick={() => setIsAccountMenuOpen(false)}
               >
                 {isWalletConnected && (

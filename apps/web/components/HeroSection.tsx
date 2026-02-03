@@ -78,10 +78,10 @@ export default function HeroSection() {
       <div className="relative z-10 min-h-[70vh] md:min-h-[80vh] flex flex-col justify-center">
         <div className="content-wrap">
           <div className="max-w-2xl text-left">
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
               <h1
-                className="text-3xl md:text-5xl leading-tight reveal"
-                style={{ animationDelay: "0.1s", minHeight: "3.75em" }}
+                className="text-3xl md:text-5xl leading-tight whitespace-nowrap reveal"
+                style={{ animationDelay: "0.1s" }}
               >
                 {slides[index].title}
               </h1>

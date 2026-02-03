@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import GenericModal from "~~/components/ui/GenericModal";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { notifyError, notifySuccess } from "~~/utils/notifications";
@@ -9,6 +9,7 @@ import {
   type NetworkConfig,
   type SupportedNetworkId,
 } from "~~/config/networks";
+import { useConnect } from "wagmi";
 
 interface WalletConnectDialogProps {
   open: boolean;
@@ -32,34 +33,12 @@ const NETWORK_ORDER: SupportedNetworkId[] = [
   "hyperliquid-testnet",
 ];
 
-const RECOMMENDED_WALLETS = ["metamask", "coinbase", "walletconnect"] as const;
-
 const WALLET_BADGE_STYLE =
   "text-[var(--brand-accent)] text-xs font-semibold";
-
-type KnownWallet = {
-  id: string;
-  label: string;
-  check: (provider: any) => boolean;
-  installUrl: string;
-};
-
-type WalletOption = KnownWallet & { installed: boolean };
-
-type EIP6963ProviderDetail = {
-  info: {
-    uuid: string;
-    name: string;
-    icon: string;
-    rdns: string;
-  };
-  provider: any;
-};
 
 export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps) {
 
   const {
-    connect,
     connectDemo,
     disconnect,
     isDemo,
@@ -69,6 +48,7 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
     networkId,
     setNetwork,
   } = useWallet();
+  const { connectors, connectAsync, isPending: isConnecting } = useConnect();
 
   const networkConfigured = Boolean(network.chainId && network.rpcUrls.length);
 
@@ -85,176 +65,14 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
     return ordered;
   }, [networkId]);
 
-  const detectedWallets = useMemo(() => {
-    const collectedProviders: any[] = [];
-    let ethereum: any;
-    if (typeof window !== "undefined") {
-      ethereum = (window as any).ethereum;
-      if (ethereum?.providers?.length) {
-        collectedProviders.push(...ethereum.providers);
-      } else if (ethereum) {
-        collectedProviders.push(ethereum);
-      }
-    }
-
-    const knownWallets: KnownWallet[] = [
-      {
-        id: "metamask",
-        label: "MetaMask",
-        check: (provider: any) => provider?.isMetaMask,
-        installUrl: "https://metamask.io/download/",
-      },
-      {
-        id: "coinbase",
-        label: "Coinbase Wallet",
-        check: (provider: any) => provider?.isCoinbaseWallet,
-        installUrl: "https://www.coinbase.com/wallet",
-      },
-      {
-        id: "brave",
-        label: "Brave Wallet",
-        check: (provider: any) => provider?.isBraveWallet,
-        installUrl: "https://brave.com/wallet/",
-      },
-      {
-        id: "rabby",
-        label: "Rabby Wallet",
-        check: (provider: any) => provider?.isRabby,
-        installUrl: "https://rabby.io",
-      },
-      {
-        id: "frame",
-        label: "Frame",
-        check: (provider: any) => provider?.isFrame,
-        installUrl: "https://frame.sh",
-      },
-      {
-        id: "zerion",
-        label: "Zerion Wallet",
-        check: (provider: any) => provider?.isZerion,
-        installUrl: "https://zerion.io/wallet",
-      },
-      {
-        id: "okx",
-        label: "OKX Wallet",
-        check: (provider: any) => provider?.isOkxWallet,
-        installUrl: "https://www.okx.com/web3",
-      },
-      {
-        id: "walletconnect",
-        label: "WalletConnect",
-        check: (provider: any) => provider?.isWalletConnect,
-        installUrl: "https://walletconnect.com/",
-      },
-    ];
-
-    const detectedIds = new Set<string>();
-    const fallbackInstalled: WalletOption[] = [];
-    collectedProviders.forEach((provider) => {
-      let matched = false;
-      knownWallets.forEach((wallet) => {
-        if (!detectedIds.has(wallet.id) && wallet.check(provider)) {
-          detectedIds.add(wallet.id);
-          matched = true;
-        }
-      });
-      if (!matched) {
-        const label =
-          typeof provider?.name === "string" && provider.name.trim().length > 0
-            ? provider.name.trim()
-            : "EVM Wallet";
-        const fallbackId = `detected-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-        if (!fallbackInstalled.some((wallet) => wallet.id === fallbackId)) {
-          fallbackInstalled.push({
-            id: fallbackId,
-            label,
-            check: () => true,
-            installUrl: "https://metamask.io/download/",
-            installed: true,
-          });
-        }
-      }
-    });
-
-    const installed = knownWallets
-      .filter((wallet) => detectedIds.has(wallet.id))
-      .map((wallet) => ({ ...wallet, installed: true }));
-
-    if (installed.length === 0 && ethereum) {
-      installed.push({
-        id: "browser",
-        label: "Browser Wallet",
-        check: () => true,
-        installUrl: "https://metamask.io/download/",
-        installed: true,
-      });
-    }
-
-    fallbackInstalled.forEach((fallback) => {
-      if (!installed.some((wallet) => wallet.id === fallback.id)) {
-        installed.push(fallback);
-      }
-    });
-
-    const prioritizedInstalled = [...installed].sort((a, b) => {
-      const rank = (id: string) => {
-        const idx = RECOMMENDED_WALLETS.indexOf(id as typeof RECOMMENDED_WALLETS[number]);
-        return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
-      };
-      return rank(a.id) - rank(b.id);
-    });
-
-    return { installed: prioritizedInstalled };
-  }, [open, status, networkId]);
-
-  const [eipProviders, setEipProviders] = useState<EIP6963ProviderDetail[]>([]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !open) return;
-
-    const providersMap = new Map<string, EIP6963ProviderDetail>();
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<EIP6963ProviderDetail>).detail;
-      if (!detail?.info?.uuid) return;
-      if (providersMap.has(detail.info.uuid)) return;
-      providersMap.set(detail.info.uuid, detail);
-      setEipProviders(Array.from(providersMap.values()));
-    };
-
-    window.addEventListener("eip6963:announceProvider", handler as EventListener);
-    window.dispatchEvent(new Event("eip6963:requestProvider"));
-    return () => window.removeEventListener("eip6963:announceProvider", handler as EventListener);
-  }, [open]);
-
-  // Merge EIP-6963 providers into the installed list to ensure all injected wallets show up.
   const installedWallets = useMemo(() => {
-    const fromDetect = detectedWallets.installed;
-    const merged = [...fromDetect];
-    eipProviders.forEach((providerDetail) => {
-      const label = providerDetail.info?.name || "Injected Wallet";
-      const id = `eip6963-${providerDetail.info?.uuid ?? label}`;
-      if (!merged.some((wallet) => wallet.id === id)) {
-        merged.push({
-          id,
-          label,
-          check: () => true,
-          installUrl: "https://walletconnect.com/",
-          installed: true,
-        });
-      }
-    });
-    // Always surface WalletConnect even if not detected to catch mobile/QR flows.
-    if (!merged.some((wallet) => wallet.id === "walletconnect")) {
-      merged.push({
-        id: "walletconnect",
-        label: "WalletConnect",
-        check: () => true,
-        installUrl: "https://walletconnect.com/",
-        installed: true,
-      });
-    }
-    return merged;
-  }, [detectedWallets.installed, eipProviders]);
+    return connectors.map((connector) => ({
+      id: connector.id,
+      label: connector.name,
+      ready: connector.ready ?? true,
+      connector,
+    }));
+  }, [connectors]);
 
   if (!open) {
     return null;
@@ -264,9 +82,9 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
     onClose();
   };
 
-  const handleConnect = async () => {
+  const handleConnect = async (connector: (typeof connectors)[number]) => {
     try {
-      await connect();
+      await connectAsync({ connector });
       closeModal();
     } catch (err) {
       console.error("Wallet connect failed", err);
@@ -404,14 +222,16 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
               <button
                 key={wallet.id}
                 type="button"
-                onClick={() => networkConfigured && handleConnect()}
-                className={`${buttonBase} ${!networkConfigured ? "opacity-50" : ""}`}
-                disabled={!networkConfigured}
+                onClick={() => networkConfigured && wallet.ready && handleConnect(wallet.connector)}
+                className={`${buttonBase} ${!networkConfigured || isConnecting || !wallet.ready ? "opacity-50" : ""}`}
+                disabled={!networkConfigured || isConnecting || !wallet.ready}
               >
                 <span className={WALLET_BADGE_STYLE}>{wallet.label.slice(0, 1).toUpperCase()}</span>
                 <div className="flex flex-1 flex-col text-left leading-tight">
                   <span>{wallet.label}</span>
-                  <span className="text-[11px] font-normal text-white/60">Installed</span>
+                  <span className="text-[11px] font-normal text-white/60">
+                    {isConnecting ? "Connecting…" : wallet.ready ? "Installed" : "Unavailable"}
+                  </span>
                 </div>
               </button>
             ))

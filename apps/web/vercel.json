@@ -1,5 +1,0 @@
-{
-  "framework": "nextjs",
-  "installCommand": "YARN_ENABLE_SCRIPTS=0 yarn install --immutable --inline-builds",
-  "buildCommand": "yarn build"
-}

@@ -33,12 +33,12 @@ npx prisma generate
 For a one-shot local bootstrap (migrate + generate + optional seed), run:
 
 ```bash
-AUTO_MIGRATE=true ./scripts/docker_up.sh
+AUTO_MIGRATE=true ./scripts/start_local.sh
 ```
 
 Optional seed:
 ```bash
-SEED_GAMES=true AUTO_MIGRATE=true ./scripts/docker_up.sh
+SEED_GAMES=true AUTO_MIGRATE=true ./scripts/start_local.sh
 ```
 
 ### Local run checklist (full stack)
@@ -64,6 +64,12 @@ SEED_GAMES=true AUTO_MIGRATE=true ./scripts/docker_up.sh
 
 ## Environment setup
 
+Recommended workflow:
+- Use a root `.env` (or `.env.local`) as the source of truth.
+- Sync into app-specific files with `./scripts/sync_env.sh`.
+- Avoid wrapping values in quotes; some tools treat quoted strings literally.
+- Most scripts read `.env` by default; you can override with `ENV_FILE=...` where noted.
+
 Web app (`apps/web/.env.local`):
 - Copy `apps/web/.env.example` to `.env.local`.
 - Set `NEXT_PUBLIC_WS_URL` to the WebSocket server URL (e.g. `ws://localhost:8099`).
@@ -78,7 +84,7 @@ WebSocket server (`apps/ws-server/.env`):
 - Configure `PORT` if you need a different public port.
 
 See `docs/env.md` for a full env matrix (local, docker, and Cloud Run).
-You can sync root `.env` into app-specific files with:
+You can sync root env into app-specific files with:
 ```bash
 ./scripts/sync_env.sh
 ```
@@ -88,7 +94,12 @@ You can sync root `.env` into app-specific files with:
 Run the same containers that Cloud Run uses:
 
 ```bash
-docker compose -f docker-compose.prod.yml up --build
+AUTO_MIGRATE=true ./scripts/start_local.sh
+```
+
+To use a different env file:
+```bash
+ENV_FILE=.env.local AUTO_MIGRATE=true ./scripts/start_local.sh
 ```
 
 Defaults:
@@ -97,90 +108,114 @@ Defaults:
 
 Override with environment variables if needed (e.g. `NEXT_PUBLIC_WS_URL`, `ALLOWED_WS_ORIGINS`).
 
-## GCP deployment (Cloud Run)
+## 🚀 GCP Deployment (Cloud Run + Cloud SQL)
 
-We deploy both services from the same image (root `Dockerfile`) and select the runtime via `SERVICE`.
-The runtime image uses Debian (bookworm-slim) so Prisma engines target OpenSSL 3 and are compatible with Cloud Run.
+Complete deployment guide for PokerWars full-stack application with automated database setup, migration, and service deployment.
 
-### Step-by-step (production deploy)
+### 📋 Prerequisites
 
-1) **Prepare env**
+1. **Google Cloud Project** with billing enabled
+2. **gcloud CLI** installed and authenticated
+3. **Docker** installed locally
+4. **Environment variables** configured
+
+### 🔧 Environment Setup
+
+1. **Copy environment template**
    ```bash
    cp .env.example .env
    ```
-   Fill at minimum:
-   - `PROJECT_ID`, `REGION`, `REPO_NAME`
-   - `WEB_SERVICE_NAME`, `WS_SERVICE_NAME`
-   - `WEB_PUBLIC_URL`, `WS_PUBLIC_URL`
-   - `WALLETCONNECT_PROJECT_ID`, `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`
-   - `ALLOWED_WS_ORIGINS`
-   - `DB_INSTANCE`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (and optionally `DB_TIER`)
-   - `NEXT_PUBLIC_HYPERLIQUID_*` / `NEXT_PUBLIC_HYPERLIQUID_TESTNET_*`
 
-2) **Login + set gcloud defaults**
+2. **Configure required variables** in `.env`:
+   ```bash
+   # GCP Configuration
+   PROJECT_ID=your-gcp-project-id
+   REGION=us-central1
+   REPO_NAME=pokerwars-repo
+
+   # Service Names
+   WEB_SERVICE_NAME=poker-web
+   WS_SERVICE_NAME=poker-ws
+
+   # Public URLs (will be set after deployment)
+   WEB_PUBLIC_URL=https://poker-web-[hash].us-central1.run.app
+   WS_PUBLIC_URL=https://poker-ws-[hash].us-central1.run.app
+
+   # WebSocket Configuration
+   ALLOWED_WS_ORIGINS=https://poker-web-[hash].us-central1.run.app
+
+   # Database Configuration
+   DB_INSTANCE=pokerwars-instance
+   DB_NAME=pokerwars-database
+   DB_USER=pokerwars-admin
+   DB_PASSWORD=your-secure-password
+   DB_TIER=db-g1-small
+
+   # Wallet Configuration
+   WALLETCONNECT_PROJECT_ID=your-walletconnect-project-id
+   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-walletconnect-project-id
+
+   # Optional: Hyperliquid Configuration
+   NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID=998
+   NEXT_PUBLIC_HYPERLIQUID_RPC_URL=https://rpc.hyperliquid.xyz/evm
+
+   # Development: Allow unverified wallets (bypasses authentication)
+   # Set to 1 for testing without wallet verification
+   ALLOW_UNVERIFIED_WALLETS=1
+   ```
+
+3. **Authenticate with Google Cloud**
    ```bash
    gcloud auth login
    ./scripts/gcp_use_env.sh
    ```
+   `gcp_use_env.sh` reads `.env` in the repo root. The deploy scripts support `ENV_FILE=...` if you keep a separate GCP env file.
 
-3) **Create Cloud SQL (optional, automated)**
-   ```bash
-   CREATE_CLOUDSQL=true ./scripts/gcp_deploy_ws.sh
-   ```
-   This creates the instance/db/user if missing, builds the image, and deploys WS.
+### 🗄️ Database Setup
 
-4) **Grant DB privileges (first-time only)**
-   If migrations fail with permission errors (P1010), grant privileges using an admin role:
+#### Option 1: Automated Setup (Recommended)
    ```bash
-   export DB_ADMIN_USER=postgres
-   export DB_ADMIN_PASSWORD=your-admin-password
-   ./scripts/db_grant.sh
-   ```
-   Or use a direct admin URL:
-   ```bash
-   export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-database"
-   ./scripts/db_grant.sh
-   ```
-
-5) **Run Prisma migrations**
-   ```bash
-   ./scripts/run_prisma_job.sh
-   ```
-   Tip: you can fully automate grants + migrations by setting:
-   ```bash
-   export AUTO_GRANT_DB=true
-   export AUTO_MIGRATE=true
-   ```
-   Then run:
-   ```bash
-   ./scripts/gcp_deploy_ws.sh
-   ```
-
-6) **Deploy WS**
-   ```bash
-   ./scripts/gcp_deploy_ws.sh
-   ```
-   Notes:
-   - Attaches Cloud SQL if `DB_INSTANCE` is set.
-   - Uses `.env` → generated env files for Cloud Run.
-
-7) **Deploy Web**
-   ```bash
-   ./scripts/gcp_deploy_web.sh
-   ```
-
-8) **Verify**
-   ```bash
-   gcloud run services list
-   gcloud run jobs executions list
-   gcloud logs read --project "$PROJECT_ID" --limit 100
-   ```
-
-### Fully automated deploy (copy/paste)
-```bash
+export CREATE_CLOUDSQL=true
 export AUTO_GRANT_DB=true
 export AUTO_MIGRATE=true
+export CREATE_VPC_CONNECTOR=true
+export USE_VPC_CONNECTOR=true
+
+./scripts/gcp_deploy_ws.sh
+```
+
+#### Option 2: Manual Database Setup
+   ```bash
+# 1. Create Cloud SQL instance
+CREATE_CLOUDSQL=true ./scripts/gcp_deploy_ws.sh
+
+# 2. Grant database permissions
+./scripts/db_grant.sh
+
+# 3. Run database migrations
+   ./scripts/run_prisma_job.sh
+   ```
+
+### 🌐 Service Deployment
+
+#### Deploy WebSocket Server
+```bash
+export AUTO_MIGRATE=true
+export AUTO_GRANT_DB=true
+./scripts/gcp_deploy_ws.sh
+```
+
+#### Deploy Web Application
+```bash
+./scripts/gcp_deploy_web.sh
+```
+
+#### Complete One-Command Deployment
+```bash
+# Full automated deployment
 export CREATE_CLOUDSQL=true
+export AUTO_GRANT_DB=true
+export AUTO_MIGRATE=true
 export CREATE_VPC_CONNECTOR=true
 export USE_VPC_CONNECTOR=true
 
@@ -188,55 +223,300 @@ export USE_VPC_CONNECTOR=true
 ./scripts/gcp_deploy_web.sh
 ```
 
-### Troubleshooting Database Deployment
+### 🔄 Redeployment Procedures
 
-If tables are not created after deployment:
-
-1. **Run diagnostics**:
-   ```bash
-   ./scripts/diagnose_db_deployment.sh
-   ```
-
-2. **Test database connection setup**:
-   ```bash
-   ./test_db_connection.sh
-   ```
-
-3. **Check migration job logs**:
-   ```bash
-   gcloud run jobs logs read --region=$REGION --job=pokerwars-prisma-migrate
-   ```
-
-4. **Manual migration** (if automated fails):
-   ```bash
-   ./scripts/run_prisma_job.sh
-   ```
-
-**Common Issues:**
-- **Empty DATABASE_URL in logs**: Environment variables not set correctly in Cloud Run job
-- **"DATABASE_URL cannot be specified multiple times"**: Fixed in v1.0+ - env file now uses Cloud SQL socket path
-- **"relation does not exist"**: Migration assumes existing state - now uses `db push` for fresh databases
-- **Connection timeout**: Private IP database without VPC connector
-- **Permission denied**: Database user lacks privileges
-- **Migration files missing**: Schema changes not committed
-
-**Common Issues:**
-- **Missing tables**: Deployment uses `prisma migrate deploy` (fixed in v1.0+), not `db push`
-- **Permission errors**: Set `AUTO_GRANT_DB=true` to auto-grant DB privileges
-- **VPC connectivity**: Ensure `USE_VPC_CONNECTOR=true` for private IP Cloud SQL
-
-### Optional single-service deploy script
-If you want a single generic deploy entrypoint:
+#### Quick Redeploy (Code Changes Only)
 ```bash
-SERVICE_NAME="$WEB_SERVICE_NAME" SERVICE_TYPE=web ./scripts/gcp_deploy.sh
-SERVICE_NAME="$WS_SERVICE_NAME" SERVICE_TYPE=ws-server ./scripts/gcp_deploy.sh
+# Redeploy WS server only
+./scripts/gcp_deploy_ws.sh
+
+# Redeploy web app only
+./scripts/gcp_deploy_web.sh
+
+# Redeploy both
+./scripts/gcp_deploy_ws.sh && ./scripts/gcp_deploy_web.sh
 ```
 
-### Notes
-- Postgres 15 is supported.
-- Env files for Cloud Run are generated under `.env.generated/`.
-- To auto-run migrations before WS deploy, set `AUTO_MIGRATE=true`.
-- Deploy scripts now fail fast if `DATABASE_URL` contains unresolved `$VARS` or if a production deploy uses a localhost URL.
+#### Database Schema Changes
+```bash
+# Update Prisma schema, then redeploy
+npm run db:generate
+./scripts/run_prisma_job.sh
+./scripts/gcp_deploy_ws.sh
+```
+
+#### Environment Variable Changes
+```bash
+# Update .env file, then redeploy
+./scripts/gcp_deploy_ws.sh
+./scripts/gcp_deploy_web.sh
+```
+
+#### Database Reset (⚠️ Destroys Data)
+```bash
+# Drop and recreate database
+./drop_db_psql.sh
+gcloud sql databases create pokerwars-database --instance=pokerwars-instance
+./scripts/db_grant.sh
+./scripts/run_prisma_job.sh
+```
+
+### 📊 Verification & Monitoring
+
+#### Check Deployment Status
+```bash
+# List all services
+gcloud run services list --region=us-central1
+
+# Check service URLs
+gcloud run services describe poker-ws --region=us-central1 --format="value(status.url)"
+gcloud run services describe poker-web --region=us-central1 --format="value(status.url)"
+```
+
+#### Monitor Logs
+```bash
+# WS server logs (real-time)
+gcloud run services logs read poker-ws --region=us-central1 --follow
+
+# Web app logs (real-time)
+gcloud run services logs read poker-web --region=us-central1 --follow
+
+# Migration job logs
+gcloud run jobs logs read --region=us-central1 --job=pokerwars-prisma-migrate
+```
+
+#### Health Checks
+```bash
+# WS server health
+curl https://poker-ws-[hash].us-central1.run.app/health
+
+# Web app status
+curl -I https://poker-web-[hash].us-central1.run.app
+```
+
+#### Database Verification
+```bash
+# Check tables
+gcloud sql databases execute pokerwars-instance \
+  --command="SELECT schemaname, tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;"
+
+# Connect directly
+gcloud sql connect pokerwars-instance --user=pokerwars-admin
+```
+
+### 🛠️ Troubleshooting
+
+#### Deployment Issues
+```bash
+# Diagnose deployment problems
+./scripts/diagnose_deployment.sh
+
+# Check migration status
+./debug_migration_job.sh
+```
+
+#### Common Problems
+
+**"Permission denied" during database setup**
+```bash
+# Reset database permissions
+./scripts/db_grant.sh
+```
+
+**"[[: not found" in Cloud Run logs**
+```bash
+# Fixed in v1.0+ - Cloud Run job now uses bash instead of sh
+# If you see this error, redeploy with updated scripts
+./scripts/run_prisma_job.sh
+```
+
+**Migration failures**
+```bash
+# Check migration logs
+gcloud run jobs logs read --region=us-central1 --job=pokerwars-prisma-migrate
+
+# Rerun migrations
+./scripts/run_prisma_job.sh
+```
+
+**Service startup failures**
+```bash
+# Check environment variables
+./scripts/build_cloudrun_env.sh
+cat .env.generated/env.ws.env
+
+# Redeploy with updated config
+./scripts/gcp_deploy_ws.sh
+```
+
+**WebSocket connection issues**
+```bash
+# Verify WS server is healthy
+curl https://poker-ws-[hash].us-central1.run.app/health
+
+# Check web app configuration
+gcloud run services logs read poker-web --region=us-central1
+```
+
+**API authentication errors (401 Unauthorized)**
+```bash
+# For testing without wallet verification, set:
+export ALLOW_UNVERIFIED_WALLETS=1
+
+# Then redeploy WS server
+./scripts/gcp_deploy_ws.sh
+```
+
+### 📋 Deployment Scripts Reference
+
+| Script | Purpose | When to Use |
+|--------|---------|-------------|
+| `gcp_deploy_ws.sh` | Deploy WS server + DB setup | Main deployment |
+| `gcp_deploy_web.sh` | Deploy web application | After WS deployment |
+| `run_prisma_job.sh` | Run database migrations | After DB creation |
+| `db_grant.sh` | Grant DB permissions | First-time setup |
+| `drop_db_psql.sh` | Drop database safely | Reset operations |
+| `diagnose_deployment.sh` | Debug deployment issues | Troubleshooting |
+
+### 🌱 Database Seeding
+
+### Initial Data Setup
+
+After database deployment, seed initial platform data:
+
+```bash
+# Seed all initial data (recommended)
+npm run seed:all
+
+# Or seed specific components
+npm run seed:initial    # Treasury, ledger, blind schedules
+npm run seed:games      # Game templates (cash, S&G, MTT)
+```
+
+### Seeding During Deployment
+
+Enable automatic seeding during deployment:
+
+```bash
+export AUTO_SEED=true
+./scripts/run_prisma_job.sh
+```
+
+Or for full deployment:
+```bash
+export CREATE_CLOUDSQL=true AUTO_GRANT_DB=true AUTO_MIGRATE=true AUTO_SEED=true
+./scripts/gcp_deploy_ws.sh
+```
+
+### What Gets Seeded
+
+| Component | Description | Status |
+|-----------|-------------|---------|
+| **Treasury** | 5B coin supply, ticket reserves | ✅ Auto-seeded |
+| **Ledger** | Genesis block and transaction | ✅ Auto-seeded |
+| **Blind Schedules** | STT/MTT tournament levels | ✅ Auto-seeded |
+| **Game Templates** | Cash games, S&G, MTT configs | ✅ Auto-seeded |
+| **Test Data** | Development user accounts | ⚠️ Optional |
+
+### Manual Seeding Scripts
+
+```bash
+cd apps/ws-server
+
+# Seed treasury and system accounts
+npx ts-node scripts/seed-initial-data.ts
+
+# Seed game templates
+npx ts-node scripts/seed-game-templates.ts
+
+# Seed with test data (development only)
+SEED_TEST_DATA=true npx ts-node scripts/seed-initial-data.ts
+```
+
+## 🎯 Production Checklist
+
+- [ ] Environment variables configured
+- [ ] Database instance created and accessible
+- [ ] VPC connector configured (if using private IP)
+- [ ] Services deployed successfully
+- [ ] **Database seeded with initial data**
+- [ ] Health endpoints responding
+- [ ] WebSocket connections working
+- [ ] Database operations functional
+- [ ] Monitoring and logging configured
+
+### 🚀 Quick Commands
+
+```bash
+# One-time setup
+cp .env.example .env  # Configure variables
+gcloud auth login
+./scripts/gcp_use_env.sh
+
+# Full deployment
+export CREATE_CLOUDSQL=true AUTO_GRANT_DB=true AUTO_MIGRATE=true CREATE_VPC_CONNECTOR=true USE_VPC_CONNECTOR=true
+./scripts/gcp_deploy_ws.sh && ./scripts/gcp_deploy_web.sh
+
+# Health check
+curl https://poker-ws-[hash].us-central1.run.app/health
+
+# Monitor logs
+gcloud run services logs read poker-ws --region=us-central1 --follow
+```
+
+### 🧪 Full Stack Integration Testing
+
+After deployment, verify all components work together:
+
+1. **Health Check**: `curl https://poker-ws-[hash].us-central1.run.app/health`
+2. **Web App**: Open `https://poker-web-[hash].us-central1.run.app`
+3. **WebSocket Connection**: Check browser dev tools for WS connections
+4. **Database Operations**: Create user → verify in database
+5. **Real-time Features**: Test live updates between browser tabs
+
+### 🔄 CI/CD Integration
+
+For automated deployments in CI/CD pipelines:
+
+```bash
+# Set required environment variables
+export CREATE_CLOUDSQL=true
+export AUTO_GRANT_DB=true
+export AUTO_MIGRATE=true
+export CREATE_VPC_CONNECTOR=true
+export USE_VPC_CONNECTOR=true
+
+# Deploy in sequence
+./scripts/gcp_deploy_ws.sh
+./scripts/gcp_deploy_web.sh
+
+# Verify deployment
+curl https://poker-ws-[hash].us-central1.run.app/health
+```
+
+### 📝 Additional Notes
+
+- **Postgres 15** is supported
+- **Environment files** for Cloud Run are generated under `.env.generated/`
+- **Docker images** use Debian (bookworm-slim) for OpenSSL 3 compatibility
+- **Prisma engines** target native binary for optimal performance
+- **VPC connectors** enable private IP database access
+- **Cloud SQL proxy** provides secure database connections
+
+### 🔧 Development Scripts
+
+```bash
+# Build all packages
+npm run build:packages
+
+# Start development servers
+npm run dev         # Web app (port 8080)
+npm run dev:ws      # WS server (port 8099)
+
+# Database operations
+npm run db:generate # Regenerate Prisma client
+npm run db:migrate  # Run dev migrations
+```
 
 ## Build and run
 
@@ -285,4 +565,43 @@ Details in `docs/mtt_stt.md` and `docs/vanilla-blockchain.md`.
 
 ## Template note
 
-`gcp-project/` contains a separate minimal template (Next.js + Fastify) for reference only; production deploys should use the root scripts above.
+## 🎯 Architecture Overview
+
+```
+🌐 Web App (Next.js + Cloud Run)
+    ↓ WebSocket
+🖥️ WS Server (Node.js + Cloud Run)
+    ↓ Database
+🗄️ Cloud SQL (PostgreSQL + Private IP)
+    ↓ Secure Access
+🔒 VPC Connector (Private Networking)
+```
+
+**Key Features:**
+- **Real-time multiplayer** poker with WebSocket connections
+- **Blockchain integration** via wallet connectivity
+- **Ledger-based economy** with tournament escrow
+- **Automated scaling** with Cloud Run
+- **Secure database** with private IP and VPC
+
+## 📚 Additional Documentation
+
+- `docs/env.md` - Complete environment variable reference
+- `docs/vanilla-blockchain.md` - Economy and ledger system
+- `docs/bot-guide.md` - Bot player configuration
+- `docs/mtt_stt.md` - Tournament and game mechanics
+
+## 🤝 Contributing
+
+1. **Local Development**: Use `npm run dev` and `npm run dev:ws`
+2. **Database Changes**: Update schema, run `npm run db:generate`
+3. **Testing**: Verify health endpoints and core flows before deployment
+4. **Deployment**: Use the GCP deployment scripts above
+
+## 📄 License
+
+This project is part of the PokerWars ecosystem. See individual package licenses for details.
+
+---
+
+**PokerWars**: Real-time multiplayer poker with blockchain economy, deployed on Google Cloud Platform.

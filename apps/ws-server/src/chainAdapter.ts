@@ -39,7 +39,7 @@ export class ChainAdapter {
 
   async convert(wallet: string, direction: "coinsToTickets" | "ticketsToCoins", tier: TicketTier, amount: number) {
     const account = await this.ledger.convert(wallet, direction, tier, amount);
-    return this.receipt({ account });
+    return this.receipt({ balance: account });
   }
 
   async buyInCash(wallet: string, tableId: string, amount: number) {

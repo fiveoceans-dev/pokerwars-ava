@@ -7,11 +7,24 @@ type WebEnv = {
   walletConnectProjectId?: string;
 };
 
+const normalizeEnvValue = (value: string | undefined): string => {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 const readEnv = (
   key: string,
   options?: { requiredInProd?: boolean; fallback?: string },
 ): string => {
-  const value = process.env[key]?.trim();
+  const value = normalizeEnvValue(process.env[key]);
   if (value) return value;
   const isBuildPhase =
     process.env.NEXT_PHASE === "phase-production-build" ||
@@ -25,11 +38,11 @@ const readEnv = (
 
 export const getWebEnv = (): WebEnv => {
   const appName =
-    process.env.NEXT_PUBLIC_APP_NAME?.trim() || "PokerWars";
+    normalizeEnvValue(process.env.NEXT_PUBLIC_APP_NAME) || "PokerWars";
   const appDescription =
-    process.env.NEXT_PUBLIC_APP_DESCRIPTION?.trim() ||
+    normalizeEnvValue(process.env.NEXT_PUBLIC_APP_DESCRIPTION) ||
     "PokerWars is a tournament poker game.";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const appUrl = normalizeEnvValue(process.env.NEXT_PUBLIC_APP_URL);
 
   return {
     appName,
@@ -38,8 +51,8 @@ export const getWebEnv = (): WebEnv => {
     wsUrl: readEnv("NEXT_PUBLIC_WS_URL", { requiredInProd: true }),
     apiUrl: readEnv("NEXT_PUBLIC_API_URL", { requiredInProd: true }),
     walletConnectProjectId:
-      process.env.WALLETCONNECT_PROJECT_ID?.trim() ||
-      process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim() ||
+      normalizeEnvValue(process.env.WALLETCONNECT_PROJECT_ID) ||
+      normalizeEnvValue(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID) ||
       undefined,
   };
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useAccount, useDisconnect, useSwitchChain, useChainId } from "wagmi";
+import { useAccount, useDisconnect, useChainId } from "wagmi";
 import {
   AVAILABLE_NETWORKS,
   DEFAULT_NETWORK_ID,
@@ -9,8 +9,9 @@ import {
   type NetworkConfig,
   type SupportedNetworkId,
 } from "~~/config/networks";
-import { ensureAppKitReady, isWalletConnectConfigured } from "~~/config/wagmi";
+import { isWalletConnectConfigured } from "~~/config/wagmi";
 import { shortAddress } from "~~/utils/address";
+import { useAuth } from "~~/hooks/useAuth";
 
 const STORAGE_KEYS = {
   mode: "wallet:last-mode",
@@ -39,6 +40,10 @@ export type WalletContextValue = {
   disconnect: () => Promise<void>;
   resetError: () => void;
   formatAddress: (addr?: string) => string;
+  // Authentication
+  isAuthenticated: boolean;
+  authStatus: import('~~/hooks/useAuth').AuthStatus;
+  ensureAuth: () => Promise<boolean>;
 };
 
 const WalletContext = createContext<WalletContextValue | undefined>(undefined);
@@ -77,21 +82,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const { address: wagmiAddress, status: wagmiStatus, isConnected } = useAccount();
   const connectedChainId = useChainId();
   const { disconnectAsync } = useDisconnect();
-  const { switchChainAsync } = useSwitchChain();
-  const appKit = typeof window !== "undefined" ? ensureAppKitReady() : null;
-  const open = useCallback(async () => {
-    if (!appKit) {
-      setError("Wallet connect unavailable. Missing project ID?");
-      return;
-    }
-    try {
-      await appKit.open();
-    } catch (err) {
-      console.error("Wallet connect failed", err);
-      setError("Wallet connect failed. Check network and project ID.");
-    }
-  }, [appKit]);
-
   const [mode, setMode] = useState<WalletMode>(() => {
     if (typeof window === "undefined") return null;
     const stored = window.localStorage.getItem(STORAGE_KEYS.mode);
@@ -146,18 +136,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     resetError();
+    if (status === "connected" || status === "connecting") {
+      return;
+    }
     if (!isWalletConnectConfigured) {
       setError("Wallet connect unavailable: set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID.");
       return;
     }
     try {
-      await open({ view: "Connect" });
+      // With AppKit, we open the modal by dispatching a custom event
+      // The WalletConnectButton component listens for this event
+      window.dispatchEvent(new Event("open-wallet-connect"));
     } catch (err) {
-      console.error("Open Web3Modal failed", err);
+      console.error("Open wallet connect failed", err);
       if (err instanceof Error) setError(err.message);
       throw err;
     }
-  }, [open, resetError]);
+  }, [resetError]);
 
   const connectDemo = useCallback(async () => {
     resetError();
@@ -185,22 +180,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [disconnectAsync, isConnected]);
 
-  const ensureSwitchChain = useCallback(
-    async (targetNetwork: NetworkConfig) => {
-      if (!targetNetwork.chainId) return;
-      if (!isConnected || mode !== "wallet") return;
-      if (connectedChainId === targetNetwork.chainId) return;
-
-      if (!switchChainAsync) {
-        console.warn("switchChainAsync not available");
-        return;
-      }
-
-      await switchChainAsync({ chainId: targetNetwork.chainId });
-    },
-    [connectedChainId, isConnected, mode, switchChainAsync],
-  );
-
   const setNetwork = useCallback(
     async (id: SupportedNetworkId) => {
       setNetworkId(id);
@@ -210,16 +189,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (!cfg.chainId || !cfg.rpcUrls.length) {
           throw new Error(`${cfg.label} is missing chain configuration`);
         }
-        await ensureSwitchChain(cfg);
       } catch (err) {
         console.error("Failed to switch chain", err);
         if (err instanceof Error) setError(err.message);
       }
     },
-    [ensureSwitchChain],
+    [],
   );
 
   const formatAddress = useCallback((addr?: string) => shortAddress(addr), []);
+
+  // Authentication
+  const { authStatus, isAuthenticated, authenticate, reset: resetAuth } = useAuth();
+
+  // Reset auth on disconnect
+  useEffect(() => {
+    if (status === 'disconnected') {
+      resetAuth();
+    }
+  }, [status, resetAuth]);
+
+  const ensureAuth = useCallback(async () => {
+    if (isAuthenticated) return true;
+    if (!address || status !== "connected") return false;
+    return authenticate(address);
+  }, [address, authenticate, isAuthenticated, status]);
 
   const value = useMemo<WalletContextValue>(
     () => ({
@@ -238,6 +232,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       disconnect,
       resetError,
       formatAddress,
+      isAuthenticated,
+      authStatus,
+      ensureAuth,
     }),
     [
       address,
@@ -254,6 +251,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       disconnect,
       resetError,
       formatAddress,
+      isAuthenticated,
+      authStatus,
+      ensureAuth,
     ],
   );
 

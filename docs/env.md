@@ -1,127 +1,66 @@
 # Environment Variables Guide
 
-This repo uses **three scopes** of environment variables:
+This project follows professional standards for containerized Next.js and Node.js applications.
 
-1) **Script env** (root `.env` / `.env.gcp`)  
-   Used by deploy scripts in `scripts/`.
-2) **Web app env** (`apps/web/.env.local`)  
-   Client-facing values only (`NEXT_PUBLIC_*`).
-3) **WS server env** (`apps/ws-server/.env`)  
-   Server-only values like database URLs and allowlists.
+## 核心原则 (Core Principles)
 
-## Local development
+1.  **Build-Time Variables (`NEXT_PUBLIC_*`)**: These are baked into the JavaScript bundle during the build process. They are accessible to the browser. In Docker, these must be passed as `build-args`.
+2.  **Runtime Variables (Server-only)**: These are secrets or backend configs (e.g., `DATABASE_URL`, `JWT_SECRET`). They are injected when the container starts. They should **never** be baked into the image.
+3.  **Isolation**: Local `.env` files are ignored by Docker (`.dockerignore`). Configuration must be passed explicitly via Docker Compose or Cloud Run to ensure consistency and security.
 
-### 1) Root `.env` (for scripts)
-Copy:
-```
+---
+
+## Local Development (Docker Compose)
+
+The local workflow uses a single root `.env` file as the **Source of Truth**.
+
+### 1. Setup
+Copy the example and configure your variables:
+```bash
 cp .env.example .env
 ```
-Common values:
-```
-PROJECT_ID=your-gcp-project
-REGION=us-central1
-REPO_NAME=pokerwars-repo
-WEB_SERVICE_NAME=poker-web
-WS_SERVICE_NAME=poker-ws
+
+### 2. Startup
+Use the provided script to ensure variables are correctly exported and containers are restarted:
+```bash
+# Starts Postgres, rebuilds containers with .env variables, and runs migrations
+AUTO_MIGRATE=true ./scripts/start_local.sh
 ```
 
-### 2) Web app (`apps/web/.env.local`)
-```
-NEXT_PUBLIC_APP_URL=http://localhost:8090
-NEXT_PUBLIC_WS_URL=ws://localhost:8099
-NEXT_PUBLIC_API_URL=http://localhost:8099/api
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-wc-project-id
-```
+### 3. How it works (Internals)
+- **Build**: `docker-compose.prod.yml` maps `.env` variables to `args`. The `Dockerfile` receives these via `ARG` and embeds them using `ENV`.
+- **Runtime**: `docker-compose.prod.yml` uses `env_file: .env` to inject variables into the running container.
+- **Database**: The script starts a `pokerwars-pg` container. The app connects via `host.docker.internal` (Mac/Win) or the container network.
 
-### 3) WS server (`apps/ws-server/.env`)
-```
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pokerwars?schema=public
-ALLOWED_WS_ORIGINS=http://localhost:8090
-DEV_ALLOWED_WS_ORIGINS=http://localhost:8090
-REDIS_URL=
-```
+---
 
-### 4) Docker dev overrides (optional)
-`scripts/docker_up.sh` reads `.env.docker` if present:
-```
-# .env.docker
-NEXT_PUBLIC_APP_URL=http://localhost:8090
-NEXT_PUBLIC_WS_URL=ws://localhost:8099
-NEXT_PUBLIC_API_URL=http://localhost:8099/api
-ALLOWED_WS_ORIGINS=http://localhost:8090
-DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/pokerwars?schema=public
-```
+## Production Deployment (GCP)
 
-If you want to run migrations automatically on startup:
-```
-AUTO_MIGRATE=true ./scripts/docker_up.sh
-```
+### 1. Web Application (Cloud Run)
+Next.js requires `NEXT_PUBLIC_*` variables during the Cloud Build phase.
 
-Optional seed:
-```
-SEED_GAMES=true AUTO_MIGRATE=true ./scripts/docker_up.sh
-```
+- **Build**: `scripts/gcp_deploy_web.sh` reads your local/CI env and passes variables as `--substitutions` to `gcloud builds submit`.
+- **Mapping**: `cloudbuild.yaml` receives these substitutions and passes them as `--build-arg` to the Docker build.
+- **Runtime**: `scripts/build_cloudrun_env.sh` generates a YAML file used during `gcloud run deploy` to set runtime environment variables.
 
-## Cloud Run + Cloud SQL (production)
+### 2. WebSocket Server (Cloud Run)
+The WS server primarily uses **Runtime** variables.
 
-### Script env (`.env` or `.env.gcp`)
-```
-PROJECT_ID=...
-REGION=...
-REPO_NAME=...
-WEB_SERVICE_NAME=poker-web
-WS_SERVICE_NAME=poker-ws
-WALLETCONNECT_PROJECT_ID=...
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...
-DB_NAME=pokerwars-database
-DB_USER=pokerwars-admin
-DB_PASSWORD=your-password
-DB_INSTANCE=your-cloudsql-instance
-DATABASE_URL_CLOUD=postgresql://user:pass@/pokerwars?host=/cloudsql/PROJECT:REGION:INSTANCE
-DB_INSTANCE=your-cloudsql-instance
-ALLOWED_WS_ORIGINS=https://your-web-domain
-WEB_PUBLIC_URL=https://your-web-domain
-WS_PUBLIC_URL=https://your-ws-domain
-AUTO_MIGRATE=true
-```
+- **Database**: Connects to Cloud SQL via the Cloud SQL Proxy (configured in the deploy script).
+- **Security**: Wallet verification is enforced unless `ALLOW_UNVERIFIED_WALLETS=1` is set.
 
-Notes:
-- If your DB password includes special characters (like `@`), prefer `DB_USER`/`DB_PASSWORD`/`DB_NAME` and let the deploy scripts build an encoded URL.
+---
 
-### DB grants bootstrap (avoid Prisma P1010)
-If migrations fail with permission errors, run the grants script using an admin role:
-```
-export DB_ADMIN_USER=postgres
-export DB_ADMIN_PASSWORD=your-admin-password
-./scripts/db_grant.sh
-```
+## Troubleshooting
 
-Optional: use an explicit admin URL instead of user/pass:
-```
-export DATABASE_URL_ADMIN="postgresql://admin:pass@10.63.208.3:5432/pokerwars-database"
-./scripts/db_grant.sh
-```
+### "Missing Environment Variables" in Browser
+- **Cause**: The variable was missing during `npm run build`.
+- **Fix**: 
+    1. Check if the variable is in your root `.env`.
+    2. Check if the variable is listed in the `args` section of `docker-compose.prod.yml`.
+    3. Check if the variable is declared as an `ARG` in the `Dockerfile`.
+    4. Rebuild without cache: `docker compose build --no-cache`.
 
-If you need to grant a different role than `DB_USER`, set:
-```
-export GRANT_USER=some-other-user
-```
-
-To run grants automatically before Prisma migrations, set:
-```
-export AUTO_GRANT_DB=true
-```
-
-### Cloud Run service envs
-These are set by `scripts/gcp_deploy_web.sh` and `scripts/gcp_deploy_ws.sh` using generated env files:
-- Web: `NEXT_PUBLIC_*`, `WALLETCONNECT_PROJECT_ID`
-- WS: `DATABASE_URL`, `ALLOWED_WS_ORIGINS`, `REDIS_URL` (optional)
-
-### Secrets
-For production, store secrets in **Secret Manager** and mount them as env vars in Cloud Run.
-Avoid committing secrets into any `.env` checked into git.
-
-## Common pitfalls
-- Client code **cannot** read non-`NEXT_PUBLIC_*` vars.
-- `DATABASE_URL` must be set for Prisma to connect.
-- `ALLOWED_WS_ORIGINS` must match your web app origin exactly.
+### "Can't reach database"
+- **Cause**: Incorrect hostname or timing.
+- **Fix**: The `start_local.sh` script handles this with an automated health check (`pg_isready`). Ensure you use the script rather than raw docker commands.

@@ -13,11 +13,10 @@
     "prisma:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
     "seed:games": "ts-node ./scripts/seed-game-templates.ts",
-    "server-local": "./server-local.sh",
+    "seed:initial": "ts-node ./scripts/seed-initial-data.ts",
+    "seed:all": "npm run seed:initial && npm run seed:games",
     "test": "vitest",
-    "deploy": "git subtree push --prefix=packages/nextjs/server heroku main",
-    "deploy-heroku": "./heroku-deploy.sh",
-    "heroku-postbuild": "npm run build"
+    "deploy": "npm run build"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -25,17 +24,15 @@
     "ethers": "^6.12.0",
     "tsconfig-paths": "^4.2.0",
     "redis": "^4.7.0",
-    "uuid": "^9.0.0",
     "ws": "^8.18.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.2",
     "@hyper-poker/engine": "*"
   },
   "devDependencies": {
     "prisma": "^5.22.0",
     "@types/node": "^20.0.0",
-    "@types/uuid": "^9.0.0",
     "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2",
     "vitest": "^2.1.9"
   },
   "overrides": {

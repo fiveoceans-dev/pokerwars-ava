@@ -1,6 +1,7 @@
 import { createAppKit, type AppKit } from "@reown/appkit";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { defineChain, http, type Chain } from "viem";
+import { mainnet } from "viem/chains";
 import { createConfig, cookieStorage, createStorage } from "wagmi";
 import { readPublicEnv } from "~~/utils/public-env";
 
@@ -104,10 +105,10 @@ if (configuredChains.length === 0) {
   );
 }
 
-export const wagmiChains = (configuredChains.length > 0
-  ? configuredChains
-  : [fallbackChain]) as [Chain, ...Chain[]];
-export const wagmiDefaultChain = hyperliquidMainnet ?? wagmiChains[0];
+const baseChains = configuredChains.length > 0 ? configuredChains : [fallbackChain];
+const uniqueBase = baseChains.filter((chain) => chain.id !== mainnet.id);
+export const wagmiChains = [mainnet, ...uniqueBase] as [Chain, ...Chain[]];
+export const wagmiDefaultChain = mainnet;
 
 const transports = Object.fromEntries(
   wagmiChains.map((chain) => [chain.id, http()]),
@@ -120,11 +121,13 @@ const wagmiAdapter = new WagmiAdapter({
   ssr: true,
   transports,
   metadata,
+  multiInjectedProviderDiscovery: true,
 });
 export const wagmiConfig = wagmiAdapter.wagmiConfig ?? createConfig({
   chains: wagmiChains,
   transports,
   ssr: true,
+  multiInjectedProviderDiscovery: true,
   storage: createStorage({ storage: cookieStorage }),
 });
 export const web3ModalThemeVariables = {

@@ -5,17 +5,23 @@ node_modules
 .next
 **/.next
 dist
+**/dist
 build
 coverage
 .DS_Store
 *.log
-*.local
-# Keep example envs for build scripts; ignore real env files
-!.env.example
-!.env.gcp.example
-!apps/web/.env.example
+
+# Ignore all environment files in the root and all subdirectories
+# This ensures that variables MUST be passed via Docker mechanisms (args/environment)
 .env
 .env.*
+**/.env
+**/.env.*
+
+# Explicitly allow example files if they are needed for documentation
+!.env.example
+!**/env.example
+
 tmp
 temp
 **/tmp

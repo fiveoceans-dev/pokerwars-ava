@@ -328,6 +328,30 @@ a.tbtn {
   padding: 0;
 }
 
+.wallet-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: auto;
+  margin-top: 0.25rem;
+  min-width: 100%;
+  padding-left: calc(var(--btn-pad-x) * 0.75 + 0.6ch + 0.35rem);
+  display: grid;
+  gap: 0.25rem;
+}
+
+.wallet-menu-item {
+  padding: 0;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.wallet-menu-item::before,
+.wallet-menu-item::after {
+  content: "";
+  width: 0;
+}
+
 .nav-list > li > a {
   margin: 0;
 }

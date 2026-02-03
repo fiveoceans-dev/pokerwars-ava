@@ -5,6 +5,18 @@ const normalizeUrlList = (value: string): string[] => {
     .filter(Boolean);
 };
 
+const normalizeEnvValue = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 const isLocalHost = (host: string) =>
   ["localhost", "127.0.0.1", "[::1]"].includes(host);
 
@@ -67,11 +79,11 @@ const readRuntimeWsUrl = (): string | undefined => {
   if (typeof window === "undefined") return undefined;
   const value = (window as unknown as { __NEXT_PUBLIC_WS_URL?: unknown }).__NEXT_PUBLIC_WS_URL;
   if (typeof value !== "string") return undefined;
-  return selectPreferredUrl(value.trim());
+  return selectPreferredUrl(normalizeEnvValue(value));
 };
 
 export const resolveWebSocketUrl = (): string => {
-  const envValueRaw = (process.env.NEXT_PUBLIC_WS_URL ?? "").trim();
+  const envValueRaw = normalizeEnvValue(process.env.NEXT_PUBLIC_WS_URL ?? "");
   const envValue = envValueRaw ? selectPreferredUrl(envValueRaw) : undefined;
   const runtimeValue = readRuntimeWsUrl();
   const candidate = runtimeValue || envValue;

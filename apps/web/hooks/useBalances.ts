@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { useWallet } from "~~/components/providers/WalletProvider";
+import { getAuthToken } from "~~/utils/auth";
 
 type TicketBalances = {
   ticket_x: number;
@@ -32,7 +33,7 @@ function resolveApiBase(): string | null {
 }
 
 export function useBalances() {
-  const { address } = useWallet();
+  const { address, isAuthenticated } = useWallet();
   const [balances, setBalances] = useState<Balances>({
     coins: 0,
     tickets: { ticket_x: 0, ticket_y: 0, ticket_z: 0 },
@@ -49,7 +50,10 @@ export function useBalances() {
         return;
       }
       try {
-        const res = await fetch(`${apiBase}/api/user/balance?wallet=${address}`);
+        const token = getAuthToken();
+        const res = await fetch(`${apiBase}/api/user/balance?wallet=${address}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
         const data = await res.json();
         if (!cancelled && data?.balance) {
           setBalances({
@@ -122,7 +126,10 @@ export function useBalances() {
 
   const refreshBalances = useCallback(async () => {
     if (!address || !apiBase) return;
-    const res = await fetch(`${apiBase}/api/user/balance?wallet=${address}`);
+    const token = getAuthToken();
+    const res = await fetch(`${apiBase}/api/user/balance?wallet=${address}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     const data = await res.json();
     if (data?.balance) {
       setBalances({
@@ -138,7 +145,12 @@ export function useBalances() {
 
   const claimFreeCoins = useCallback(async () => {
     if (!address || !apiBase) return { ok: false, nextAvailableInMs: 0 };
-    const res = await fetch(`${apiBase}/api/user/claim?wallet=${address}`, { method: "POST" });
+    if (!isAuthenticated) return { ok: false, error: 'Wallet not authenticated' };
+    const token = getAuthToken();
+    const res = await fetch(`${apiBase}/api/user/claim?wallet=${address}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
     const data = await res.json();
     if (!res.ok) {
       if (typeof data?.nextAvailableInMs === "number") {
@@ -164,9 +176,13 @@ export function useBalances() {
   const convert = useCallback(
     async (direction: "coinsToTickets" | "ticketsToCoins", tier: "ticket_x" | "ticket_y" | "ticket_z", amount: number) => {
       if (!address || !apiBase) return { ok: false };
+      const token = getAuthToken();
       const res = await fetch(`${apiBase}/api/user/convert?wallet=${address}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ direction, tier, amount }),
       });
       const data = await res.json();

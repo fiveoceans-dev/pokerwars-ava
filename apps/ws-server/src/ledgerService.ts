@@ -13,6 +13,13 @@ const DEFAULT_CONFIG = {
 
 export type TicketTier = "ticket_x" | "ticket_y" | "ticket_z";
 
+const toBigIntAmount = (value: number): bigint => {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("invalid amount");
+  }
+  return BigInt(Math.floor(value));
+};
+
 export class LedgerService {
   constructor(private prisma: PrismaClient) {}
 
@@ -36,10 +43,10 @@ export class LedgerService {
     const existing = await this.prisma.treasury.findUnique({ where: { id: TREASURY_ID } });
     if (existing) {
       const treasuryAccount = await this.ensureAccount(AccountOwnerType.TREASURY, TREASURY_ID);
-      if (treasuryAccount.coins === 0 && existing.coin_supply_remaining > 0n) {
+      if (treasuryAccount.coins === 0n && existing.coin_supply_remaining > 0n) {
         await this.prisma.account.update({
           where: { id: treasuryAccount.id },
-          data: { coins: Number(existing.coin_supply_remaining) },
+          data: { coins: existing.coin_supply_remaining },
         });
       }
       return existing;
@@ -54,7 +61,7 @@ export class LedgerService {
     const treasuryAccount = await this.ensureAccount(AccountOwnerType.TREASURY, TREASURY_ID);
     await this.prisma.account.update({
       where: { id: treasuryAccount.id },
-      data: { coins: Number(config.coin_supply_total) },
+      data: { coins: config.coin_supply_total },
     });
     return treasury;
   }
@@ -165,9 +172,11 @@ export class LedgerService {
     const userAccount = await this.ensureAccount(AccountOwnerType.USER, user.id);
     const rate = direction === "coinsToTickets" ? config.buy_rate : config.sell_rate;
     const coinsDelta = amount * rate;
+    const coinsDeltaBig = toBigIntAmount(coinsDelta);
+    const amountBig = toBigIntAmount(amount);
 
     if (direction === "coinsToTickets") {
-      if (userAccount.coins < coinsDelta) throw new Error("Insufficient coins");
+      if (userAccount.coins < coinsDeltaBig) throw new Error("Insufficient coins");
       // coins -> treasury
       await this.applyTransfer({
         type: LedgerType.CONVERT_BUY,
@@ -180,9 +189,9 @@ export class LedgerService {
         metadata: { tier, amount, rate },
       });
       // mint tickets into treasury if needed
-      const treasuryTickets = (treasuryAccount as any)[tier] as number;
-      if (treasuryTickets < amount) {
-        const mintAmount = amount - treasuryTickets;
+      const treasuryTickets = (treasuryAccount as any)[tier] as bigint;
+      if (treasuryTickets < amountBig) {
+        const mintAmount = Number(amountBig - treasuryTickets);
         await this.applyTransfer({
           type: LedgerType.MINT,
           fromAccountId: null,
@@ -213,7 +222,7 @@ export class LedgerService {
     }
 
     // tickets -> coins
-    if ((userAccount as any)[tier] < amount) throw new Error("Insufficient tickets");
+    if ((userAccount as any)[tier] < amountBig) throw new Error("Insufficient tickets");
     await this.applyTransfer({
       type: LedgerType.CONVERT_SELL,
       fromAccountId: userAccount.id,
@@ -308,9 +317,7 @@ export class LedgerService {
     referenceId: string;
     metadata?: Record<string, any>;
   }) {
-    if (!Number.isFinite(params.amount) || params.amount <= 0) {
-      throw new Error("invalid amount");
-    }
+    const amount = toBigIntAmount(params.amount);
     const maxRetries = 3;
     let attempt = 0;
     while (true) {
@@ -336,19 +343,19 @@ export class LedgerService {
             fromAccount = await tx.account.findUnique({ where: { id: params.fromAccountId } });
             if (!fromAccount) throw new Error("from account missing");
             const field = assetToField(params.asset);
-            if ((fromAccount as any)[field] < params.amount) {
+            if ((fromAccount as any)[field] < amount) {
               throw new Error("insufficient balance");
             }
             fromAccount = await tx.account.update({
               where: { id: params.fromAccountId },
-              data: { [field]: { decrement: params.amount } } as any,
+              data: { [field]: { decrement: amount } } as any,
             });
           }
 
           if (params.toAccountId) {
             toAccount = await tx.account.update({
               where: { id: params.toAccountId },
-              data: { [assetToField(params.asset)]: { increment: params.amount } } as any,
+              data: { [assetToField(params.asset)]: { increment: amount } } as any,
             });
           }
 
@@ -362,7 +369,7 @@ export class LedgerService {
               fromAccountId: params.fromAccountId,
               toAccountId: params.toAccountId,
               asset: params.asset,
-              amount: params.amount,
+              amount,
               referenceType: params.referenceType,
               referenceId: params.referenceId,
               metadata: params.metadata ?? {},
@@ -376,7 +383,7 @@ export class LedgerService {
             if (treasuryAccount) {
               await tx.treasury.update({
                 where: { id: TREASURY_ID },
-                data: { coin_supply_remaining: BigInt(treasuryAccount.coins) },
+                data: { coin_supply_remaining: treasuryAccount.coins },
               });
             }
           }

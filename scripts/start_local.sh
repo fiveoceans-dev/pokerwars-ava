@@ -18,6 +18,23 @@ if [ ! -f "${ENV_FILE}" ]; then
     exit 1
 fi
 
+# Export variables from the env file so docker-compose build args are populated.
+# Preserve explicit CLI overrides (e.g., AUTO_MIGRATE=true ./scripts/start_local.sh).
+OVERRIDE_AUTO_MIGRATE="${AUTO_MIGRATE:-}"
+OVERRIDE_SEED_GAMES="${SEED_GAMES:-}"
+set -a
+# shellcheck source=/dev/null
+. "${ENV_FILE}"
+set +a
+if [ -n "${OVERRIDE_AUTO_MIGRATE}" ]; then
+    AUTO_MIGRATE="${OVERRIDE_AUTO_MIGRATE}"
+    export AUTO_MIGRATE
+fi
+if [ -n "${OVERRIDE_SEED_GAMES}" ]; then
+    SEED_GAMES="${OVERRIDE_SEED_GAMES}"
+    export SEED_GAMES
+fi
+
 # Helper to extract a variable from .env without sourcing it (avoids shell syntax issues)
 # and strips surrounding quotes.
 get_env_var() {
@@ -25,6 +42,10 @@ get_env_var() {
     # Strip leading/trailing quotes (double or single)
     val=$(echo "$val" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
     echo "$val"
+}
+
+strip_quotes() {
+    echo "$1" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
 }
 
 POSTGRES_USER=$(get_env_var POSTGRES_USER)
@@ -102,23 +123,34 @@ echo "Restarting web and ws-server containers..."
 # Clean up old containers to ensure a fresh start
 docker compose -f docker-compose.prod.yml --env-file "${ENV_FILE}" down --remove-orphans
 
-# Prepare a compose env file that ensures container DB points to host.docker.internal
 COMPOSE_ENV_FILE="${ENV_FILE}"
-TMP_ENV_FILE=""
+export ENV_FILE="${ENV_FILE}"
 if grep -q "^DATABASE_URL=" "${ENV_FILE}"; then
     raw_db_url=$(get_env_var DATABASE_URL)
+    raw_db_url=$(strip_quotes "${raw_db_url}")
     case "${raw_db_url}" in
-        *localhost*|*127.0.0.1*)
-            TMP_ENV_FILE="$(mktemp /tmp/pokerwars.env.XXXXXX)"
-            awk -v repl="DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/${POSTGRES_DB}?schema=public" '
-                BEGIN { replaced=0 }
-                /^DATABASE_URL=/ { print repl; replaced=1; next }
-                { print }
-                END { if (replaced==0) print repl }
-            ' "${ENV_FILE}" > "${TMP_ENV_FILE}"
-            COMPOSE_ENV_FILE="${TMP_ENV_FILE}"
+        postgresql://*|postgres://*)
+            if echo "${raw_db_url}" | grep -qE 'localhost|127\.0\.0\.1'; then
+                echo "ERROR: DATABASE_URL points to localhost. For Docker, use host.docker.internal." >&2
+                echo "Example: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/${POSTGRES_DB}?schema=public" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "ERROR: DATABASE_URL must start with postgresql:// or postgres:// in ${ENV_FILE}" >&2
+            exit 1
             ;;
     esac
+else
+    echo "ERROR: DATABASE_URL missing in ${ENV_FILE}" >&2
+    exit 1
+fi
+
+# Run migrations before starting services (host connects to Postgres on localhost).
+if [ "${AUTO_MIGRATE}" = "true" ]; then
+    echo "Running database migrations on the host..."
+    export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+    ./scripts/db_bootstrap.sh
 fi
 
 # Start the stack with the build in the foreground so Ctrl+C stops everything.
@@ -129,16 +161,11 @@ cleanup() {
     echo ""
     echo "Stopping containers..."
     docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" down --remove-orphans
-    if [ -n "${TMP_ENV_FILE}" ] && [ -f "${TMP_ENV_FILE}" ]; then
-        rm -f "${TMP_ENV_FILE}"
+    if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        echo "Stopping Postgres container..."
+        docker stop "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+        docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
     fi
 }
 trap cleanup INT TERM
 docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" up --build
-
-# Set the DATABASE_URL for the host-based migration script.
-if [ "${AUTO_MIGRATE}" = "true" ]; then
-    echo "Running database migrations on the host..."
-    export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
-    ./scripts/db_bootstrap.sh
-fi

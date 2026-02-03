@@ -1,13 +1,24 @@
 import { useState, useCallback } from 'react';
 import { useSignMessage } from 'wagmi';
 import { resolveWebSocketUrl } from '~~/utils/ws-url';
-import { clearAuthToken, setAuthToken } from '~~/utils/auth';
+import { clearAuthToken, getAuthToken, getAuthWallet, setAuthToken } from '~~/utils/auth';
 
 export type AuthStatus = 'none' | 'challenging' | 'signing' | 'verifying' | 'verified' | 'failed';
 
 export function useAuth() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>('none');
   const { signMessageAsync } = useSignMessage();
+
+  const assumeAuthenticated = useCallback((walletAddress: string) => {
+    const token = getAuthToken();
+    const tokenWallet = getAuthWallet();
+    if (!token || !tokenWallet) return false;
+    if (tokenWallet !== walletAddress.toLowerCase()) return false;
+    if (authStatus !== 'verified') {
+      setAuthStatus('verified');
+    }
+    return true;
+  }, [authStatus]);
 
   const authenticate = useCallback(async (walletAddress: string) => {
     if (!walletAddress) return false;
@@ -55,7 +66,7 @@ export function useAuth() {
         const result = await verifyRes.json();
         console.log('Auth verification successful:', result);
         if (result?.token) {
-          setAuthToken(String(result.token));
+          setAuthToken(String(result.token), walletAddress);
         }
         setAuthStatus('verified');
         return true;
@@ -83,6 +94,7 @@ export function useAuth() {
     authStatus,
     isAuthenticated: authStatus === 'verified',
     authenticate,
-    reset
+    reset,
+    assumeAuthenticated
   };
 }

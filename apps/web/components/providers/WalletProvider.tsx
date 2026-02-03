@@ -200,7 +200,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const formatAddress = useCallback((addr?: string) => shortAddress(addr), []);
 
   // Authentication
-  const { authStatus, isAuthenticated, authenticate, reset: resetAuth } = useAuth();
+  const { authStatus, isAuthenticated, authenticate, reset: resetAuth, assumeAuthenticated } = useAuth();
+
+  // Restore auth status from stored token when reconnecting.
+  useEffect(() => {
+    if (status === "connected" && address) {
+      assumeAuthenticated(address);
+    }
+  }, [address, assumeAuthenticated, status]);
 
   // Reset auth on disconnect
   useEffect(() => {
@@ -210,10 +217,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [status, resetAuth]);
 
   const ensureAuth = useCallback(async () => {
-    if (isAuthenticated) return true;
     if (!address || status !== "connected") return false;
+    if (isAuthenticated || assumeAuthenticated(address)) return true;
     return authenticate(address);
-  }, [address, authenticate, isAuthenticated, status]);
+  }, [address, authenticate, assumeAuthenticated, isAuthenticated, status]);
 
   const value = useMemo<WalletContextValue>(
     () => ({

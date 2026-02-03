@@ -471,20 +471,33 @@ export default function Table({ timer }: { timer?: number | null }) {
             className="w-full max-w-md rounded-lg bg-black p-5 shadow-xl border border-white/10"
             onMouseDown={(event) => event.stopPropagation()}
           >
+            {(() => {
+              const minCoins = Math.round(buyInModal.bbMin * buyInModal.bigBlind);
+              const maxCoins = Math.round(buyInModal.bbMax * buyInModal.bigBlind);
+              const coinAmount = Math.round(buyInModal.bbAmount * buyInModal.bigBlind);
+              const step = Math.max(1, Math.round(buyInModal.bigBlind));
+              const clampCoinsToBB = (coins: number) =>
+                Math.min(
+                  buyInModal.bbMax,
+                  Math.max(buyInModal.bbMin, Math.round(coins / buyInModal.bigBlind)),
+                );
+              return (
             <h3 className="text-lg font-semibold mb-2">Buy-in</h3>
             <p className="text-sm text-white/70 mb-4">
-              Min {buyInModal.bbMin} BB · Max {buyInModal.bbMax} BB
+              Min {minCoins.toLocaleString()} coins · Max {maxCoins.toLocaleString()} coins
             </p>
             <div className="space-y-3">
               <input
                 type="range"
-                min={buyInModal.bbMin}
-                max={buyInModal.bbMax}
-                step={1}
-                value={buyInModal.bbAmount}
+                min={minCoins}
+                max={maxCoins}
+                step={step}
+                value={coinAmount}
                 onChange={(e) =>
                   setBuyInModal((prev) =>
-                    prev ? { ...prev, bbAmount: Number(e.target.value) } : prev,
+                    prev
+                      ? { ...prev, bbAmount: clampCoinsToBB(Number(e.target.value)) }
+                      : prev,
                   )
                 }
                 className="w-full"
@@ -493,26 +506,23 @@ export default function Table({ timer }: { timer?: number | null }) {
                 <input
                   type="number"
                   className="w-full rounded bg-black border border-white/10 px-3 py-2"
-                  min={buyInModal.bbMin}
-                  max={buyInModal.bbMax}
-                  step={1}
-                  value={buyInModal.bbAmount}
+                  min={minCoins}
+                  max={maxCoins}
+                  step={step}
+                  value={coinAmount}
                   onChange={(e) => {
                     const v = Number(e.target.value);
                     setBuyInModal((prev) =>
                       prev
                         ? {
                             ...prev,
-                            bbAmount: Math.min(
-                              buyInModal.bbMax,
-                              Math.max(buyInModal.bbMin, v),
-                            ),
+                            bbAmount: clampCoinsToBB(v),
                           }
                         : prev,
                     );
                   }}
                 />
-                <span className="text-white/60 text-sm">BB</span>
+                <span className="text-white/60 text-sm">Coins</span>
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -536,6 +546,8 @@ export default function Table({ timer }: { timer?: number | null }) {
                 </button>
               </div>
             </div>
+              );
+            })()}
           </div>
         </div>
       )}

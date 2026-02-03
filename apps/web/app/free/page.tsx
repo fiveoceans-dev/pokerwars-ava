@@ -13,6 +13,7 @@ export default function FreePage() {
     hydrated,
     claimFreeCoins,
     freeClaimAmount,
+    refreshBalances,
   } = useBalances();
   const { status, isAuthenticated, ensureAuth } = useWallet();
   const [showCongrats, setShowCongrats] = useState(false);
@@ -33,17 +34,11 @@ export default function FreePage() {
     }
     const result = await claimFreeCoins();
     if (result.ok) {
+      await refreshBalances();
       setShowCongrats(true);
     } else if (result.error) {
       notifyError(result.error);
     }
-  };
-
-  const countdownLabel = () => {
-    const totalSeconds = Math.ceil(remainingMs / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const buttonLabel = !hydrated ? "Loading…" : "Claim Coins";

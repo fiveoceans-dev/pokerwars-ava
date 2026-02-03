@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { TicketTier } from "./ledgerService";
 import { LedgerPort } from "./ledgerPort";
 import { Asset } from "@prisma/client";
+import { serializeAccount } from "./serializers";
 
 export interface ChainTxReceipt<T = any> {
   txHash: string;
@@ -28,18 +29,18 @@ export class ChainAdapter {
 
   async getBalance(wallet: string) {
     const { account } = await this.ledger.getBalanceForWallet(wallet);
-    return this.receipt({ balance: account });
+    return this.receipt({ balance: serializeAccount(account) });
   }
 
   async claim(wallet: string) {
     const res = await this.ledger.claimFreeCoins(wallet);
     if (!res.ok) return this.receipt(res);
-    return this.receipt(res);
+    return this.receipt({ ...res, account: serializeAccount(res.account) });
   }
 
   async convert(wallet: string, direction: "coinsToTickets" | "ticketsToCoins", tier: TicketTier, amount: number) {
     const account = await this.ledger.convert(wallet, direction, tier, amount);
-    return this.receipt({ balance: account });
+    return this.receipt({ balance: serializeAccount(account) });
   }
 
   async buyInCash(wallet: string, tableId: string, amount: number) {

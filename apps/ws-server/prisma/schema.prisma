@@ -91,10 +91,10 @@ model Account {
   id        String           @id @default(cuid())
   ownerType AccountOwnerType
   ownerId   String
-  coins     Int              @default(0)
-  ticket_x  Int              @default(0)
-  ticket_y  Int              @default(0)
-  ticket_z  Int              @default(0)
+  coins     BigInt           @default(0)
+  ticket_x  BigInt           @default(0)
+  ticket_y  BigInt           @default(0)
+  ticket_z  BigInt           @default(0)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
@@ -118,7 +118,7 @@ model LedgerTransaction {
   fromAccount   Account?   @relation("LedgerFrom", fields: [fromAccountId], references: [id])
   toAccount     Account?   @relation("LedgerTo", fields: [toAccountId], references: [id])
   asset         Asset
-  amount        Int
+  amount        BigInt
   referenceType String
   referenceId   String
   metadata      Json?

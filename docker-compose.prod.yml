@@ -34,7 +34,7 @@ services:
     env_file: ${ENV_FILE:-.env}
     environment:
       - SERVICE=web
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=8090
       # All NEXT_PUBLIC_* variables are loaded automatically from .env via env_file.
       # Explicitly listing them with ${VAR} substitution is dangerous if the shell env is empty,
@@ -54,7 +54,7 @@ services:
     env_file: ${ENV_FILE:-.env}
     environment:
       - SERVICE=ws-server
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=8099
       # DATABASE_URL is managed by start_local.sh via env_file (or user .env)
     ports:

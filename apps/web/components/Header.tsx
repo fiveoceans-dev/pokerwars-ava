@@ -151,9 +151,14 @@ export const Header = () => {
   const walletMenuRef = useRef<HTMLDivElement>(null);
   const { error: walletSyncError } = useWalletGameSync();
   const appName = process.env.NEXT_PUBLIC_APP_NAME || "PokerWars";
-  const { balances, hydrated } = useBalances();
+  const { balances, hydrated, walletForBalance } = useBalances();
   const { status, address } = useWallet();
   const isWalletConnected = status === "connected";
+  const showBalances = hydrated && Boolean(walletForBalance);
+  const coinsDisplay = showBalances ? balances.coins : "—";
+  const ticketXDisplay = showBalances ? balances.tickets.ticket_x : "—";
+  const ticketYDisplay = showBalances ? balances.tickets.ticket_y : "—";
+  const ticketZDisplay = showBalances ? balances.tickets.ticket_z : "—";
   const navControlClass = "tbtn tbtn-tight nav-btn";
   const groupGap = "gap-[5px]";
   const addressLabel = useMemo(
@@ -276,10 +281,10 @@ export const Header = () => {
           className={`${compactNav ? "hidden" : "hidden sm:flex"} items-center justify-end ${groupGap} text-white/70`}
         >
           <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-            Coins {hydrated ? balances.coins : "—"}
+            Coins {coinsDisplay}
           </LinkComponent>
           <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-            Tickets X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
+            Tickets X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
           </LinkComponent>
           <div className="dropdown" ref={walletMenuRef}>
             {isWalletConnected ? (
@@ -358,12 +363,12 @@ export const Header = () => {
                 )}
                 <li>
                   <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-                    Coins {hydrated ? balances.coins : "—"}
+                    Coins {coinsDisplay}
                   </LinkComponent>
                 </li>
                 <li>
                   <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-                    Tickets X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
+                    Tickets X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
                   </LinkComponent>
                 </li>
                 <li>
@@ -406,10 +411,10 @@ export const Header = () => {
         </div>
         <div ref={measureRightRef} className="flex items-center  text-white/70">
           <span className="tbtn tbtn-tight nav-btn">
-            Coins {hydrated ? balances.coins : "—"}
+            Coins {coinsDisplay}
           </span>
           <span className="tbtn tbtn-tight nav-btn">
-            Tickets X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
+            Tickets X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
           </span>
           <span className="tbtn tbtn-tight nav-btn max-w-[140px] truncate">
             {isWalletConnected ? addressLabel : "Wallet"}

@@ -269,6 +269,13 @@ a.tbtn {
   color: var(--muted);
 }
 
+.connect-modal .tbtn[aria-disabled="true"]::before,
+.connect-modal .tbtn:disabled::before,
+.connect-modal .tbtn[aria-disabled="true"]::after,
+.connect-modal .tbtn:disabled::after {
+  content: "";
+}
+
 .tbtn-secondary {
   color: var(--text);
   opacity: 0.8;

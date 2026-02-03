@@ -18,8 +18,9 @@ type GameHistoryRow = {
 
 export default function AccountClient() {
   const { status, address, formatAddress, disconnect } = useWallet();
-  const { balances, hydrated, convert } = useBalances();
+  const { balances, hydrated, convert, walletForBalance } = useBalances();
   const isConnected = status === "connected" && !!address;
+  const showBalances = hydrated && Boolean(walletForBalance);
   const [storedEmail, setStoredEmail] = useState("");
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState("");
@@ -218,8 +219,8 @@ export default function AccountClient() {
             <div className="space-y-3">
               <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Tokens</div>
               <BalanceRow
-                label="$POKER"
-                balance={hydrated ? balances.coins.toLocaleString() : "—"}
+                label="$POKER (Coins)"
+                balance={showBalances ? balances.coins.toLocaleString() : "—"}
                 amount={coinAmount}
                 onAmountChange={setCoinAmount}
                 onBuy={() => openConvert("ticketsToCoins", "ticket_x", coinAmount)}
@@ -233,7 +234,7 @@ export default function AccountClient() {
                   <BalanceRow
                     key={tier}
                     label={ticketLabelMap[tier]}
-                    balance={hydrated ? balances.tickets[tier].toString() : "—"}
+                    balance={showBalances ? balances.tickets[tier].toString() : "—"}
                     amount={ticketActions[tier].buy}
                     onAmountChange={(val) =>
                       setTicketActions((prev) => ({

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { useWallet } from "~~/components/providers/WalletProvider";
-import { getAuthToken } from "~~/utils/auth";
+import { clearAuthToken, getAuthToken } from "~~/utils/auth";
 
 type TicketBalances = {
   ticket_x: number;
@@ -41,19 +41,27 @@ export function useBalances() {
   const [hydrated, setHydrated] = useState(false);
   const [lastClaimAt, setLastClaimAt] = useState<number | null>(null);
   const apiBase = useMemo(() => resolveApiBase(), []);
+  const fallbackWallet =
+    typeof window !== "undefined" ? window.localStorage.getItem("walletAddress") : null;
+  const walletForBalance = (address || fallbackWallet || "").toLowerCase() || null;
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (!address || !apiBase) {
+      if (!walletForBalance || !apiBase) {
         setHydrated(true);
         return;
       }
       try {
         const token = getAuthToken();
-        const res = await fetch(`${apiBase}/api/user/balance?wallet=${address}`, {
+        const res = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
+        if (res.status === 401) {
+          clearAuthToken();
+          setHydrated(true);
+          return;
+        }
         const data = await res.json();
         if (!cancelled && data?.balance) {
           setBalances({
@@ -75,7 +83,7 @@ export function useBalances() {
     return () => {
       cancelled = true;
     };
-  }, [address, apiBase]);
+  }, [apiBase, walletForBalance]);
 
   const canAfford = useCallback(
     (buyIn: { currency: "chips" | "tickets"; amount: number }) => {
@@ -125,11 +133,15 @@ export function useBalances() {
   );
 
   const refreshBalances = useCallback(async () => {
-    if (!address || !apiBase) return;
+    if (!walletForBalance || !apiBase) return;
     const token = getAuthToken();
-    const res = await fetch(`${apiBase}/api/user/balance?wallet=${address}`, {
+    const res = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
+    if (res.status === 401) {
+      clearAuthToken();
+      return;
+    }
     const data = await res.json();
     if (data?.balance) {
       setBalances({
@@ -141,16 +153,18 @@ export function useBalances() {
         },
       });
     }
-  }, [address, apiBase]);
+  }, [apiBase, walletForBalance]);
 
   const claimFreeCoins = useCallback(async () => {
     if (!address || !apiBase) return { ok: false, nextAvailableInMs: 0 };
-    if (!isAuthenticated) return { ok: false, error: 'Wallet not authenticated' };
     const token = getAuthToken();
     const res = await fetch(`${apiBase}/api/user/claim?wallet=${address}`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
+    if (res.status === 401) {
+      clearAuthToken();
+    }
     const data = await res.json();
     if (!res.ok) {
       if (typeof data?.nextAvailableInMs === "number") {
@@ -185,6 +199,9 @@ export function useBalances() {
         },
         body: JSON.stringify({ direction, tier, amount }),
       });
+      if (res.status === 401) {
+        clearAuthToken();
+      }
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data?.error };
       if (data?.balance) {
@@ -214,5 +231,6 @@ export function useBalances() {
     convert,
     freeClaimAmount: FREE_CLAIM_AMOUNT,
     freeClaimCooldownMs: FREE_CLAIM_COOLDOWN_MS,
+    walletForBalance,
   };
 }

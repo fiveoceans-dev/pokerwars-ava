@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Tournament } from "~~/hooks/useTournaments";
 import { useTournamentActions } from "~~/hooks/useTournamentActions";
 import { useBalances } from "~~/hooks/useBalances";
+import { useWallet } from "~~/components/providers/WalletProvider";
+import { formatNumber } from "~~/utils/format";
 
 type SortKey = "start" | "name" | "buyIn" | "players" | "prize" | "level";
 
@@ -22,7 +25,20 @@ function formatStart(t: Tournament): string {
   if (t.startAt) {
     const date = new Date(t.startAt);
     if (!Number.isNaN(date.valueOf())) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const now = Date.now();
+      const diffMs = date.getTime() - now;
+      const hours = diffMs / (1000 * 60 * 60);
+
+      // If less than 48 hours, show HH:mm
+      if (hours < 48) {
+        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+      }
+      
+      // If more than 28 hours (and logic above ensures > 48 if we reach here, 
+      // but to strictly follow "more then 28 hours" format):
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      return `${day}-${month}`;
     }
   }
   if (typeof t.lateRegMinutes === "number") {
@@ -70,7 +86,7 @@ function formatPayouts(t: Tournament): string {
 function formatBuyIn(t: Tournament): string {
   if (!t.buyIn) return "—";
   if (t.buyIn.currency === "tickets") return `${t.buyIn.amount} ticket`;
-  return `${t.buyIn.amount.toLocaleString()} Coins`;
+  return `${formatNumber(t.buyIn.amount)} Coins`;
 }
 
 export function TournamentTable({
@@ -79,8 +95,10 @@ export function TournamentTable({
   showStartColumn = true,
   showPayouts = true,
 }: Props) {
+  const router = useRouter();
   const { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds } = useTournamentActions();
-  const { balances, hydrated, canAfford, refreshBalances } = useBalances();
+  const { balances, hydrated, refreshBalances } = useBalances();
+  const { status, isAuthenticated, ensureAuth } = useWallet();
   const [selected, setSelected] = useState<Tournament | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -90,10 +108,19 @@ export function TournamentTable({
   });
 
   const sorted = useMemo(() => {
-    const items = [...tournaments];
+    const items = tournaments.filter((t) => t.status !== "finished");
+    const rank = (t: Tournament) => {
+      const isRegistered = registeredIds.has(t.id);
+      if (isRegistered) return 0;
+      if (t.status === "running") return 1;
+      if (t.status === "scheduled" || t.status === "registering") return 2;
+      return 3;
+    };
     const { key, dir } = sort;
     items.sort((a, b) => {
       const factor = dir === "asc" ? 1 : -1;
+      const rdiff = rank(a) - rank(b);
+      if (rdiff !== 0) return rdiff;
       if (key === "start") {
         return factor * formatStart(a).localeCompare(formatStart(b));
       }
@@ -115,7 +142,7 @@ export function TournamentTable({
       return 0;
     });
     return items;
-  }, [tournaments, sort]);
+  }, [tournaments, sort, registeredIds]);
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -123,22 +150,47 @@ export function TournamentTable({
     );
   };
 
+  const isWalletConnected = status === "connected";
+
+  const canAffordWith = (buyIn: { currency: "chips" | "tickets"; amount: number }, currentBalances: typeof balances) => {
+    if (buyIn.currency === "chips") return currentBalances.coins >= buyIn.amount;
+    return currentBalances.tickets.ticket_x >= buyIn.amount;
+  };
+
   const openModal = (t: Tournament) => {
+    if (!isWalletConnected) {
+      window.dispatchEvent(new Event("open-wallet-connect"));
+      return;
+    }
     setSelected(t);
     setError(null);
     setModalOpen(true);
   };
 
-  const confirmJoin = () => {
+  const confirmJoin = async () => {
     if (!selected) return;
-    const affordable = canAfford(selected.buyIn);
+    setError(null);
+    if (!isWalletConnected) {
+      window.dispatchEvent(new Event("open-wallet-connect"));
+      setError("Connect wallet to join.");
+      return;
+    }
+    if (!isAuthenticated) {
+      const ok = await ensureAuth();
+      if (!ok) {
+        setError("Wallet not authenticated.");
+        return;
+      }
+    }
+    const latestBalances = (await refreshBalances()) ?? balances;
+    const affordable = canAffordWith(selected.buyIn, latestBalances);
     if (!affordable) {
       setError("Not enough balance for the buy-in.");
       return;
     }
     const sent = register(selected.id, {
       onSuccess: () => refreshBalances(),
-      onError: () => setError("Unable to register right now. Please check your connection."),
+      onError: (message) => setError(message || "Unable to register right now. Please check your connection."),
     });
     if (!sent) return;
     setModalOpen(false);
@@ -148,6 +200,7 @@ export function TournamentTable({
     if (!registeredIds.has(tournament.id)) return;
     const sent = unregister(tournament.id, {
       onSuccess: () => refreshBalances(),
+      onError: (message) => setError(message || "Unable to cancel right now. Please check your connection."),
     });
     if (!sent) return;
   };
@@ -158,6 +211,11 @@ export function TournamentTable({
     startSitAndGoWithBots(tournament.id);
   };
 
+  const openTable = (t: Tournament) => {
+    const tableId = (t.tables && t.tables.length > 0) ? t.tables[0] : t.id;
+    router.push(`/play?table=${tableId}`);
+  };
+
   return (
     <div className="w-full">
       {title ? <h2 className="text-2xl mb-3">{title}</h2> : null}
@@ -165,7 +223,7 @@ export function TournamentTable({
         <table className="min-w-full">
           <thead className="text-white/60 uppercase text-[11px] tracking-[0.14em]">
             <tr>
-              <th className={headerBase} onClick={() => toggleSort("start")}>Table</th>
+              <th className={headerBase} onClick={() => toggleSort("start")}>Name</th>
               <th className={headerBase} onClick={() => toggleSort("name")}>Game</th>
               <th className={headerBase} onClick={() => toggleSort("players")}>Players</th>
               <th className={headerBase} onClick={() => toggleSort("buyIn")}>Buy-in</th>
@@ -177,12 +235,36 @@ export function TournamentTable({
             </tr>
           </thead>
           <tbody>
-            {sorted.map((t) => (
-              <tr key={t.id} className="border-b border-white/10">
-                <td className={cellBase}>{t.name}</td>
+            {sorted.map((t) => {
+              const isRegistered = registeredIds.has(t.id);
+              const isActive = isRegistered;
+              const hasStarted = t.status === "running";
+              
+              return (
+              <tr key={t.id} className={`border-b border-white/10 ${isActive ? "bg-white/5" : ""}`}>
+                <td className={cellBase}>
+                  <div className="flex items-center gap-2">
+                    {isRegistered ? (
+                      <button 
+                        onClick={() => openTable(t)}
+                        className="font-bold text-white hover:text-[var(--brand-accent)] hover:underline transition-colors text-left"
+                      >
+                        {t.name}
+                      </button>
+                    ) : (
+                      <span>{t.name}</span>
+                    )}
+                    {isRegistered ? (
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
+                        aria-label="active table"
+                      />
+                    ) : null}
+                  </div>
+                </td>
                 <td className={cellBase}>{t.type?.toUpperCase() ?? "MTT"}</td>
                 <td className={cellBase}>
-                  {t.registeredCount}/{t.maxPlayers}
+                  {formatNumber(t.registeredCount)}/{formatNumber(t.maxPlayers)}
                 </td>
                 <td className={cellBase}>
                   {formatBuyIn(t)}
@@ -193,7 +275,7 @@ export function TournamentTable({
                     <span className="text-[11px] text-white/60">{formatLateReg(t)}</span>
                   </div>
                 </td>
-                <td className={cellBase}>{estimatePrizePool(t).toLocaleString()}</td>
+                <td className={cellBase}>{formatNumber(estimatePrizePool(t))}</td>
                 {showPayouts ? (
                   <td className={cellBase}>
                     {formatPayouts(t) ? (
@@ -204,30 +286,31 @@ export function TournamentTable({
                   </td>
                 ) : null}
                 <td className={cellBase}>
-                  {(() => {
-                    const isRegistered = registeredIds.has(t.id);
-                    const isLoading = loadingId === t.id;
-                    if (t.status === "running") {
-                      return <span className="text-xs text-white/70">Started</span>;
-                    }
-                    const label = isLoading
-                      ? isRegistered
-                        ? "Cancelling…"
-                        : "Joining…"
-                      : isRegistered
-                        ? "Cancel"
-                        : "Join";
-                    return (
+                  {isRegistered ? (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => (isRegistered ? handleCancel(t) : openModal(t))}
-                        disabled={isLoading}
-                        className="tbtn text-xs font-semibold"
-                        aria-disabled={isLoading}
+                        onClick={() => openTable(t)}
+                        className="tbtn text-xs font-semibold bg-emerald-600 hover:bg-emerald-500"
                       >
-                        {label}
+                        Open
                       </button>
-                    );
-                  })()}
+                      {!hasStarted && (
+                        <button
+                          onClick={() => handleCancel(t)}
+                          className="tbtn text-xs font-semibold bg-red-600 hover:bg-red-500"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => openModal(t)}
+                      className="tbtn text-xs font-semibold"
+                    >
+                      Join
+                    </button>
+                  )}
                 </td>
                 {showStartColumn ? (
                   <td className={cellBase}>
@@ -244,7 +327,8 @@ export function TournamentTable({
                   </td>
                 ) : null}
               </tr>
-            ))}
+              );
+            })}
             {sorted.length === 0 ? (
               <tr>
                 <td
@@ -284,7 +368,7 @@ export function TournamentTable({
               Join <span className="text-white">{selected.name}</span> with buy-in{" "}
               {selected.buyIn.currency === "tickets"
                 ? `${selected.buyIn.amount} ticket(s)`
-                : `${selected.buyIn.amount.toLocaleString()} Coins`}
+                : `${formatNumber(selected.buyIn.amount)} Coins`}
               .
             </p>
             <div className="text-xs text-white/70 space-y-1">

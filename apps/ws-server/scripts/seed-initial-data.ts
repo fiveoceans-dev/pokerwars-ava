@@ -13,19 +13,21 @@ const TREASURY_CONFIG = {
 
 // Initial ledger configuration
 const LEDGER_CONFIG = {
-  id: "main-ledger",
-  genesisBlockId: "genesis-block",
-  currentBlockId: "genesis-block",
-  totalTransactions: 0,
-  totalBlocks: 1,
+  id: "DEFAULT",
+  coin_supply_total: 5_000_000_000,
+  free_claim_amount: 1000,
+  free_claim_cooldown_ms: 36_000_000,
+  buy_rate: 250,
+  sell_rate: 220,
 };
 
 // Genesis block for the ledger
 const GENESIS_BLOCK = {
   id: "genesis-block",
+  height: 0,
   hash: "genesis-hash-" + Date.now(),
   prevHash: null,
-  transactionCount: 1,
+  txCount: 1,
   createdAt: new Date(),
 };
 
@@ -38,7 +40,7 @@ const TREASURY_MINT_TRANSACTION = {
   type: LedgerType.MINT,
   toAccountId: "platform-treasury-account",
   asset: Asset.COINS,
-  amount: TREASURY_CONFIG.initialCoinSupply,
+  amount: BigInt(TREASURY_CONFIG.initialCoinSupply),
   referenceType: "system",
   referenceId: "genesis-mint",
   metadata: {
@@ -102,6 +104,12 @@ const BLIND_SCHEDULES = [
 async function seedTreasury() {
   console.log("🌰 Seeding treasury...");
 
+  const existing = await prisma.treasury.findUnique({ where: { id: TREASURY_CONFIG.id } });
+  if (existing) {
+    console.log("ℹ️ Treasury already exists; skipping");
+    return;
+  }
+
   // Create treasury record
   await prisma.treasury.upsert({
     where: { id: TREASURY_CONFIG.id },
@@ -153,6 +161,12 @@ async function seedTreasury() {
 async function seedLedger() {
   console.log("📒 Seeding ledger...");
 
+  const existing = await prisma.ledgerConfig.findUnique({ where: { id: LEDGER_CONFIG.id } });
+  if (existing) {
+    console.log("ℹ️ Ledger config already exists; skipping");
+    return;
+  }
+
   // Create genesis block
   await prisma.ledgerBlock.upsert({
     where: { id: GENESIS_BLOCK.id },
@@ -163,10 +177,7 @@ async function seedLedger() {
   // Create ledger configuration
   await prisma.ledgerConfig.upsert({
     where: { id: LEDGER_CONFIG.id },
-    update: {
-      ...LEDGER_CONFIG,
-      updatedAt: new Date(),
-    },
+    update: {},
     create: LEDGER_CONFIG,
   });
 
@@ -181,35 +192,7 @@ async function seedLedger() {
 }
 
 async function seedBlindSchedules() {
-  console.log("⏰ Seeding blind schedules...");
-
-  for (const schedule of BLIND_SCHEDULES) {
-    // Create tournament levels for this schedule
-    for (const level of schedule.levels) {
-      await prisma.tournamentLevel.upsert({
-        where: {
-          blindScheduleId_level: {
-            blindScheduleId: schedule.id,
-            level: level.level,
-          },
-        },
-        update: {
-          smallBlind: level.smallBlind,
-          bigBlind: level.bigBlind,
-          durationMinutes: level.durationMinutes,
-        },
-        create: {
-          blindScheduleId: schedule.id,
-          level: level.level,
-          smallBlind: level.smallBlind,
-          bigBlind: level.bigBlind,
-          durationMinutes: level.durationMinutes,
-        },
-      });
-    }
-  }
-
-  console.log("✅ Blind schedules seeded");
+  console.log("⏰ Skipping blind schedule seeding (schedules are defined in code)");
 }
 
 async function seedTestData() {
@@ -257,11 +240,6 @@ async function main() {
     await seedTreasury();
     await seedLedger();
     await seedBlindSchedules();
-
-    // Seed game templates (existing script)
-    console.log("🎮 Seeding game templates...");
-    const { execSync } = require('child_process');
-    execSync('npm run seed:games', { stdio: 'inherit', cwd: __dirname });
 
     // Optional: seed test data for development
     if (process.env.NODE_ENV === 'development' || process.env.SEED_TEST_DATA === 'true') {

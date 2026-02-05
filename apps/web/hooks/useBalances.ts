@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { clearAuthToken, getAuthToken } from "~~/utils/auth";
+import { getLocalIdentity, resolveEffectiveId } from "~~/utils/identity";
 
 type TicketBalances = {
   ticket_x: number;
@@ -41,9 +42,11 @@ export function useBalances() {
   const [hydrated, setHydrated] = useState(false);
   const [lastClaimAt, setLastClaimAt] = useState<number | null>(null);
   const apiBase = useMemo(() => resolveApiBase(), []);
-  const fallbackWallet =
-    typeof window !== "undefined" ? window.localStorage.getItem("walletAddress") : null;
-  const walletForBalance = (address || fallbackWallet || "").toLowerCase() || null;
+  const localIdentity = getLocalIdentity();
+  const walletForBalance =
+    resolveEffectiveId(address, localIdentity.walletAddress) ||
+    resolveEffectiveId(null, localIdentity.sessionId) ||
+    null;
 
   useEffect(() => {
     let cancelled = false;
@@ -132,28 +135,53 @@ export function useBalances() {
     [],
   );
 
-  const refreshBalances = useCallback(async () => {
-    if (!walletForBalance || !apiBase) return;
+  const refreshBalances = useCallback(async (): Promise<Balances | null> => {
+    if (!walletForBalance || !apiBase) return null;
     const token = getAuthToken();
     const res = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (res.status === 401) {
       clearAuthToken();
-      return;
+      return null;
     }
     const data = await res.json();
     if (data?.balance) {
-      setBalances({
+      const next = {
         coins: data.balance.coins ?? 0,
         tickets: {
           ticket_x: data.balance.ticket_x ?? 0,
           ticket_y: data.balance.ticket_y ?? 0,
           ticket_z: data.balance.ticket_z ?? 0,
         },
-      });
+      };
+      setBalances(next);
+      return next;
     }
+    return null;
   }, [apiBase, walletForBalance]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void refreshBalances();
+  }, [isAuthenticated, refreshBalances]);
+
+  useEffect(() => {
+    if (!walletForBalance || !apiBase) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshBalances();
+    };
+    const onFocus = () => void tick();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [apiBase, refreshBalances, walletForBalance]);
 
   const claimFreeCoins = useCallback(async () => {
     if (!address || !apiBase) return { ok: false, nextAvailableInMs: 0 };

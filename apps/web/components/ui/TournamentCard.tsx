@@ -7,6 +7,7 @@ import Button from "./Button";
 import TournamentDetailsModal, {
   TournamentItem,
 } from "./TournamentDetailsModal";
+import { formatNumber } from "~~/utils/format";
 
 export type TournamentCardProps = TournamentItem;
 
@@ -33,9 +34,11 @@ export default function TournamentCard(props: TournamentCardProps) {
           </span>
         </div>
         <p className="text-xs mb-1">{props.date}</p>
-        <p className="text-xs mb-1">Price: {props.price} HYPE</p>
-        <p className="text-xs mb-1">Registered: {props.registered}</p>
-        <p className="text-xs mb-2">Prize: {totalPrize.toFixed(2)} HYPE</p>
+        <p className="text-xs mb-1">Price: {formatNumber(props.price)} HYPE</p>
+        <p className="text-xs mb-1">Registered: {formatNumber(props.registered)}</p>
+        <p className="text-xs mb-2">
+          Prize: {formatNumber(totalPrize, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} HYPE
+        </p>
         <Button className="w-full" onClick={() => setOpen(true)}>
           More Details
         </Button>

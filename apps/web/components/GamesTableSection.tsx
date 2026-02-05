@@ -4,12 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LobbyTable } from "~~/game-engine";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
+import { useActiveStatus } from "~~/hooks/useActiveStatus";
 
 export default function GamesTableSection() {
   const [tables, setTables] = useState<LobbyTable[]>([]);
+  const activeStatus = useActiveStatus();
+  const activeCashTables = useMemo(
+    () => new Set(activeStatus.cashTableIds || []),
+    [activeStatus.cashTableIds],
+  );
   const visibleTables = useMemo(() => {
-    return tables.filter((t) => !/^mtt-|^stt-/i.test(t.id));
-  }, [tables]);
+    const cash = tables.filter((t) => !/^mtt-|^stt-/i.test(t.id));
+    if (activeCashTables.size === 0) return cash;
+    return [...cash].sort((a, b) => {
+      if (activeCashTables.has(a.id)) return -1;
+      if (activeCashTables.has(b.id)) return 1;
+      return 0;
+    });
+  }, [tables, activeCashTables]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.WebSocket) return;
@@ -56,9 +68,21 @@ export default function GamesTableSection() {
             </tr>
           </thead>
           <tbody>
-            {visibleTables.map((t) => (
-              <tr key={t.id} className="border-b border-white/10">
-                <td className="px-2 py-2">{t.name}</td>
+            {visibleTables.map((t) => {
+              const isActive = activeCashTables.has(t.id);
+              return (
+              <tr key={t.id} className={`border-b border-white/10 ${isActive ? "bg-white/5" : ""}`}>
+                <td className="px-2 py-2">
+                  <div className="flex items-center gap-2">
+                    <span>{t.name}</span>
+                    {isActive ? (
+                      <span
+                        className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
+                        aria-label="active table"
+                      />
+                    ) : null}
+                  </div>
+                </td>
                 <td className="px-2 py-2">{t.gameType}</td>
                 <td className="px-2 py-2 text-center">
                   {t.playerCount}/{t.maxPlayers}
@@ -77,12 +101,16 @@ export default function GamesTableSection() {
                   {t.prizePool ? `${t.prizePool}` : "—"}
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <Link href={`/play?table=${t.id}`} className="tbtn text-xs font-semibold">
+                  <Link
+                    href={`/play?table=${t.id}`}
+                    className="tbtn text-xs font-semibold"
+                  >
                     Join
                   </Link>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {visibleTables.length === 0 ? (
               <tr>
                 <td className="px-2 py-3 text-sm text-white/60" colSpan={7}>

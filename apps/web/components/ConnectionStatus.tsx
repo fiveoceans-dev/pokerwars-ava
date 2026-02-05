@@ -22,7 +22,7 @@ export function ConnectionStatus() {
 
   return (
     <span
-      className="flex items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-white/50"
+      className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-white/50 leading-none"
       title={statusText}
       aria-label={statusText}
     >

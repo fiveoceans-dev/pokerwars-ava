@@ -1,9 +1,9 @@
-import { EventEngine, type Table } from "@hyper-poker/engine";
+import { EventEngine, type Table, type ActionType, getBettingLimits } from "@hyper-poker/engine";
 import { logger } from "@hyper-poker/engine/utils/logger";
 
 const BOT_PREFIX = "bot_";
 
-export type BotStyle = "tight" | "aggressive" | "loose" | "random";
+export type BotStyle = "tight" | "aggressive" | "loose" | "random" | "balanced";
 export interface BotConfig {
   style: BotStyle;
   minDelayMs?: number;
@@ -11,9 +11,16 @@ export interface BotConfig {
 }
 
 const DEFAULT_STYLE: BotStyle = "random";
-const DEFAULT_MIN_DELAY = 200;
-const DEFAULT_MAX_DELAY = 600;
+const DEFAULT_MIN_DELAY = 350;
+const DEFAULT_MAX_DELAY = 1100;
 const FAILSAFE_DELAY_MS = 1500;
+const STYLE_DELAYS: Record<BotStyle, { min: number; max: number }> = {
+  random: { min: 300, max: 1200 },
+  tight: { min: 450, max: 1200 },
+  loose: { min: 300, max: 900 },
+  aggressive: { min: 250, max: 800 },
+  balanced: { min: 350, max: 1000 },
+};
 
 /**
  * Lightweight bot runner for house bots.
@@ -73,8 +80,9 @@ export class BotManager {
     if (existing) clearTimeout(existing);
 
     const cfg = this.botStyles.get(tableId) ?? { style: DEFAULT_STYLE };
-    const minDelay = cfg.minDelayMs ?? DEFAULT_MIN_DELAY;
-    const maxDelay = cfg.maxDelayMs ?? DEFAULT_MAX_DELAY;
+    const styleDelay = STYLE_DELAYS[cfg.style] ?? { min: DEFAULT_MIN_DELAY, max: DEFAULT_MAX_DELAY };
+    const minDelay = cfg.minDelayMs ?? styleDelay.min;
+    const maxDelay = cfg.maxDelayMs ?? styleDelay.max;
     const delay = minDelay + Math.floor(Math.random() * Math.max(1, maxDelay - minDelay)); // keep it snappy but human-ish
     const timer = setTimeout(() => {
       this.timers.delete(tableId);
@@ -128,22 +136,33 @@ export class BotManager {
         board: table.communityCards,
       };
 
-      const { action, amount } = decideAction(ctx);
+      const availableActions = engine.getPlayerAvailableActions(actor);
+      if (!availableActions.length) {
+        logger.debug(`🤖 [Bot] No available actions for ${seat.pid} on ${tableId}, skipping`);
+        return;
+      }
+      const limits = getBettingLimits(table, actor);
+      const { action, amount } = ensureDecision(
+        decideAction(ctx, availableActions, limits),
+        availableActions,
+        limits,
+        ctx,
+      );
 
       // Normalize actions that require amount
       let normalizedAction = action;
       let normalizedAmount = amount;
       if (normalizedAction === "CALL" && toCall === 0) {
-      normalizedAction = "CHECK";
-      normalizedAmount = undefined;
-    }
+        normalizedAction = "CHECK";
+        normalizedAmount = undefined;
+      }
 
-    await engine.dispatch({
-      t: "Action",
-      seat: actor,
-      action: normalizedAction,
-      amount: normalizedAmount,
-    });
+      await engine.dispatch({
+        t: "Action",
+        seat: actor,
+        action: normalizedAction,
+        amount: normalizedAmount,
+      });
       logger.info(`🤖 [Bot] ${seat.pid} (${style}) acted ${normalizedAction}${normalizedAmount ? ` (${normalizedAmount})` : ""} on ${tableId}`);
     } catch (err) {
       logger.error(`❌ [Bot] Failed to act on table ${tableId}:`, err);
@@ -188,43 +207,68 @@ type BotContext = {
   playersLeft: number;
 };
 
-type BotDecision = { action: "CHECK" | "CALL" | "FOLD" | "ALLIN"; amount?: number };
+type BotDecision = { action: ActionType; amount?: number };
 
-function decideAction(ctx: BotContext): BotDecision {
+type BotLimits = {
+  minBet: number;
+  maxBet: number;
+  minRaise: number;
+  maxRaise: number;
+  toCall: number;
+};
+
+function decideAction(ctx: BotContext, available: ActionType[], limits: BotLimits): BotDecision {
   const toCall = Math.min(ctx.toCall, ctx.stack);
   const pot = Math.max(ctx.pot, ctx.bb * 2);
   const pressure = toCall / Math.max(ctx.bb, 1);
   const effStackBb = ctx.stack / Math.max(ctx.bb, 1);
 
-  if (toCall <= 0) {
-    // Optional stab for aggro styles; keep it simple: check
-    return { action: "CHECK" };
-  }
-
   const strength = evaluateStrength(ctx);
+  const aggression =
+    ctx.style === "aggressive" ? 0.75 : ctx.style === "loose" ? 0.45 : ctx.style === "tight" ? 0.25 : ctx.style === "balanced" ? 0.4 : 0.5;
+  const bluffiness = ctx.style === "aggressive" ? 0.25 : ctx.style === "balanced" ? 0.15 : ctx.style === "loose" ? 0.1 : 0.05;
+  const rng = Math.random();
+
+  if (toCall <= 0) {
+    if (available.includes("BET") && strength >= 3 && rng < aggression) {
+      return { action: "BET", amount: pickBetSize(limits, pot) };
+    }
+    if (available.includes("BET") && rng < bluffiness) {
+      return { action: "BET", amount: pickBetSize(limits, pot) };
+    }
+    return { action: available.includes("CHECK") ? "CHECK" : available.includes("BET") ? "BET" : "FOLD", amount: available.includes("BET") ? pickBetSize(limits, pot) : undefined };
+  }
 
   // Short stack: shove if any decent strength or pressure high
   if (effStackBb <= 8) {
     if (strength >= 2 || pressure >= 4) {
-      return { action: "ALLIN", amount: ctx.stack };
+      return available.includes("ALLIN") ? { action: "ALLIN", amount: ctx.stack } : { action: "CALL", amount: toCall };
     }
   }
 
-  // Style-based tolerance
-  const styleBias =
-    ctx.style === "aggressive" ? 1.5 : ctx.style === "loose" ? 1.2 : ctx.style === "tight" ? 0.8 : 1;
-
-  // Call thresholds (rough pot odds)
-  const callThreshold =
-    strength >= 3 ? 4 * styleBias : strength === 2 ? 3 * styleBias : strength === 1 ? 1.5 * styleBias : 0.8 * styleBias;
-
-  if (pressure <= callThreshold) {
-    return { action: "CALL", amount: toCall };
+  if (strength >= 4) {
+    if (available.includes("RAISE") && rng < aggression + 0.2) {
+      return { action: "RAISE", amount: pickRaiseSize(limits, pot) };
+    }
+    return { action: available.includes("CALL") ? "CALL" : "FOLD", amount: toCall };
   }
 
-  // If strong but facing big pressure, shove; otherwise fold
-  if (strength >= 3 && pressure <= callThreshold * 2) {
-    return { action: "ALLIN", amount: ctx.stack };
+  if (strength >= 3) {
+    if (available.includes("RAISE") && rng < aggression) {
+      return { action: "RAISE", amount: pickRaiseSize(limits, pot) };
+    }
+    if (available.includes("CALL")) return { action: "CALL", amount: toCall };
+    return { action: available.includes("CHECK") ? "CHECK" : "FOLD" };
+  }
+
+  if (strength >= 2) {
+    if (available.includes("CALL") && pressure <= 3) return { action: "CALL", amount: toCall };
+    if (available.includes("RAISE") && rng < bluffiness) return { action: "RAISE", amount: pickRaiseSize(limits, pot) };
+    return { action: available.includes("FOLD") ? "FOLD" : "CALL", amount: toCall };
+  }
+
+  if (available.includes("CALL") && pressure <= 1.5 && (ctx.style === "loose" || ctx.style === "random" || ctx.style === "balanced") && rng < 0.35) {
+    return { action: "CALL", amount: toCall };
   }
 
   return { action: "FOLD" };
@@ -232,26 +276,14 @@ function decideAction(ctx: BotContext): BotDecision {
 
 // Strength buckets: 0 air, 1 weak, 2 medium, 3 strong, 4 monster
 function evaluateStrength(ctx: BotContext): number {
-  const ranks = (ctx.holeCards || []).map((c) => c % 13);
-  const boardRanks = (ctx.board || []).map((c) => c % 13);
+  const ranks = (ctx.holeCards || []).map((c) => Math.floor(c / 4));
+  const boardRanks = (ctx.board || []).map((c) => Math.floor(c / 4));
 
   // Preflop: simple chart
   if (ctx.street === "preflop") {
     if (ranks.length === 2) {
-      const [a, b] = ranks;
-      const pair = a === b;
-      const highPair = pair && a >= 8; // 99+
-      const midPair = pair && a >= 5; // 66-88
-      const highCard = Math.max(a, b);
-      const lowCard = Math.min(a, b);
-      const broadway = highCard >= 10 && lowCard >= 8;
-
-      if (highPair) return 4;
-      if (midPair) return 3;
-      if (pair) return 2;
-      if (broadway) return 3;
-      if (highCard >= 10 && lowCard >= 5) return 2;
-      return 1;
+      const tier = preflopTier(ctx);
+      return adjustPreflopByStyle(tier, ctx.style);
     }
     return 1;
   }
@@ -278,4 +310,110 @@ function evaluateStrength(ctx: BotContext): number {
   if (hasTrips || flushMade) return 3;
   if (hasPair || flushDraw) return 2;
   return 1;
+}
+
+function adjustPreflopByStyle(tier: number, style: BotStyle): number {
+  if (style === "tight") {
+    if (tier >= 4) return 4;
+    if (tier === 3) return 3;
+    if (tier === 2) return 1;
+    return 0;
+  }
+  if (style === "aggressive") {
+    if (tier >= 3) return 4;
+    if (tier === 2) return 2;
+    return 1;
+  }
+  if (style === "loose") {
+    return Math.min(4, tier + 1);
+  }
+  if (style === "random") {
+    const jitter = Math.random() < 0.35 ? 1 : 0;
+    return Math.min(4, Math.max(1, tier + jitter));
+  }
+  // balanced: neutral
+  return tier;
+}
+
+function preflopTier(ctx: BotContext): number {
+  if (!ctx.holeCards || ctx.holeCards.length !== 2) return 1;
+  const [c1, c2] = ctx.holeCards;
+  const r1 = Math.floor(c1 / 4) + 2;
+  const r2 = Math.floor(c2 / 4) + 2;
+  const s1 = c1 % 4;
+  const s2 = c2 % 4;
+  const high = Math.max(r1, r2);
+  const low = Math.min(r1, r2);
+  const suited = s1 === s2;
+  const pair = r1 === r2;
+
+  // Tier 5: premiums
+  if (pair && high >= 11) return 4; // JJ+
+  if (high === 14 && low >= 10) return 4; // AK/AQ
+  if (suited && high === 14 && low >= 10) return 4; // AKs/AQs
+
+  // Tier 4: strong
+  if (pair && high >= 9) return 3; // 99-TT
+  if (suited && high >= 13 && low >= 10) return 3; // KQs/KJs/QJs
+  if (!suited && high >= 13 && low >= 11) return 3; // KQo/AJo
+  if (high === 14 && low >= 8) return 3; // AT/A9 suited-ish
+
+  // Tier 3: medium
+  if (pair && high >= 6) return 2; // 66-88
+  if (suited && high >= 11 && low >= 8) return 2; // JTs/QTs/T9s
+  if (suited && high >= 10 && low >= 6) return 2; // T8s/98s/87s
+  if (high === 14 && suited) return 2; // suited aces
+
+  // Tier 2: speculative
+  if (pair) return 2;
+  if (suited && high - low <= 3 && high >= 7) return 2; // suited connectors/gappers
+
+  return 1;
+}
+
+function pickBetSize(limits: BotLimits, pot: number): number {
+  const base = Math.max(limits.minBet, Math.min(limits.maxBet, Math.round(pot * 0.5)));
+  return clampAmount(base, limits.minBet, limits.maxBet);
+}
+
+function pickRaiseSize(limits: BotLimits, pot: number): number {
+  const target = Math.max(limits.minRaise, Math.min(limits.maxRaise, Math.round(pot * 0.6)));
+  return clampAmount(target, limits.minRaise, limits.maxRaise);
+}
+
+function clampAmount(value: number, min: number, max: number): number {
+  if (max <= 0) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function ensureDecision(
+  decision: BotDecision,
+  available: ActionType[],
+  limits: BotLimits,
+  ctx: BotContext,
+): BotDecision {
+  if (!available.includes(decision.action)) {
+    // Fallback order
+    if (available.includes("CHECK")) return { action: "CHECK" };
+    if (available.includes("CALL")) return { action: "CALL", amount: limits.toCall };
+    if (available.includes("BET")) return { action: "BET", amount: pickBetSize(limits, ctx.pot) };
+    if (available.includes("RAISE")) return { action: "RAISE", amount: pickRaiseSize(limits, ctx.pot) };
+    if (available.includes("ALLIN")) return { action: "ALLIN", amount: ctx.stack };
+    return { action: "FOLD" };
+  }
+
+  if (decision.action === "BET") {
+    return { action: "BET", amount: pickBetSize(limits, ctx.pot) };
+  }
+  if (decision.action === "RAISE") {
+    return { action: "RAISE", amount: pickRaiseSize(limits, ctx.pot) };
+  }
+  if (decision.action === "CALL") {
+    return { action: "CALL", amount: limits.toCall };
+  }
+  if (decision.action === "ALLIN") {
+    return { action: "ALLIN", amount: ctx.stack };
+  }
+
+  return decision;
 }

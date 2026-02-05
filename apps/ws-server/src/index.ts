@@ -12,7 +12,7 @@ import 'dotenv/config';
 import { createServer, type IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
-import { healthCheck } from './health.js';
+import { healthCheck } from './health';
 
 // Import pure FSM components (no legacy types)
 import { createEventEngine, EventEngine } from "@hyper-poker/engine";
@@ -81,6 +81,13 @@ const isDevEnvironment = !env.isProduction;
 const allowedOrigins = env.allowedOrigins;
 const devAllowedOrigins = env.devAllowedOrigins;
 
+if (!env.isProduction) {
+  logger.info(`🧪 Dev Env: ${env.nodeEnv}`);
+  logger.info(`🧪 PORT: ${PORT}`);
+  logger.info(`🧪 DB: ${process.env.DATABASE_URL ? "configured" : "missing"}`);
+  logger.info(`🧪 Origins: ${devAllowedOrigins.join(", ") || "none"}`);
+}
+
 if (isDevEnvironment && allowedOrigins.length === 0 && devAllowedOrigins.length === 0) {
   logger.warn(
     "No WebSocket origins configured. Set DEV_ALLOWED_WS_ORIGINS (recommended) or ALLOWED_WS_ORIGINS to accept browser connections.",
@@ -92,19 +99,21 @@ if (prisma) {
   prisma.gameTemplate
     .findMany({ where: { type: "CASH" as any }, orderBy: { bigBlind: "asc" } })
     .then((templates) => {
-      if (templates.length) {
-        setTableConfigs(
-          templates.map((t) => ({
-            id: t.id,
-            name: t.name,
-            blinds: { small: t.smallBlind, big: t.bigBlind },
-            maxPlayers: t.maxPlayers,
-            buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
-            stakeLevel: "custom",
-          })),
-        );
-        logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
+      if (!templates.length) {
+        logger.error("❌ No CASH game templates found in DB; refusing to start without DB data");
+        process.exit(1);
       }
+      setTableConfigs(
+        templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          blinds: { small: t.smallBlind, big: t.bigBlind },
+          maxPlayers: t.maxPlayers,
+          buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
+          stakeLevel: "custom",
+        })),
+      );
+      logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
     })
     .catch((err) => {
       logger.error("❌ Failed to load cash table configs; using defaults", err);
@@ -112,6 +121,14 @@ if (prisma) {
 }
 
 const rateLimits = new Map<string, { window: number; count: number }>(); // key = `${wallet}:${route}`
+const balanceCache = new Map<string, { ts: number; payload: any }>();
+const BALANCE_CACHE_TTL_MS = 5000;
+
+function invalidateBalanceCache(wallet?: string | null) {
+  if (!wallet) return;
+  balanceCache.delete(wallet.toLowerCase());
+}
+
 function checkRateLimit(key: string, limitPerMinute = 60): boolean {
   const now = Date.now();
   const windowMs = 60_000;
@@ -275,9 +292,18 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "wallet not verified" }));
       return;
     }
+    const cached = balanceCache.get(wallet);
+    const now = Date.now();
+    if (cached && now - cached.ts < BALANCE_CACHE_TTL_MS) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(cached.payload));
+      return;
+    }
     const receipt = await chain.getBalance(wallet);
+    const payload = receipt.payload;
+    balanceCache.set(wallet, { ts: now, payload });
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(receipt.payload));
+    res.end(JSON.stringify(payload));
     return;
   }
 
@@ -330,6 +356,92 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === '/api/user/registrations' && req.method === 'GET') {
+    setCorsHeaders(res, origin);
+    if (!ledger || !prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
+    if (!wallet) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "wallet param required" }));
+      return;
+    }
+    if (!isWalletAuthorized(req, wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    try {
+      const rows = await prisma.tournamentRegistration.findMany({
+        where: {
+          playerId: { equals: wallet, mode: "insensitive" },
+          status: { in: ["REGISTERED", "SEATED"] },
+          tournament: {
+            status: { in: ["REGISTERING", "SCHEDULED", "RUNNING", "LATE_REG", "BREAKING"] },
+          },
+        },
+        select: { tournamentId: true },
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ registrations: rows }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "failed to load registrations" }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/user/active' && req.method === 'GET') {
+    setCorsHeaders(res, origin);
+    if (!ledger || !prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const wallet = url.searchParams.get('wallet')?.toLowerCase();
+    if (!wallet) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: "wallet param required" }));
+      return;
+    }
+    if (!isWalletAuthorized(req, wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "wallet not verified" }));
+      return;
+    }
+    try {
+      const registrations = await prisma.tournamentRegistration.findMany({
+        where: {
+          playerId: { equals: wallet, mode: "insensitive" },
+          status: { in: ["REGISTERED", "SEATED"] },
+          tournament: {
+            status: { in: ["REGISTERING", "SCHEDULED", "RUNNING", "LATE_REG", "BREAKING"] },
+          },
+        },
+        select: {
+          tournament: { select: { type: true } },
+        },
+      });
+      const sngActive = registrations.some((r) => r.tournament.type === "STT");
+      const mttActive = registrations.some((r) => r.tournament.type === "MTT");
+
+      const cashTableIds = globalSeatMappings
+        .getTablesForPlayer(wallet)
+        .filter((tableId) => !/^(mtt|stt)-/i.test(tableId));
+      const cashActive = cashTableIds.length > 0;
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ cashActive, cashTableIds, sngActive, mttActive }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "failed to load active games" }));
+    }
+    return;
+  }
+
   if (url.pathname === '/api/user/claim' && req.method === 'POST') {
     setCorsHeaders(res, origin);
     if (!ledger) {
@@ -363,6 +475,7 @@ const server = createServer(async (req, res) => {
     if (payload?.account && !payload?.balance) {
       payload.balance = payload.account;
     }
+    invalidateBalanceCache(wallet);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
     return;
@@ -406,6 +519,7 @@ const server = createServer(async (req, res) => {
         if (payload?.account && !payload?.balance) {
           payload.balance = payload.account;
         }
+        invalidateBalanceCache(wallet);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(payload));
       } catch (err) {
@@ -499,6 +613,9 @@ bridge.setBustHandler((tableId, playerId) => {
 
 // Kick off scheduled tournament checks every minute
 setInterval(() => tournamentOrchestrator.checkScheduled(), 60_000);
+
+// Ensure initial SNG instances exist
+tournamentOrchestrator.spawnInitialInstances();
 
 // Local helper to avoid leaking frontend utilities into server path
 function shortAddr(id?: string): string | undefined {
@@ -812,7 +929,17 @@ ws.on("message", async (data) => {
           break;
         }
         case "REGISTER_TOURNAMENT": {
-          const playerId = session.userId || session.sessionId;
+          const rawPlayerId = session.userId || session.sessionId;
+          const playerId = rawPlayerId?.toLowerCase().trim();
+          if (!playerId) {
+            ws.send(JSON.stringify({
+              tableId: "",
+              type: "ERROR",
+              code: "REGISTER_FAILED",
+              msg: "Missing player identity",
+            } satisfies ServerEvent));
+            break;
+          }
           const result = tournamentManager.registerPlayer(command.tournamentId, playerId);
           if (!result.ok || !result.tournament) {
             ws.send(JSON.stringify({
@@ -861,7 +988,17 @@ ws.on("message", async (data) => {
           break;
         }
         case "UNREGISTER_TOURNAMENT": {
-          const playerId = session.userId || session.sessionId;
+          const rawPlayerId = session.userId || session.sessionId;
+          const playerId = rawPlayerId?.toLowerCase().trim();
+          if (!playerId) {
+            ws.send(JSON.stringify({
+              tableId: "",
+              type: "ERROR",
+              code: "UNREGISTER_FAILED",
+              msg: "Missing player identity",
+            } satisfies ServerEvent));
+            break;
+          }
           const result = tournamentManager.unregisterPlayer(command.tournamentId, playerId);
           if (!result.ok || !result.tournament) {
             ws.send(JSON.stringify({
@@ -896,8 +1033,7 @@ ws.on("message", async (data) => {
           
           try {
             const table = bridge.getTableState(command.tableId);
-            const maxPlayers =
-              getTableConfig(command.tableId)?.maxPlayers ?? table.seats.length;
+            const maxPlayers = bridge.getMaxPlayers(command.tableId, table);
             
             // Proactively restore seat mapping on rejoin to prevent action failures
             if (session.userId) {
@@ -984,8 +1120,7 @@ ws.on("message", async (data) => {
             if (existing.roomId) {
               try {
                 const table = bridge.getTableState(existing.roomId);
-              const maxPlayers =
-                getTableConfig(existing.roomId)?.maxPlayers ?? table.seats.length;
+              const maxPlayers = bridge.getMaxPlayers(existing.roomId, table);
               ws.send(JSON.stringify({
                 tableId: existing.roomId,
                 type: "TABLE_SNAPSHOT", 
@@ -1000,7 +1135,8 @@ ws.on("message", async (data) => {
           break;
 
         case "ATTACH":
-          const attached = sessions.attach(ws, command.userId);
+          const normalizedUserId = command.userId.toLowerCase().trim();
+          const attached = sessions.attach(ws, normalizedUserId);
           if (attached) {
             session.userId = attached.userId;
             session.roomId = session.roomId || attached.roomId;
@@ -1017,8 +1153,7 @@ ws.on("message", async (data) => {
             if (session.roomId) {
               try {
                 const table = bridge.getTableState(session.roomId);
-              const maxPlayers =
-                getTableConfig(session.roomId)?.maxPlayers ?? table.seats.length;
+              const maxPlayers = bridge.getMaxPlayers(session.roomId, table);
               ws.send(JSON.stringify({
                 tableId: session.roomId,
                 type: "TABLE_SNAPSHOT",

@@ -164,6 +164,18 @@ export class SeatMappingManager {
       tablesWithMappings
     };
   }
+
+  /**
+   * List tables where the given player is seated
+   */
+  getTablesForPlayer(playerId: string): string[] {
+    if (!playerId) return [];
+    const tables: string[] = [];
+    for (const [tableId, map] of this.playerToSeat.entries()) {
+      if (map.has(playerId)) tables.push(tableId);
+    }
+    return tables;
+  }
 }
 
 /**

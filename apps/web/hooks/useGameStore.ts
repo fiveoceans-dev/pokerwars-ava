@@ -125,6 +125,13 @@ interface GameStoreState {
 }
 
 export const useGameStore = create<GameStoreState>((set, get) => {
+  const isWebSocketDisabled = () => {
+    if (typeof window === "undefined") return false;
+    const flag = (window as any).__POKERWARS_DISABLE_WS__ === true;
+    const path = window.location?.pathname || "";
+    return flag || path.startsWith("/table6-test") || path.startsWith("/table9-test");
+  };
+
   // Helper function to determine if a player should have cards dealt
   function shouldHaveCards(seat: any, phase: string): boolean {
     // Player should have cards if:
@@ -356,6 +363,10 @@ export const useGameStore = create<GameStoreState>((set, get) => {
   }
 
   const connectWebSocket = () => {
+    if (isWebSocketDisabled()) {
+      set({ connectionState: "connected", connectionError: null });
+      return;
+    }
     if (socket && socket.readyState === WebSocket.OPEN) {
       console.log("🔗 WebSocket already connected");
       return;
@@ -1078,7 +1089,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     }, delay);
   };
 
-  if (typeof window !== "undefined" && !socket) {
+  if (typeof window !== "undefined" && !socket && !isWebSocketDisabled()) {
     connectWebSocket();
   }
 
@@ -1150,20 +1161,21 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     actionHistory: [],
 
     connectWallet: (address: string) => {
+      const normalized = (address || "").trim().toLowerCase();
       const previousWallet = get().currentWalletId;
 
-      if (!address || typeof address !== "string") {
+      if (!normalized || typeof normalized !== "string") {
         console.error("🚫 Invalid wallet address provided");
         set({ connectionError: "Invalid wallet address" });
         return;
       }
 
       console.log(
-        `💼 Connecting wallet: ${address.slice(0, 10)}... (Previous: ${previousWallet?.slice(0, 10) + "..." || "none"})`,
+        `💼 Connecting wallet: ${normalized.slice(0, 10)}... (Previous: ${previousWallet?.slice(0, 10) + "..." || "none"})`,
       );
 
       // If switching wallets, disconnect from previous wallet's sessions
-      if (previousWallet && previousWallet !== address) {
+      if (previousWallet && previousWallet !== normalized) {
         console.log("🔄 Switching wallets - cleaning up previous state");
         get()
           .handleDisconnect()
@@ -1171,7 +1183,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             // After cleanup, connect with new wallet and ensure clean state
             seatStore.getState().reset();
             set({
-              currentWalletId: address,
+              currentWalletId: normalized,
               tableSeats: new Map(),
               connectionError: null,
               tableMaxPlayers: DEFAULT_MAX_PLAYERS,
@@ -1185,11 +1197,11 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             if (typeof window !== "undefined") {
               // Validate localStorage consistency - ensure only this address is stored
               const storedAddress = localStorage.getItem("walletAddress");
-              if (storedAddress !== address) {
+              if (storedAddress !== normalized) {
                 console.log(
-                  `🧹 Cleaning inconsistent localStorage: ${storedAddress} → ${address}`,
+                  `🧹 Cleaning inconsistent localStorage: ${storedAddress} → ${normalized}`,
                 );
-                localStorage.setItem("walletAddress", address);
+                localStorage.setItem("walletAddress", normalized);
               }
             }
 
@@ -1199,12 +1211,12 @@ export const useGameStore = create<GameStoreState>((set, get) => {
                 const cmd: ClientCommand = {
                   cmdId: crypto.randomUUID(),
                   type: "ATTACH",
-                  userId: address,
+                  userId: normalized,
                 } as any;
                 socket.send(JSON.stringify(cmd));
                 console.log(
                   "📤 Sent ATTACH command with new wallet:",
-                  address.slice(0, 10) + "...",
+                  normalized.slice(0, 10) + "...",
                 );
               } catch (error) {
                 console.error("🚫 Failed to attach new wallet:", error);
@@ -1225,15 +1237,15 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         // First time connecting or same wallet - validate consistency
         if (typeof window !== "undefined") {
           const storedAddress = localStorage.getItem("walletAddress");
-          if (storedAddress !== address) {
+          if (storedAddress !== normalized) {
             console.log(
-              `🧹 Syncing localStorage: ${storedAddress} → ${address}`,
+              `🧹 Syncing localStorage: ${storedAddress} → ${normalized}`,
             );
-            localStorage.setItem("walletAddress", address);
+            localStorage.setItem("walletAddress", normalized);
           }
         }
 
-        set({ currentWalletId: address, connectionError: null });
+        set({ currentWalletId: normalized, connectionError: null });
 
         // Ensure WebSocket is connected before attaching
         if (socket && socket.readyState === WebSocket.OPEN) {
@@ -1241,12 +1253,12 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             const cmd: ClientCommand = {
               cmdId: crypto.randomUUID(),
               type: "ATTACH",
-              userId: address,
+              userId: normalized,
             } as any;
             socket.send(JSON.stringify(cmd));
             console.log(
               "📤 Sent ATTACH command with wallet address:",
-              address.slice(0, 10) + "...",
+              normalized.slice(0, 10) + "...",
             );
           } catch (error) {
             console.error("🚫 Failed to attach wallet:", error);

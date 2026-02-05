@@ -4,6 +4,7 @@ import { useState } from "react";
 import GenericModal from "~~/components/ui/GenericModal";
 import { notifyError } from "~~/utils/notifications";
 import { useBalances } from "~~/hooks/useBalances";
+import { formatNumber } from "~~/utils/format";
 import { useWallet } from "~~/components/providers/WalletProvider";
 
 
@@ -58,13 +59,13 @@ export default function FreePage() {
           <div>
             <p className="text-lg text-white">Claim free coins</p>
             <p className="text-sm text-white/70">
-              Receive {freeClaimAmount} coins every 10 hours.
+              Receive {formatNumber(freeClaimAmount)} coins every 10 hours.
             </p>
             <p className="text-xs text-white/50 mt-2">
-              Balance: {hydrated ? balances.coins : "—"} coins
+              Balance: {hydrated ? formatNumber(balances.coins) : "—"} coins
             </p>
           </div>
-          <div className="flex flex-col items-start gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               className="tbtn"
@@ -85,7 +86,7 @@ export default function FreePage() {
         <div className="space-y-4">
           <h3 className="text-xl text-white">Congrats</h3>
           <p className="text-sm text-white/70">
-            {freeClaimAmount.toLocaleString()} coins sent to your wallet.
+            {formatNumber(freeClaimAmount)} coins sent to your wallet.
           </p>
           <button type="button" className="tbtn" onClick={() => setShowCongrats(false)}>
             Close

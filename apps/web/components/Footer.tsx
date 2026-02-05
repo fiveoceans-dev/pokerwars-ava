@@ -8,10 +8,10 @@ import { ConnectionStatus } from "./ConnectionStatus";
 export const Footer = () => {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || "PokerWars";
   return (
-    <footer className="shrink-0 w-full border-t border-white/10 py-3">
-      <div className="content-wrap flex items-center justify-between text-xs text-white/60">
+    <footer className="shrink-0 w-full border-t border-white/10 h-[15px] flex items-center">
+      <div className="content-wrap flex items-center justify-between text-[10px] text-white/60 leading-none">
         <span>{appName}</span>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-full">
           <ConnectionStatus />
         </div>
       </div>

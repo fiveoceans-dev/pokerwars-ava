@@ -6,6 +6,7 @@ import { useBalances } from "~~/hooks/useBalances";
 import GenericModal from "~~/components/ui/GenericModal";
 import { WalletDisconnectConfirm } from "~~/components/WalletDisconnectConfirm";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
+import { formatNumber } from "~~/utils/format";
 
 type GameHistoryRow = {
   id: string;
@@ -149,7 +150,7 @@ export default function AccountClient() {
           <h1 className="text-2xl md:text-3xl">Account</h1>
           <div className="rule" aria-hidden="true" />
           <p className="text-sm text-white/70">
-            Connect your wallet to view account telemetry.
+            Connect your wallet to view account details.
           </p>
         </div>
       </main>
@@ -220,7 +221,7 @@ export default function AccountClient() {
               <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Tokens</div>
               <BalanceRow
                 label="$POKER (Coins)"
-                balance={showBalances ? balances.coins.toLocaleString() : "—"}
+                balance={showBalances ? formatNumber(balances.coins) : "—"}
                 amount={coinAmount}
                 onAmountChange={setCoinAmount}
                 onBuy={() => openConvert("ticketsToCoins", "ticket_x", coinAmount)}

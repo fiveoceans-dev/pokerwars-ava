@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useGameStore } from "./useGameStore";
+import { getLocalIdentity, resolveEffectiveId } from "~~/utils/identity";
+import { resolveWebSocketUrl } from "~~/utils/ws-url";
+import { getAuthToken } from "~~/utils/auth";
+import { useWallet } from "~~/components/providers/WalletProvider";
 
 export function useTournamentActions() {
   const socket = useGameStore((s) => s.socket);
@@ -9,49 +13,28 @@ export function useTournamentActions() {
   >(null);
   const [startLoadingId, setStartLoadingId] = useState<string | null>(null);
   const [pendingStart, setPendingStart] = useState<
-    { id: string; onSuccess?: () => void; onError?: () => void } | null
+    { id: string; onSuccess?: () => void; onError?: (message?: string) => void } | null
   >(null);
-  const [registeredIds, setRegisteredIds] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const stored = window.localStorage.getItem("pokerwars:registered-tournaments");
-      if (!stored) return new Set();
-      return new Set(JSON.parse(stored) as string[]);
-    } catch {
-      return new Set();
-    }
-  });
+  const [registeredIds, setRegisteredIds] = useState<Set<string>>(new Set());
+  const { isAuthenticated } = useWallet();
 
-  const persistRegistered = useCallback((ids: Set<string>) => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("pokerwars:registered-tournaments", JSON.stringify([...ids]));
+  const markRegistered = useCallback((tournamentId: string) => {
+    setRegisteredIds((prev) => {
+      const next = new Set(prev);
+      next.add(tournamentId);
+      return next;
+    });
   }, []);
 
-  const markRegistered = useCallback(
-    (tournamentId: string) => {
-      setRegisteredIds((prev) => {
-        const next = new Set(prev);
-        next.add(tournamentId);
-        persistRegistered(next);
-        return next;
-      });
-    },
-    [persistRegistered],
-  );
+  const markUnregistered = useCallback((tournamentId: string) => {
+    setRegisteredIds((prev) => {
+      const next = new Set(prev);
+      next.delete(tournamentId);
+      return next;
+    });
+  }, []);
 
-  const markUnregistered = useCallback(
-    (tournamentId: string) => {
-      setRegisteredIds((prev) => {
-        const next = new Set(prev);
-        next.delete(tournamentId);
-        persistRegistered(next);
-        return next;
-      });
-    },
-    [persistRegistered],
-  );
-
-  type ActionCallbacks = { onSuccess?: () => void; onError?: () => void };
+  type ActionCallbacks = { onSuccess?: () => void; onError?: (message?: string) => void };
 
   const register = useCallback(
     (tournamentId: string, callbacks?: ActionCallbacks): boolean => {
@@ -117,17 +100,20 @@ export function useTournamentActions() {
         const data = JSON.parse(evt.data);
         if (!data?.type) return;
         if (pendingAction && data.type === "TOURNAMENT_UPDATED" && data.tournament?.id === pendingAction.id) {
-          if (pendingAction.type === "register") {
-            markRegistered(pendingAction.id);
-          } else {
-            markUnregistered(pendingAction.id);
-          }
+          if (pendingAction.type === "register") markRegistered(pendingAction.id);
+          else markUnregistered(pendingAction.id);
           pendingAction.onSuccess?.();
           setLoadingId(null);
           setPendingAction(null);
         }
-        if (pendingAction && data.type === "ERROR" && (data.code === "REGISTER_FAILED" || data.code === "UNREGISTER_FAILED")) {
-          pendingAction.onError?.();
+        if (
+          pendingAction &&
+          data.type === "ERROR" &&
+          (data.code === "REGISTER_FAILED" ||
+            data.code === "UNREGISTER_FAILED" ||
+            data.code === "BUY_IN_FAILED")
+        ) {
+          pendingAction.onError?.(data.msg);
           setLoadingId(null);
           setPendingAction(null);
         }
@@ -137,7 +123,7 @@ export function useTournamentActions() {
           setPendingStart(null);
         }
         if (pendingStart && data.type === "ERROR" && data.code === "START_FAILED") {
-          pendingStart.onError?.();
+          pendingStart.onError?.(data.msg);
           setStartLoadingId(null);
           setPendingStart(null);
         }
@@ -149,6 +135,38 @@ export function useTournamentActions() {
     return () => socket.removeEventListener("message", handler);
   }, [socket, pendingAction, markRegistered, markUnregistered, pendingStart]);
 
+  const localIdentity = getLocalIdentity();
+  const effectiveId = resolveEffectiveId(
+    localIdentity.walletAddress,
+    localIdentity.sessionId,
+  );
+
+  useEffect(() => {
+    if (!effectiveId || !isAuthenticated) return;
+    const controller = new AbortController();
+    const load = async () => {
+      try {
+        const wsUrl = resolveWebSocketUrl();
+        if (!wsUrl) return;
+        const ws = new URL(wsUrl);
+        const apiBase = `${ws.protocol === "wss:" ? "https:" : "http:"}//${ws.host}`;
+        const res = await fetch(`${apiBase}/api/user/registrations?wallet=${effectiveId}`, {
+          signal: controller.signal,
+          headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : undefined,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Array.isArray(data?.registrations)) return;
+        const ids = data.registrations.map((r: { tournamentId: string }) => r.tournamentId);
+        setRegisteredIds(new Set(ids));
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    return () => controller.abort();
+  }, [effectiveId, isAuthenticated]);
+
   useEffect(() => {
     if (!socket) {
       setLoadingId(null);
@@ -158,5 +176,13 @@ export function useTournamentActions() {
     }
   }, [socket]);
 
-  return { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds };
+  return {
+    register,
+    unregister,
+    startSitAndGoWithBots,
+    loadingId,
+    startLoadingId,
+    registeredIds,
+    effectiveId,
+  };
 }

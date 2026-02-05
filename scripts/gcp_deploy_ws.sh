@@ -17,6 +17,7 @@ fi
 : "${WS_SERVICE_NAME:?Missing WS_SERVICE_NAME}"
 : "${WALLETCONNECT_PROJECT_ID:?Missing WALLETCONNECT_PROJECT_ID}"
 : "${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:=${WALLETCONNECT_PROJECT_ID}}"
+: "${AUTO_MIGRATE:="true"}"
 
 sanitize() { echo "$1" | tr -d "\"'\r\n"; }
 
@@ -106,7 +107,9 @@ WS_ENV_FILE="$ENV_OUT_DIR/env.ws.yaml"
 # ----------------------------
 # Run Prisma Migrations (Cloud Run Job)
 # ----------------------------
-if [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
+if [[ "${SKIP_MIGRATE:-}" == "1" || "${SKIP_MIGRATE:-}" == "true" ]]; then
+  echo "Skipping migrations (SKIP_MIGRATE=true)"
+elif [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
   echo "Running Prisma migrations via Cloud Run Job..."
 
   if [[ "${AUTO_GRANT_DB:-}" == "1" || "${AUTO_GRANT_DB:-}" == "true" ]]; then

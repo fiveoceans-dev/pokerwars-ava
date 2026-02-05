@@ -74,28 +74,44 @@ export class LedgerService {
     });
   }
 
+  private normalizeWallet(wallet: string) {
+    return (wallet || "").trim().toLowerCase();
+  }
+
   async getOrCreateUserByWallet(wallet: string) {
-    const user = await this.prisma.user.upsert({
-      where: { walletAddress: wallet },
-      update: {},
-      create: { walletAddress: wallet },
+    const normalized = this.normalizeWallet(wallet);
+
+    // Try to find case-insensitively to avoid duplicate-address inserts
+    const existing = await this.prisma.user.findFirst({
+      where: { walletAddress: { equals: normalized, mode: "insensitive" } },
     });
+
+    const user =
+      existing ??
+      (await this.prisma.user.create({
+        data: { walletAddress: normalized },
+      }));
+
     await this.ensureAccount(AccountOwnerType.USER, user.id);
     return user;
   }
 
   async updateEmail(wallet: string, email: string) {
+    const normalized = this.normalizeWallet(wallet);
     const user = await this.prisma.user.upsert({
-      where: { walletAddress: wallet },
+      where: { walletAddress: normalized },
       update: { email },
-      create: { walletAddress: wallet, email },
+      create: { walletAddress: normalized, email },
     });
     await this.ensureAccount(AccountOwnerType.USER, user.id);
     return user;
   }
 
   async getUserAccountByWallet(wallet: string) {
-    const user = await this.prisma.user.findUnique({ where: { walletAddress: wallet } });
+    const normalized = this.normalizeWallet(wallet);
+    const user = await this.prisma.user.findFirst({
+      where: { walletAddress: { equals: normalized, mode: "insensitive" } },
+    });
     if (!user) return null;
     return this.prisma.account.findUnique({
       where: { ownerType_ownerId: { ownerType: AccountOwnerType.USER, ownerId: user.id } },
@@ -103,7 +119,10 @@ export class LedgerService {
   }
 
   async getUserByWallet(wallet: string) {
-    return this.prisma.user.findUnique({ where: { walletAddress: wallet } });
+    const normalized = this.normalizeWallet(wallet);
+    return this.prisma.user.findFirst({
+      where: { walletAddress: { equals: normalized, mode: "insensitive" } },
+    });
   }
 
   async getLedgerForWallet(wallet: string, limit = 20) {

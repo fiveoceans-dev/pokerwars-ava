@@ -94,15 +94,63 @@ export class TournamentOrchestrator {
 
   /**
    * For scheduled MTTs, call periodically to trigger start when time arrives.
+   * Also cleans up bot-only SNGs.
    */
   checkScheduled() {
     const now = Date.now();
+    this.checkBotOnlyTournaments();
+    
     this.manager.listStates().forEach((t) => {
       if (t.type === "mtt" && t.startMode === "scheduled" && t.startAt && t.status !== "running") {
         const startTs = Date.parse(t.startAt);
         if (!Number.isNaN(startTs) && startTs <= now) {
           this.startMtt(t);
         }
+      }
+    });
+  }
+
+  private checkBotOnlyTournaments() {
+    this.manager.listStates().forEach((t) => {
+      // Only clean up running STTs that have started (registered > 0)
+      if (t.type === "stt" && t.status === "running" && t.registered.size > 0) {
+        const humans = Array.from(t.registered).filter((pid) => !pid.toLowerCase().startsWith("bot_"));
+        if (humans.length === 0) {
+          logger.info(`🤖 Closing bot-only SNG ${t.id} (no humans remaining)`);
+          
+          // 1. Close tables
+          t.tables.forEach((tableId) => {
+            this.bridge.closeTable(tableId);
+          });
+
+          // 2. Cancel tournament
+          void this.manager.cancelTournament(t.id).then((cancelled) => {
+            if (cancelled) {
+              this.broadcastAll({
+                tableId: "",
+                type: "TOURNAMENT_UPDATED",
+                tournament: this.manager.toPublic(cancelled),
+              });
+            }
+          });
+        }
+      }
+    });
+  }
+
+  /**
+   * Startup routine: Ensure every SNG template has at least one active instance.
+   */
+  spawnInitialInstances() {
+    const templates = this.manager.listStates().filter((t) => t.status === "template" && t.type === "stt");
+    templates.forEach((template) => {
+      const activeInstances = this.manager.listStates().filter(
+        (t) => t.name === template.name && (t.status === "registering" || t.status === "running")
+      );
+      
+      if (activeInstances.length === 0) {
+        logger.info(`🌱 Spawning initial instance for template: ${template.name}`);
+        this.spawnReplacementSng(template);
       }
     });
   }
@@ -145,9 +193,22 @@ export class TournamentOrchestrator {
   }
 
   private startMtt(t: TournamentState) {
-    if (t.registered.size === 0) {
-      logger.info(`🛑 Cancelling MTT ${t.id} (no registrations at start time)`);
+    const minPlayers = Math.ceil(t.maxPlayers * 0.05);
+    if (t.registered.size < minPlayers) {
+      logger.info(`🛑 Cancelling MTT ${t.id} (not enough registrations: ${t.registered.size}/${minPlayers})`);
       void (async () => {
+        // Refund all players before cancelling
+        const pids = Array.from(t.registered);
+        for (const pid of pids) {
+          try {
+            const asset = t.buyIn.currency === "tickets" ? "TICKET_X" : "COINS";
+            // @ts-ignore - LedgerPort might need Asset cast
+            await this.bridge.getLedger()?.refund(pid, t.id, asset, t.buyIn.amount);
+          } catch (err) {
+            logger.error(`❌ Failed to refund ${pid} for MTT ${t.id}`, err);
+          }
+        }
+
         const cancelled = await this.manager.cancelTournament(t.id);
         if (cancelled) {
           this.broadcastAll({
@@ -214,6 +275,10 @@ export class TournamentOrchestrator {
       const engineTableId = `${tournamentId}-${randomUUID()}`;
       // Create engine table with provided blinds
       this.bridge.getEngine(engineTableId, sb, bb);
+      const state = this.manager.getState(tournamentId);
+      if (state?.maxPlayers) {
+        this.bridge.setTableMaxPlayers(engineTableId, state.maxPlayers);
+      }
       logger.info(`✅ Created tournament table ${engineTableId} for ${tournamentId} (${sb}/${bb})`);
       return engineTableId;
     } catch (err) {
@@ -417,6 +482,12 @@ export class TournamentOrchestrator {
   }
 
   private finishTournament(t: TournamentState) {
+    // Explicitly close all remaining tables to ensure DB consistency
+    t.tables.forEach((tableId) => {
+      this.bridge.closeTable(tableId);
+      this.manager.removeTable(t.id, tableId);
+    });
+
     const winners = Array.from(t.registered);
     // recorded busts are losers first; reverse to get finish order
     const losers = (t.payouts || []).map((p) => p.playerId).filter(Boolean).reverse();

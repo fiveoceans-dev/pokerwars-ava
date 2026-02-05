@@ -14,7 +14,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
     "seed:games": "ts-node ./scripts/seed-game-templates.ts",
     "seed:initial": "ts-node ./scripts/seed-initial-data.ts",
-    "seed:all": "npm run seed:initial && npm run seed:games",
+    "seed:tournaments": "ts-node ./scripts/seed-tournaments.ts",
+    "seed:all": "npm run seed:initial && npm run seed:tournaments && npm run seed:games",
     "test": "vitest",
     "deploy": "npm run build"
   },

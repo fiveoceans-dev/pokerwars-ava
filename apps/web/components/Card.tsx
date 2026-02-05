@@ -2,7 +2,7 @@
 import Image from "next/image";
 import clsx from "clsx";
 import type { Card as TCard } from "../game-engine"; // type-only ✔
-import cardBackDefault from "../assets/svg-cards/card-pokernfts.svg";
+import cardBackDefault from "../assets/svg-cards/card-back.svg";
 // import cardPokerBoots from '../assets/svg-cards/card-pokerboots.svg';
 
 /* ─────────── import all face SVGs at build-time ───────────

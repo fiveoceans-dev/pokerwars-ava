@@ -9,6 +9,8 @@ import { useWalletGameSync } from "~~/hooks/useWalletGameSync";
 import { useBalances } from "~~/hooks/useBalances";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { formatWalletLabel } from "~~/components/providers/WalletProvider";
+import { useActiveStatus } from "~~/hooks/useActiveStatus";
+import { formatNumber } from "~~/utils/format";
 
 type HeaderMenuLink = {
   label: string;
@@ -54,7 +56,7 @@ const AnimatedNavLabel = () => {
     let stage = 0;
     let shuffleTimer: number | undefined;
     let holdTimer: number | undefined;
-    const targets = ["FREE", "COINS", "DAILY"];
+    const targets = ["FREE COINS", "FREE COINS"];
     const lastPlayedRaw = getCookieValue(NAV_ANIM_COOKIE);
     const lastPlayed = lastPlayedRaw ? Number.parseInt(lastPlayedRaw, 10) : 0;
     if (lastPlayed && !Number.isNaN(lastPlayed)) {
@@ -117,6 +119,8 @@ export const menuLinks: HeaderMenuLink[] = [
 
 export const HeaderMenuLinks = () => {
   const pathname = usePathname();
+  const activeStatus = useActiveStatus();
+
   return (
     <>
       {menuLinks.map(({ label, href }) => {
@@ -124,13 +128,25 @@ export const HeaderMenuLinks = () => {
           href === "/"
             ? pathname === "/"
             : pathname === href || pathname.startsWith(`${href}/`);
+        const showDot =
+          (label === "Cash" && activeStatus.cashActive) ||
+          (label === "SNG" && activeStatus.sngActive) ||
+          (label === "MTT" && activeStatus.mttActive);
         return (
           <li key={href}>
             <LinkComponent
               href={href}
               className={`tbtn tbtn-tight nav-btn ${isActive ? "nav-active" : ""}`}
             >
-              {label === "Free" ? <AnimatedNavLabel /> : label}
+              <span className="inline-flex items-center gap-2">
+                {label === "Free" ? <AnimatedNavLabel /> : label}
+                {showDot ? (
+                  <span
+                    className="h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
+                    aria-label="active table"
+                  />
+                ) : null}
+              </span>
             </LinkComponent>
           </li>
         );
@@ -155,10 +171,10 @@ export const Header = () => {
   const { status, address } = useWallet();
   const isWalletConnected = status === "connected";
   const showBalances = hydrated && Boolean(walletForBalance);
-  const coinsDisplay = showBalances ? balances.coins : "—";
-  const ticketXDisplay = showBalances ? balances.tickets.ticket_x : "—";
-  const ticketYDisplay = showBalances ? balances.tickets.ticket_y : "—";
-  const ticketZDisplay = showBalances ? balances.tickets.ticket_z : "—";
+  const coinsDisplay = showBalances ? formatNumber(balances.coins) : "—";
+  const ticketXDisplay = showBalances ? formatNumber(balances.tickets.ticket_x) : "—";
+  const ticketYDisplay = showBalances ? formatNumber(balances.tickets.ticket_y) : "—";
+  const ticketZDisplay = showBalances ? formatNumber(balances.tickets.ticket_z) : "—";
   const navControlClass = "tbtn tbtn-tight nav-btn";
   const groupGap = "gap-[5px]";
   const addressLabel = useMemo(

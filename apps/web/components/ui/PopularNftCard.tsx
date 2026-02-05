@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { formatNumber } from "~~/utils/format";
 
 export interface PopularNftCardProps {
   id: number;
@@ -71,7 +72,7 @@ export function PopularNftCard({
       <div className="px-2 flex justify-between text-xs text-gray-600 font-medium">
         <div className="flex flex-col">
           <span className="text-green-600 flex items-center gap-1">
-            {`${registered.toLocaleString()} / ${maxRegistered.toLocaleString()}`}
+            {`${formatNumber(registered)} / ${formatNumber(maxRegistered)}`}
           </span>
           <span className="text-gray-400">Sold</span>
         </div>

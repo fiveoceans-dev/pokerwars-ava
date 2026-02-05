@@ -26,17 +26,17 @@
     "description": "6-max SNG starts when full."
   },
   {
-    "id": "mtt-prime-1",
-    "name": "Prime MTT",
+    "id": "mtt-pokerwars-1",
+    "name": "PokerWars MTT",
     "type": "mtt",
     "startMode": "scheduled",
     "startAt": "2099-01-01T20:00:00.000Z",
-    "buyIn": { "currency": "chips", "amount": 5000 },
+    "buyIn": { "currency": "chips", "amount": 100 },
     "lateRegMinutes": 120,
-    "maxPlayers": 540,
+    "maxPlayers": 10000,
     "startingStack": 15000,
     "blindScheduleId": "default-mtt",
-    "payout": { "mode": "top_x_split", "topX": 54 },
+    "payout": { "mode": "top_x_split", "topX": 1500 },
     "tableConfigId": "mid",
     "description": "Scheduled start with 2 hour late reg window."
   }

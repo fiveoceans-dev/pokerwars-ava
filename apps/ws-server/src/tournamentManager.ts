@@ -11,7 +11,7 @@ import type {
 
 export type TournamentType = "stt" | "mtt";
 export type TournamentStartMode = "full" | "scheduled";
-export type TournamentStatus = "registering" | "scheduled" | "running" | "finished" | "cancelled";
+export type TournamentStatus = "registering" | "scheduled" | "running" | "finished" | "cancelled" | "template";
 
 export type TournamentPayoutMode = "top_x_split" | "tickets";
 
@@ -92,17 +92,17 @@ const defaultTournaments: TournamentDefinition[] = [
     tableConfigId: "mid",
   },
   {
-    id: "mtt-prime-1",
-    name: "Prime MTT",
+    id: "mtt-daily-1",
+    name: "PokerWars MTT",
     type: "mtt",
     startMode: "scheduled",
     startAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    buyIn: { currency: "chips", amount: 5000 },
+    buyIn: { currency: "chips", amount: 100 },
     lateRegMinutes: 120,
-    maxPlayers: 540,
+    maxPlayers: 10000,
     startingStack: 15000,
     blindScheduleId: "default-mtt",
-    payout: { mode: "top_x_split", topX: 54 },
+    payout: { mode: "top_x_split", topX: 1500 },
     tableConfigId: "mid",
   },
 ];
@@ -163,7 +163,7 @@ function applyDailyMttSchedule(defs: TournamentDefinition[]): TournamentDefiniti
   const scheduled = startTimes.map((startAt) => ({
     ...mttTemplate,
     id: formatMttId(startAt),
-    name: `${mttTemplate.name} ${formatUtcLabel(startAt)}`,
+    name: mttTemplate.name,
     startMode: "scheduled" as const,
     startAt: startAt.toISOString(),
   }));
@@ -268,12 +268,13 @@ export class TournamentManager {
       BREAKING: "running",
       FINISHED: "finished",
       CANCELLED: "cancelled",
+      TEMPLATE: "template",
     };
     const buyInCurrency = t.buyInCurrency === "TICKETS" ? "tickets" : "chips";
     const payoutMode = t.payoutMode === "TICKETS" ? "tickets" : "top_x_split";
     const type = t.type === "MTT" ? "mtt" : "stt";
     const startMode = t.startMode === "SCHEDULED" ? "scheduled" : "full";
-    const registered = new Set<string>(regs.map((r) => r.playerId));
+    const registered = new Set<string>(regs.map((r) => r.playerId.toLowerCase().trim()));
     const lateRegEndAt =
       t.startAt && t.lateRegMinutes ? new Date(new Date(t.startAt).getTime() + t.lateRegMinutes * 60000).toISOString() : undefined;
 
@@ -318,8 +319,7 @@ export class TournamentManager {
         orderBy: { createdAt: "asc" },
       });
       if (!tournaments.length) {
-        logger.warn("⚠️ No tournaments found in DB; using in-memory defaults");
-        void this.seedDefaultsToDb();
+        logger.warn("⚠️ No tournaments found in DB; falling back to defaults");
         return;
       }
       this.tournaments.clear();
@@ -447,7 +447,7 @@ export class TournamentManager {
       const def: TournamentDefinition = {
         ...template,
         id: formatMttId(startAt),
-        name: `${template.name} ${formatUtcLabel(startAt)}`,
+        name: template.name,
         startMode: "scheduled",
         startAt: iso,
       };
@@ -459,21 +459,22 @@ export class TournamentManager {
   registerPlayer(tournamentId: string, playerId: string): { ok: boolean; message?: string; tournament?: PublicTournamentState } {
     const t = this.tournaments.get(tournamentId);
     if (!t) return { ok: false, message: "Tournament not found" };
+    const normalizedPlayerId = playerId.toLowerCase().trim();
     if (t.status === "finished" || t.status === "cancelled") {
       return { ok: false, message: "Tournament is closed" };
     }
-    if (t.registered.has(playerId)) {
+    if (t.registered.has(normalizedPlayerId)) {
       return { ok: true, tournament: this.toPublic(t) };
     }
     if (t.registered.size >= t.maxPlayers) {
       return { ok: false, message: "Tournament is full" };
     }
-    t.registered.add(playerId);
+    t.registered.add(normalizedPlayerId);
     this.maybeStart(t);
     this.touch(t);
 
     if (this.prisma) {
-      void this.persistRegistration(t, playerId, "REGISTERED");
+      void this.persistRegistration(t, normalizedPlayerId, "REGISTERED");
     }
     return { ok: true, tournament: this.toPublic(t) };
   }
@@ -481,13 +482,14 @@ export class TournamentManager {
   unregisterPlayer(tournamentId: string, playerId: string): { ok: boolean; message?: string; tournament?: PublicTournamentState } {
     const t = this.tournaments.get(tournamentId);
     if (!t) return { ok: false, message: "Tournament not found" };
+    const normalizedPlayerId = playerId.toLowerCase().trim();
     if (t.status === "running" || t.status === "finished") {
       return { ok: false, message: "Tournament already started" };
     }
-    t.registered.delete(playerId);
+    t.registered.delete(normalizedPlayerId);
     this.touch(t);
     if (this.prisma) {
-      void this.persistRegistration(t, playerId, "BUSTED", true);
+      void this.persistRegistration(t, normalizedPlayerId, "BUSTED", true);
     }
     return { ok: true, tournament: this.toPublic(t) };
   }
@@ -607,8 +609,9 @@ export class TournamentManager {
   ) {
     if (!this.prisma) return;
     try {
+      const normalizedPlayerId = playerId.toLowerCase().trim();
       await this.prisma.tournamentRegistration.updateMany({
-        where: { tournamentId, playerId },
+        where: { tournamentId, playerId: { equals: normalizedPlayerId, mode: "insensitive" } },
         data: { status: "BUSTED", position },
       });
     } catch (err) {
@@ -625,15 +628,25 @@ export class TournamentManager {
     if (!this.prisma) return;
     try {
       const statusValue = remove ? "BUSTED" : status;
-      await this.prisma.tournamentRegistration.upsert({
-        where: { tournamentId_playerId: { tournamentId: t.id, playerId } },
-        update: { status: statusValue },
-        create: {
-          tournamentId: t.id,
-          playerId,
-          status: statusValue,
-        },
+      const normalizedPlayerId = playerId.toLowerCase().trim();
+      const existing = await this.prisma.tournamentRegistration.findFirst({
+        where: { tournamentId: t.id, playerId: { equals: normalizedPlayerId, mode: "insensitive" } },
+        select: { id: true },
       });
+      if (existing) {
+        await this.prisma.tournamentRegistration.update({
+          where: { id: existing.id },
+          data: { status: statusValue, playerId: normalizedPlayerId },
+        });
+      } else {
+        await this.prisma.tournamentRegistration.create({
+          data: {
+            tournamentId: t.id,
+            playerId: normalizedPlayerId,
+            status: statusValue,
+          },
+        });
+      }
       await this.prisma.tournament.update({
         where: { id: t.id },
         data: {

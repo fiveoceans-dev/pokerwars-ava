@@ -12,6 +12,19 @@ export function useWalletGameSync() {
   const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const path = window.location?.pathname || "";
+      const isTestTable =
+        (window as any).__POKERWARS_DISABLE_WS__ === true ||
+        (window as any).__POKERWARS_DISABLE_WALLET_SYNC__ === true ||
+        path.startsWith("/table6-test") ||
+        path.startsWith("/table9-test");
+      if (isTestTable) {
+        setIsInitialized(true);
+        return;
+      }
+    }
+
     if (status === "connected" && address) {
       connectWallet(address);
       setIsInitialized(true);

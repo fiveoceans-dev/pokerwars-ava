@@ -45,11 +45,11 @@ const sngTemplates = [
 const mttTemplates = [
   {
     id: "mtt-prime",
-    name: "Prime MTT",
-    maxPlayers: 540,
-    buyIn: 5000,
+    name: "PokerWars MTT",
+    maxPlayers: 10000,
+    buyIn: 100,
     blindScheduleId: "default-mtt",
-    payoutTopX: 54,
+    payoutTopX: 1500,
     lateRegMinutes: 120,
     startingStack: 15000,
   },

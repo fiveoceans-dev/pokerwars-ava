@@ -2,24 +2,25 @@ import { useEffect, useMemo, useState } from "react";
 import { useGameStore } from "./useGameStore";
 import useIsMobile from "./useIsMobile";
 import { useWalletGameSync } from "./useWalletGameSync";
+import { getLocalIdentity, resolveEffectiveId } from "~~/utils/identity";
 import {
-  DESKTOP_SEAT_POSITIONS,
-  MOBILE_SEAT_POSITIONS,
-  DESKTOP_SEAT_POSITIONS_2,
-  DESKTOP_SEAT_POSITIONS_6,
-  MOBILE_SEAT_POSITIONS_2,
-  MOBILE_SEAT_POSITIONS_6,
-  type SeatPos,
-} from "../utils/seatPositions";
+  DESKTOP_LAYOUT_9,
+  MOBILE_LAYOUT_9,
+  DESKTOP_LAYOUT_6,
+  MOBILE_LAYOUT_6,
+  DESKTOP_LAYOUT_2,
+  MOBILE_LAYOUT_2,
+  type Position,
+} from "../utils/tableElementPositions";
 
-const buildLayout = (isMobile: boolean, maxPlayers: number): SeatPos[] => {
+const buildLayout = (isMobile: boolean, maxPlayers: number): Position[] => {
   if (maxPlayers === 2) {
-    return isMobile ? MOBILE_SEAT_POSITIONS_2 : DESKTOP_SEAT_POSITIONS_2;
+    return isMobile ? MOBILE_LAYOUT_2.seats : DESKTOP_LAYOUT_2.seats;
   }
   if (maxPlayers === 6) {
-    return isMobile ? MOBILE_SEAT_POSITIONS_6 : DESKTOP_SEAT_POSITIONS_6;
+    return isMobile ? MOBILE_LAYOUT_6.seats : DESKTOP_LAYOUT_6.seats;
   }
-  return isMobile ? MOBILE_SEAT_POSITIONS : DESKTOP_SEAT_POSITIONS;
+  return isMobile ? MOBILE_LAYOUT_9.seats : DESKTOP_LAYOUT_9.seats;
 };
 
 export function useTableViewModel(_timer?: number | null) {
@@ -66,19 +67,19 @@ export function useTableViewModel(_timer?: number | null) {
   }, [minRaise, currentTurn, chips]);
 
   useEffect(() => {
+    const baseW = isMobile ? 480 : 820;
+    const baseH = isMobile ? 760 : 520;
+    const minTableWidth = isMobile ? 360 : baseW;
+    // Reserve extra space for action controls so table and buttons remain visible
+    const bottomSpace = isMobile ? 200 : 200;
+    const minScale = minTableWidth / baseW;
     const handle = () => {
-      const baseW = isMobile ? 420 : 820;
-      const baseH = isMobile ? 680 : 520;
-      const minTableWidth = isMobile ? 360 : baseW;
-      // Reserve extra space for action controls so table and buttons remain visible
-      const bottomSpace = isMobile ? 220 : 200;
-      const minScale = minTableWidth / baseW;
       const scale = Math.min(
         Math.max(window.innerWidth / baseW, minScale),
         (window.innerHeight - bottomSpace) / baseH,
         1,
       );
-      setTableScale(isMobile ? scale * 0.85 : scale);
+      setTableScale(isMobile ? scale * 0.95 : scale);
     };
     handle();
     window.addEventListener("resize", handle);
@@ -99,8 +100,12 @@ export function useTableViewModel(_timer?: number | null) {
   }, [layout]);
 
   const { address } = useWalletGameSync();
+  const localIdentity = getLocalIdentity();
+  const effectiveWalletId =
+    resolveEffectiveId(currentWalletId || address, null) ||
+    resolveEffectiveId(localIdentity.walletAddress, localIdentity.sessionId);
   const walletSeatIdx = useMemo(() => {
-    if (!currentWalletId || !tableId) return -1;
+    if (!effectiveWalletId || !tableId) return -1;
 
     // Check if we have a seat at the current table
     const seatIndex = tableSeats.get(tableId);
@@ -109,7 +114,7 @@ export function useTableViewModel(_timer?: number | null) {
       const playerId = safePlayerIds[seatIndex];
       if (
         playerId &&
-        playerId.toLowerCase() === currentWalletId.toLowerCase()
+        playerId.toLowerCase() === effectiveWalletId.toLowerCase()
       ) {
         return seatIndex;
       }
@@ -119,14 +124,14 @@ export function useTableViewModel(_timer?: number | null) {
     return safePlayerIds.findIndex(
       (id) =>
         id &&
-        currentWalletId &&
-        id.toLowerCase() === currentWalletId.toLowerCase(),
+        effectiveWalletId &&
+        id.toLowerCase() === effectiveWalletId.toLowerCase(),
     );
-  }, [playerIds, currentWalletId, tableSeats, tableId]);
+  }, [playerIds, effectiveWalletId, tableSeats, tableId]);
 
   const communityCardSize = useMemo((): "xs" | "sm" | "md" | "lg" => {
-    return tableScale < 0.75 ? "xs" : tableScale < 1 ? "sm" : "md";
-  }, [tableScale]);
+    return "sm";
+  }, []);
 
   const baseW = isMobile ? 420 : 820;
   const baseH = isMobile ? 680 : 520;

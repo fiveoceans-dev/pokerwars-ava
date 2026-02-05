@@ -9,8 +9,8 @@ Goal: automatically sit house bots so real players can start/continue games when
 - **Table selection:** Prefer the most active table per stake before opening new ones; do not seat bots at private/invite-only tables.
 
 ## Behavior & fairness
-- **Strategy:** Simple and predictable by type (random/tight/loose/aggressive) with a clear upgrade path for ranges later.
-- **Timing:** Add 200–600 ms randomized response delay to mimic humans but stay within action timeouts.
+- **Strategy:** Five distinct styles with preflop ranges and postflop heuristics: `random`, `tight`, `loose`, `aggressive`, `balanced`.
+- **Timing:** Randomized response delay (roughly 250–1200 ms, style‑weighted) to mimic humans but stay within action timeouts.
 - **Bankroll:** Give bots deterministic stacks (e.g., table default buy-in); auto-rebuy to the minimum so they never bust and leave holes.
 - **Seating:** Multiple bots can sit together; keep behavior predictable and non-collusive by not sharing hole-card logic.
 - **Identity:** Bot display names must start with `bot_00000`, incrementing or randomizing the trailing digits for uniqueness.
@@ -31,7 +31,14 @@ Goal: automatically sit house bots so real players can start/continue games when
 - Broadcast a tournament update so clients see status change and bot-filled seats.
 - Bots seated via this trigger should use the `bot_00000xxxxx` naming and carry their ticket bounty as described above.
 - Bots only choose **valid available actions** (never random illegal actions). If `check` is not valid, they choose between `call`, `fold`, or a size from the allowed raise list.
-- Bot styles available now: `random` (default), `tight`, `loose`, `aggressive`. Table-level style selection is supported; stake-based mapping can be added easily.
+- Bot styles available now: `random` (default), `tight`, `loose`, `aggressive`, `balanced`. Table-level style selection is supported; stake-based mapping can be added easily.
+
+## Style notes (preflop ranges)
+- **tight:** premium pairs (JJ+), AK/AQ, suited broadways.
+- **aggressive:** premiums + strong broadways; raises more frequently.
+- **balanced:** medium pairs (66+), suited broadways, suited aces, selective connectors.
+- **loose:** all pairs, suited aces, suited connectors/gappers, more calls.
+- **random:** wide range with randomness, but still constrained by valid actions and stack pressure.
 
 ## Server hooks to add (if missing)
 - Flag bot seats: extend seat state with `isBot: true` and surface in snapshots/events.

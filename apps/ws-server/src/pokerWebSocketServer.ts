@@ -45,6 +45,7 @@ import { LedgerPort } from "./ledgerPort";
  */
 class WebSocketFSMBridge extends EventEmitter {
   private engines = new Map<string, EventEngine>();
+  private tableMaxPlayers = new Map<string, number>();
   private sessions: SessionManager;
   // Simple rate limiter state: sessionId -> { windowStartMs, count }
   private rl = new Map<string, { t: number; c: number }>();
@@ -65,6 +66,23 @@ class WebSocketFSMBridge extends EventEmitter {
 
   setBotStyle(tableId: string, cfg: BotConfig) {
     this.botManager?.setTableStyle(tableId, cfg);
+  }
+
+  setTableMaxPlayers(tableId: string, maxPlayers: number) {
+    if (!Number.isFinite(maxPlayers) || maxPlayers <= 0) return;
+    this.tableMaxPlayers.set(tableId, Math.floor(maxPlayers));
+  }
+
+  getMaxPlayers(tableId: string, table?: Table): number {
+    return this.resolveMaxPlayers(tableId, table);
+  }
+
+  private resolveMaxPlayers(tableId: string, table?: Table): number {
+    const override = this.tableMaxPlayers.get(tableId);
+    if (override) return override;
+    const config = getTableConfig(tableId);
+    if (config?.maxPlayers) return config.maxPlayers;
+    return table?.seats?.length ?? 9;
   }
 
 
@@ -342,7 +360,7 @@ class WebSocketFSMBridge extends EventEmitter {
   ): void {
     // State changes - send Table format directly to clients
     engine.on("stateChanged", (table: Table) => {
-      const maxPlayers = getTableConfig(tableId)?.maxPlayers ?? table.seats.length;
+      const maxPlayers = this.resolveMaxPlayers(tableId, table);
       this.emit("broadcast", tableId, {
         type: "TABLE_SNAPSHOT",
         table, // Send Table directly - clients adapt
@@ -677,8 +695,7 @@ class WebSocketFSMBridge extends EventEmitter {
       try {
         if (session.roomId) {
           const table = this.getTableState(session.roomId);
-          const maxPlayers =
-            getTableConfig(session.roomId)?.maxPlayers ?? table.seats.length;
+          const maxPlayers = this.resolveMaxPlayers(session.roomId, table);
           this.emit("broadcast", session.roomId, {
             tableId: session.roomId,
             type: "TABLE_SNAPSHOT",
@@ -705,7 +722,7 @@ class WebSocketFSMBridge extends EventEmitter {
         throw new Error("Invalid SIT command: missing tableId or seat");
       }
 
-      const maxPlayers = getTableConfig(command.tableId)?.maxPlayers ?? 9;
+      const maxPlayers = this.resolveMaxPlayers(command.tableId);
       if (command.seat < 0 || command.seat >= maxPlayers) {
         throw new Error(
           `Invalid seat number: must be 0-${maxPlayers - 1}`,
@@ -1156,6 +1173,26 @@ class WebSocketFSMBridge extends EventEmitter {
   }
 
   /**
+   * Close a table and cleanup resources
+   */
+  closeTable(tableId: string): void {
+    const engine = this.engines.get(tableId);
+    if (engine) {
+      // Force shutdown of any attached timers
+      try {
+        // @ts-ignore - accessing internal timer manager if exposed or just letting GC handle it
+        // The TimerIntegration handles its own cleanup if we stop referencing it, 
+        // but explicit cleanup is better. 
+        // Current Engine doesn't expose explicit destroy().
+      } catch (e) {}
+      this.engines.delete(tableId);
+      this.tableMaxPlayers.delete(tableId);
+      this.botManager?.setTableStyle(tableId, { style: "random" }); // Reset bot style
+      logger.info(`🗑️ Closed table ${tableId}`);
+    }
+  }
+
+  /**
    * Get current table state from FSM
    */
   getTableState(tableId: string): Table {
@@ -1179,8 +1216,7 @@ class WebSocketFSMBridge extends EventEmitter {
         const engine = this.engines.get(id);
         if (!engine) return false;
         const table = engine.getState();
-        const maxPlayers =
-          getTableConfig(id)?.maxPlayers ?? table.seats.length ?? cfg.maxPlayers;
+        const maxPlayers = this.resolveMaxPlayers(id, table);
         const occupied = table.seats.filter((s) => s.pid).length;
         return occupied < maxPlayers;
       });
@@ -1204,7 +1240,7 @@ class WebSocketFSMBridge extends EventEmitter {
         name: config?.name ?? `Table ${id}`,
         gameType: "No Limit Hold'em",
         playerCount: table.seats.filter((s) => s.pid).length,
-        maxPlayers: config?.maxPlayers ?? table.seats.length,
+        maxPlayers: this.resolveMaxPlayers(id, table),
         smallBlind: table.smallBlind,
         bigBlind: table.bigBlind,
         stakeLevel: config?.stakeLevel,

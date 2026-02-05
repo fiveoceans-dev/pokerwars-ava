@@ -8,6 +8,8 @@ import { ThemeProvider } from "~~/components/ThemeProvider";
 import { WalletConnectButton } from "~~/components/WalletConnectButton";
 import { WalletDisconnectConfirmHost } from "~~/components/WalletDisconnectConfirm";
 import { WalletProvider } from "~~/components/providers/WalletProvider";
+import { DebugPanel } from "~~/components/DebugPanel";
+import TournamentWinModal from "~~/components/TournamentWinModal";
 import { useGameStore } from "~~/hooks/useGameStore";
 import { notifyError } from "~~/utils/notifications";
 import { wagmiConfig } from "~~/config/wagmi";
@@ -140,6 +142,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
             {enableConsoleForwarder ? <ConsoleErrorForwarder /> : null}
             <WalletConnectButton showButton={false} />
             <WalletDisconnectConfirmHost />
+            <TournamentWinModal />
+            <DebugPanel />
             <Toaster position="bottom-right" />
           </ThemeProvider>
         </WalletProvider>

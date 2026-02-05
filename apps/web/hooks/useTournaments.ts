@@ -3,7 +3,7 @@ import { readPublicEnv } from "~~/utils/public-env";
 
 export type TournamentType = "stt" | "mtt";
 export type TournamentStartMode = "full" | "scheduled";
-export type TournamentStatus = "registering" | "scheduled" | "running" | "finished" | "cancelled";
+export type TournamentStatus = "registering" | "scheduled" | "running" | "finished" | "cancelled" | "template";
 
 export type Tournament = {
   id: string;
@@ -62,7 +62,12 @@ export function useTournaments() {
         }
         const json = await res.json();
         const list: Tournament[] = Array.isArray(json.tournaments)
-          ? json.tournaments
+          ? json.tournaments.filter(
+              (t: Tournament) => 
+                t.status !== "template" && 
+                t.status !== "finished" && 
+                t.status !== "cancelled"
+            )
           : [];
         setTournaments(list);
       } catch (err) {

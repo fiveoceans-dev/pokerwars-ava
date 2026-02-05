@@ -5,6 +5,7 @@ import Image from "next/image";
 import Avatar from "./Avatar";
 import Button from "./Button";
 import { calculatePrizeDistribution } from "../../utils/prizeDistribution";
+import { formatNumber } from "~~/utils/format";
 
 export type TournamentItem = {
   title: string;
@@ -54,16 +55,16 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
             <span className="font-semibold">{item.creatorName}</span>
           </div>
           <p>{item.date}</p>
-          <p>Price: {item.price} HYPE</p>
-          <p>Registered: {item.registered}</p>
-          <p>Total Prize: {totalPrize.toFixed(2)} HYPE</p>
+          <p>Price: {formatNumber(item.price)} HYPE</p>
+          <p>Registered: {formatNumber(item.registered)}</p>
+          <p>Total Prize: {formatNumber(totalPrize, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} HYPE</p>
         </div>
         <div className="text-background">
           <h4 className="font-semibold mb-1">Prize Distribution</h4>
           <ul className="text-sm max-h-32 overflow-y-auto space-y-1">
             {distribution.map((p, i) => (
               <li key={i}>
-                Place {i + 1}: {p.toFixed(2)} HYPE
+                Place {i + 1}: {formatNumber(p, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} HYPE
               </li>
             ))}
           </ul>

@@ -29,6 +29,7 @@ enum TournamentStatus {
   BREAKING
   FINISHED
   CANCELLED
+  TEMPLATE
 }
 
 enum BuyInCurrency {

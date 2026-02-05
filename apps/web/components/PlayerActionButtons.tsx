@@ -12,6 +12,7 @@ interface Props {
   playerChips: number;
   minRaise?: number;
   isMobile?: boolean;
+  className?: string;
 }
 
 export default function PlayerActionButtons({
@@ -21,6 +22,7 @@ export default function PlayerActionButtons({
   playerChips,
   minRaise,
   isMobile: propIsMobile,
+  className,
 }: Props) {
   const { playerAction, connectionState, bigBlind, leaveSeat } = useGameStore();
   const effectiveMinRaise = minRaise ?? bigBlind;
@@ -127,11 +129,15 @@ export default function PlayerActionButtons({
   const canShowCards =
     street === 4 && hasCards && !safeCardsRevealed[walletSeat];
 
+  const hasAnythingToShow = showActions || canRevealCards || canMuckCards;
+
+  if (!hasAnythingToShow) return null;
+
   return (
     <div
-      className={`w-full h-full flex flex-col justify-between ${
-        isMobile ? "text-[10px] min-h-[160px]" : "text-xs min-h-[140px]"
-      }`}
+      className={`${isMobile ? "w-full" : "w-auto"} max-w-[420px] h-full flex flex-col justify-between ${
+        isMobile ? "text-[10px] min-h-[120px]" : "text-xs min-h-[120px]"
+      } ${className ?? ""}`}
     >
       {/* Row 1 - Action Buttons (Fixed positions) */}
       <div
@@ -146,14 +152,14 @@ export default function PlayerActionButtons({
             <button
               onClick={() => handleAction("FOLD")}
               disabled={isActionPending}
-              className={`min-w-[70px] px-3 py-1.5 rounded font-semibold text-white ${
+              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-white flex items-center justify-center ${
                 isActionPending ? "bg-rose-400 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-400"
               }`}
             >
               Fold
             </button>
           ) : (
-            <div className="min-w-[70px] px-3 py-1.5 opacity-0 pointer-events-none">
+            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
               Fold
             </div>
           )}
@@ -165,7 +171,7 @@ export default function PlayerActionButtons({
             <button
               onClick={() => handleAction("CHECK")}
               disabled={isActionPending}
-              className={`min-w-[70px] px-3 py-1.5 rounded font-semibold text-black ${
+              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
                 isActionPending
                   ? "bg-sky-300 cursor-not-allowed"
                   : "bg-sky-400 hover:bg-sky-300"
@@ -174,7 +180,7 @@ export default function PlayerActionButtons({
               Check
             </button>
           ) : (
-            <div className="min-w-[70px] px-3 py-1.5 opacity-0 pointer-events-none">
+            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
               Check
             </div>
           )}
@@ -186,7 +192,7 @@ export default function PlayerActionButtons({
             <button
               onClick={() => handleAction("CALL")}
               disabled={isActionPending}
-              className={`min-w-[70px] px-3 py-1.5 rounded font-semibold text-black ${
+              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
                 isActionPending
                   ? "bg-teal-300 cursor-not-allowed"
                   : "bg-teal-400 hover:bg-teal-300"
@@ -195,7 +201,7 @@ export default function PlayerActionButtons({
               Call {playerChips < toCall ? `${playerChips} (All-in)` : toCall}
             </button>
           ) : (
-            <div className="min-w-[70px] px-3 py-1.5 opacity-0 pointer-events-none">
+            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
               Call
             </div>
           )}
@@ -207,7 +213,7 @@ export default function PlayerActionButtons({
             <button
               onClick={() => handleAction("BET", raiseAmount)}
               disabled={isActionPending}
-              className={`min-w-[70px] px-3 py-1.5 rounded font-semibold text-black ${
+              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
                 isActionPending
                   ? "bg-emerald-300 cursor-not-allowed"
                   : "bg-emerald-400 hover:bg-emerald-300"
@@ -216,7 +222,7 @@ export default function PlayerActionButtons({
               Bet
             </button>
           ) : (
-            <div className="min-w-[70px] px-3 py-1.5 opacity-0 pointer-events-none">
+            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
               Bet
             </div>
           )}
@@ -228,7 +234,7 @@ export default function PlayerActionButtons({
             <button
               onClick={() => handleAction("RAISE", raiseAmount)}
               disabled={isActionPending}
-              className={`min-w-[70px] px-3 py-1.5 rounded font-semibold text-black ${
+              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
                 isActionPending
                   ? "bg-emerald-300 cursor-not-allowed"
                   : "bg-emerald-500 hover:bg-emerald-400"
@@ -237,7 +243,7 @@ export default function PlayerActionButtons({
               Raise
             </button>
           ) : (
-            <div className="min-w-[70px] px-3 py-1.5 opacity-0 pointer-events-none">
+            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
               Raise
             </div>
           )}
@@ -249,7 +255,7 @@ export default function PlayerActionButtons({
             <button
               onClick={() => handleAction("ALLIN")}
               disabled={isActionPending}
-              className={`min-w-[70px] px-3 py-1.5 rounded font-semibold text-white ${
+              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-white flex items-center justify-center ${
                 isActionPending
                   ? "bg-orange-400 cursor-not-allowed"
                   : "bg-orange-500 hover:bg-orange-400"
@@ -258,7 +264,7 @@ export default function PlayerActionButtons({
               All-in
             </button>
           ) : (
-            <div className="min-w-[70px] px-3 py-1.5 opacity-0 pointer-events-none">
+            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
               All-in
             </div>
           )}

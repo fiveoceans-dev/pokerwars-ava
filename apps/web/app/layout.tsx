@@ -68,6 +68,7 @@ const App = ({ children }: { children: React.ReactNode }) => {
     NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL: process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL ?? "",
     NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS: process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS ?? "",
     NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL: process.env.NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL ?? "",
+    NEXT_PUBLIC_ENABLE_DEBUG_PANEL: process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL ?? "",
   };
   const runtimePublicEnvScript = Object.entries(runtimePublicEnv)
     .map(([key, value]) => `window.__${key} = ${JSON.stringify(value)};`)
@@ -89,7 +90,7 @@ const App = ({ children }: { children: React.ReactNode }) => {
         <AppProviders>
           <div className="flex relative flex-col min-h-screen">
             <Header />
-            <main className="relative flex flex-col flex-1 pt-16">{children}</main>
+            <main className="relative flex flex-col flex-1">{children}</main>
             <Footer />
           </div>
         </AppProviders>

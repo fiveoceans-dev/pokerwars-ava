@@ -43,10 +43,10 @@ export default function SngPage() {
       const sessionId = typeof window !== "undefined" ? localStorage.getItem("sessionId")?.toLowerCase() : undefined;
       const pid = evt.playerId?.toLowerCase();
       if (pid && (pid === myId || (!myId && pid === sessionId))) {
-        if (!openedTables.current.has(evt.tableId)) {
-          openedTables.current.add(evt.tableId);
-          window.open(`/play?table=${evt.tableId}`, "_blank");
-        }
+          if (!openedTables.current.has(evt.tableId)) {
+            openedTables.current.add(evt.tableId);
+            window.open(`/play?table=${evt.tableId}`, "_blank");
+          }
       }
     }
   });

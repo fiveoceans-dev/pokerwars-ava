@@ -541,18 +541,32 @@ SERVICE=ws-server npm start
 - `npm run db:generate` - regenerate Prisma client (ws-server schema)
 - `npm run db:migrate` - run Prisma migrate dev (ws-server schema)
 
-## Economy (ledger-first)
+## 🧩 Core Architecture: Templates & Instances
+
+PokerWars uses a strict separation between **Game Templates** and **Active Instances** to ensure data integrity and clean state:
+- **Game Templates:** Static definitions stored in the DB (e.g., "Daily SNG 9-Max"). They define buy-ins, blinds, and payouts.
+- **Active Instances:** Dynamic game runs with unique UUIDs (e.g., `sng-a1b2...`). Every tournament table has a unique ID, ensuring registrations are isolated from template names.
+- **Lifecycle Management:** The WebSocket server automatically hydrates running games on startup and cleans up "stale" or "bot-only" instances to keep the database lean.
+
+## 🎨 UI & UX Improvements
+
+- **Unified Pro HUD:** Player seats are standardized at 140x50px with integrated action states. No more overlapping overlays—actions like "CALL" or "FOLD" replace the profile photo temporarily for a cleaner interface.
+- **Integrated Controls:** Responsive control panel centered at the bottom, with Dealer logs on the bottom-left and Player Chat on the bottom-right.
+- **Dynamic Feedback:** Real-time glow animations for active turns (blue) and winners (gold).
+- **Tournament Win Modals:** Automatic "Congratulations" modal for prize winners, displaying rank and earnings (coins/tickets).
+
+## 💰 Economy (ledger-first)
 
 - Ledger + accounts + treasury act as a “vanilla blockchain” (see `docs/vanilla-blockchain.md`).
 - Treasury total supply: 5,000,000,000 coins. Tickets: `ticket_x`, `ticket_y`, `ticket_z`.
 - Free claim: 1,000 coins every 10 hours (`POST /api/user/claim`).
 - Conversions: coins ↔ tickets with buy/sell rates (server enforced).
-- Buy-ins, refunds, payouts flow through tournament escrow accounts and are recorded in the ledger.
+- **Hardened Payouts:** Tournament payouts are strictly persisted to the DB and distributed via the LedgerPort once a tournament hits the `FINISHED` state.
 
-## Bots
+## 🤖 Bots
 
-- S&G only (no bots in MTT). “Start w/ bots” fills empty S&G seats and starts immediately (requires ≥1 human).
-- Bot names start with `bot_00000…`; each carries a ticket_x bounty on bust.
+- **Dynamic Spawning:** S&G only. “Start w/ bots” fills empty seats and starts immediately.
+- **Auto-Cleanup:** The server periodically checks for "bot-only" SNGs (running games with no humans) and automatically closes them to reclaim resources.
 - Bot styles: random, tight, loose, aggressive; bots choose only valid available actions.
 See `docs/bot-guide.md`.
 

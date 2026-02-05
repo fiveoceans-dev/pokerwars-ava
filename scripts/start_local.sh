@@ -21,6 +21,7 @@ fi
 # Export variables from the env file so docker-compose build args are populated.
 # Preserve explicit CLI overrides (e.g., AUTO_MIGRATE=true ./scripts/start_local.sh).
 OVERRIDE_AUTO_MIGRATE="${AUTO_MIGRATE:-}"
+OVERRIDE_AUTO_SEED="${AUTO_SEED:-}"
 OVERRIDE_SEED_GAMES="${SEED_GAMES:-}"
 set -a
 # shellcheck source=/dev/null
@@ -28,8 +29,18 @@ set -a
 set +a
 if [ -n "${OVERRIDE_AUTO_MIGRATE}" ]; then
     AUTO_MIGRATE="${OVERRIDE_AUTO_MIGRATE}"
-    export AUTO_MIGRATE
+else
+    AUTO_MIGRATE="${AUTO_MIGRATE:-true}"
 fi
+export AUTO_MIGRATE
+if [ -n "${OVERRIDE_AUTO_SEED}" ]; then
+    AUTO_SEED="${OVERRIDE_AUTO_SEED}"
+else
+    AUTO_SEED="${AUTO_SEED:-true}"
+fi
+export AUTO_SEED
+FORCE_SEED_TOURNAMENTS="${FORCE_SEED_TOURNAMENTS:-true}"
+export FORCE_SEED_TOURNAMENTS
 if [ -n "${OVERRIDE_SEED_GAMES}" ]; then
     SEED_GAMES="${OVERRIDE_SEED_GAMES}"
     export SEED_GAMES
@@ -151,6 +162,10 @@ if [ "${AUTO_MIGRATE}" = "true" ]; then
     echo "Running database migrations on the host..."
     export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
     ./scripts/db_bootstrap.sh
+    if [ "${AUTO_SEED}" = "true" ]; then
+        echo "Seeding database (idempotent)..."
+        npm run seed:all -w apps/ws-server
+    fi
 fi
 
 # Start the stack with the build in the foreground so Ctrl+C stops everything.
@@ -158,6 +173,10 @@ fi
 # Build args in docker-compose.yml will be substituted from the shell environment
 # which docker-compose AUTOMATICALLY loads from .env in the current directory.
 cleanup() {
+    if [ "${CLEANED_UP:-}" = "1" ]; then
+        return
+    fi
+    CLEANED_UP=1
     echo ""
     echo "Stopping containers..."
     docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" down --remove-orphans
@@ -167,5 +186,5 @@ cleanup() {
         docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
     fi
 }
-trap cleanup INT TERM
+trap cleanup EXIT INT TERM
 docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" up --build

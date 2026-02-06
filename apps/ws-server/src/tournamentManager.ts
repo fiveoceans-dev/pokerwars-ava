@@ -29,6 +29,7 @@ export interface TournamentBuyIn {
 export interface TournamentDefinition {
   id: string;
   name: string;
+  gameType?: string;
   type: TournamentType;
   startMode: TournamentStartMode;
   startAt?: string; // ISO string for scheduled MTTs
@@ -240,6 +241,7 @@ export class TournamentManager {
     return {
       id: t.id,
       name: t.name,
+      gameType: t.gameType,
       type: t.type,
       startMode: t.startMode,
       startAt: t.startAt,
@@ -281,6 +283,7 @@ export class TournamentManager {
     return {
       id: t.id,
       name: t.name,
+      gameType: t.gameType,
       type,
       startMode,
       startAt: t.startAt?.toISOString(),
@@ -373,6 +376,7 @@ export class TournamentManager {
         where: { id: def.id },
         update: {
           name: def.name,
+          gameType: def.gameType ?? "No Limit Hold'em",
           type,
           startMode,
           startAt: def.startAt ? new Date(def.startAt) : null,
@@ -391,6 +395,7 @@ export class TournamentManager {
         create: {
           id: def.id,
           name: def.name,
+          gameType: def.gameType ?? "No Limit Hold'em",
           type,
           startMode,
           startAt: def.startAt ? new Date(def.startAt) : null,

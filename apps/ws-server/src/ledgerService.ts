@@ -5,8 +5,8 @@ const TREASURY_ID = "TREASURY";
 const DEFAULT_CONFIG = {
   id: "DEFAULT",
   coin_supply_total: 5_000_000_000n,
-  free_claim_amount: 1_000,
-  free_claim_cooldown_ms: 10 * 60 * 60 * 1000, // 10 hours
+  free_claim_amount: 3_000,
+  free_claim_cooldown_ms: 5 * 60 * 60 * 1000, // 5 hours
   buy_rate: 250,  // coins per ticket (buy)
   sell_rate: 220, // coins per ticket (sell)
 } as const;
@@ -26,7 +26,10 @@ export class LedgerService {
   private async getConfig() {
     return this.prisma.ledgerConfig.upsert({
       where: { id: DEFAULT_CONFIG.id },
-      update: {},
+      update: {
+        free_claim_amount: DEFAULT_CONFIG.free_claim_amount,
+        free_claim_cooldown_ms: DEFAULT_CONFIG.free_claim_cooldown_ms,
+      },
       create: {
         id: DEFAULT_CONFIG.id,
         coin_supply_total: DEFAULT_CONFIG.coin_supply_total,

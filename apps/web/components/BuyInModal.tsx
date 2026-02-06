@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatNumber } from "~~/utils/format";
+import GenericModal from "~~/components/ui/GenericModal";
 
 export interface BuyInConfig {
   seat: number;
@@ -27,63 +28,73 @@ export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalPr
     Math.min(config.bbMax, Math.max(config.bbMin, Math.round(coins / config.bigBlind)));
 
   return (
-    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-[#15171e] p-6 rounded-2xl border border-white/10 shadow-2xl w-80 text-white animate-in zoom-in duration-200">
-      <h3 className="text-xl font-bold mb-1">Buy In</h3>
-      <p className="text-xs text-gray-400 mb-6 uppercase tracking-wide">
-        Blinds: {config.bigBlind / 2}/{config.bigBlind}
-      </p>
-
-      <div className="space-y-6">
-        <div className="flex justify-between text-sm text-gray-300 font-mono">
-          <span>Min: {formatNumber(minCoins)}</span>
-          <span>Max: {formatNumber(maxCoins)}</span>
+    <GenericModal 
+      modalId="buyin-modal" 
+      open={true} 
+      onClose={onCancel}
+      className="bg-black text-white border border-white/10"
+    >
+      <div className="space-y-4 text-sm text-white/80">
+        <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Buy In</div>
+        
+        <div className="space-y-1">
+          <p className="text-white font-medium">Select Amount</p>
+          <p className="text-xs text-white/50 uppercase tracking-wide">
+            Blinds: {config.bigBlind / 2}/{config.bigBlind}
+          </p>
         </div>
 
-        <input
-          type="range"
-          min={config.bbMin}
-          max={config.bbMax}
-          step={1}
-          value={bbAmount}
-          onChange={(e) => setBbAmount(Number(e.target.value))}
-          className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-        />
+        <div className="rule" aria-hidden="true" />
 
-        <div className="flex items-center gap-2">
+        <div className="space-y-6">
+          <div className="flex justify-between text-xs text-white/60 font-mono">
+            <span>Min: {formatNumber(minCoins)}</span>
+            <span>Max: {formatNumber(maxCoins)}</span>
+          </div>
+
           <input
-            type="number"
-            className="w-full rounded bg-black border border-white/10 px-3 py-2 font-mono text-right"
-            min={minCoins}
-            max={maxCoins}
-            step={step}
-            value={coinAmount}
-            onChange={(e) => setBbAmount(clampCoinsToBB(Number(e.target.value)))}
+            type="range"
+            min={config.bbMin}
+            max={config.bbMax}
+            step={1}
+            value={bbAmount}
+            onChange={(e) => setBbAmount(Number(e.target.value))}
+            className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[var(--brand-accent)]"
           />
-          <span className="text-white/60 text-sm">Coins</span>
-        </div>
 
-        <div className="flex items-center justify-between bg-black/30 p-3 rounded-lg border border-white/5">
-          <span className="text-sm text-gray-400">Total:</span>
-          <span className="text-xl font-mono font-bold text-blue-400">
-            {formatNumber(coinAmount)}
-          </span>
-        </div>
+          <div className="flex items-center gap-3">
+            <span className="text-white/80 min-w-[110px]">Coins</span>
+            <input
+              type="number"
+              className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white font-mono"
+              min={minCoins}
+              max={maxCoins}
+              step={step}
+              value={coinAmount}
+              onChange={(e) => setBbAmount(clampCoinsToBB(Number(e.target.value)))}
+            />
+          </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white font-bold rounded-lg transition-colors uppercase tracking-wide text-sm border border-white/10"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onConfirm(coinAmount)}
-            className="flex-[2] py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg transition-colors uppercase tracking-wide text-sm"
-          >
-            Confirm
-          </button>
+          <div className="flex items-center justify-between bg-white/5 p-3 rounded border border-white/5">
+            <span className="text-xs text-white/50 uppercase tracking-wider">Total:</span>
+            <span className="text-lg font-mono font-bold text-[var(--brand-accent)]">
+              {formatNumber(coinAmount)}
+            </span>
+          </div>
+
+          <div className="flex justify-end gap-2 text-xs pt-2">
+            <button className="tbtn-secondary" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              className="tbtn"
+              onClick={() => onConfirm(coinAmount)}
+            >
+              Confirm
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </GenericModal>
   );
 }

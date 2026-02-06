@@ -146,8 +146,8 @@ model Treasury {
 model LedgerConfig {
   id                    String   @id @default("DEFAULT")
   coin_supply_total     BigInt   @default(5000000000)
-  free_claim_amount     Int      @default(1000)
-  free_claim_cooldown_ms Int     @default(36000000)
+  free_claim_amount     Int      @default(3000)
+  free_claim_cooldown_ms Int     @default(18000000)
   buy_rate              Int      @default(250)
   sell_rate             Int      @default(220)
   createdAt             DateTime @default(now())
@@ -176,6 +176,7 @@ model TournamentEscrow {
 model Tournament {
   id                String              @id
   name              String
+  gameType          String              @default("No Limit Hold'em")
   type              TournamentType
   startMode         TournamentStartMode
   startAt           DateTime?
@@ -260,6 +261,7 @@ model TournamentPayout {
 model GameTemplate {
   id                String               @id
   name              String
+  gameType          String               @default("No Limit Hold'em")
   type              GameTemplateType
   maxPlayers        Int
   smallBlind        Int

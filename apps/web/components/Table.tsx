@@ -44,6 +44,7 @@ export default function Table({ timer }: { timer?: number | null }) {
   } = useTableViewModel(timer);
 
   const gameStore = useGameStore();
+  const { sitOut, sitIn, leaveSeat, playerAction } = gameStore;
   const street = gameStore.street || 0;
   const totalPot = gameStore.pot;
   const cardsRevealed = gameStore.cardsRevealed;
@@ -55,12 +56,40 @@ export default function Table({ timer }: { timer?: number | null }) {
   const countdownInfo = useCountdownWithPriority(gameStore.countdowns);
   const seats = seatStore((state) => state.seats);
   const [buyInModal, setBuyInModal] = useState<BuyInConfig | null>(null);
+  const [isActionPending, setIsActionPending] = useState(false);
 
   // Safe Accessors
   const safePlayerHands = Array.isArray(playerHands) ? playerHands : Array(9).fill(null);
   const safePlayerBets = Array.isArray(playerBets) ? playerBets : Array(9).fill(0);
   const safePlayerStates = Array.isArray(playerStates) ? playerStates : Array(9).fill("empty");
   const safePlayerIds = Array.isArray(playerIds) ? playerIds : Array(9).fill(null);
+
+  const isMyTurn = currentTurn !== null && currentTurn === walletSeatIdx;
+  const isSittingOut = walletSeatIdx >= 0 && safePlayerStates[walletSeatIdx] === "sittingOut";
+
+  const handleSitOutToggle = async () => {
+    if (walletSeatIdx < 0 || isActionPending) return;
+    setIsActionPending(true);
+    try {
+      if (isSittingOut) await sitIn();
+      else await sitOut();
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const handleLeaveTable = async () => {
+    if (walletSeatIdx < 0 || isActionPending) return;
+    setIsActionPending(true);
+    try {
+      if (isMyTurn) {
+        try { await playerAction({ type: "FOLD" }); } catch {}
+      }
+      await leaveSeat();
+    } finally {
+      setIsActionPending(false);
+    }
+  };
 
   const handleSeatRequest = (idx: number) => {
     if (!isConnected || !address) {

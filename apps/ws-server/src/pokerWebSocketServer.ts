@@ -198,8 +198,9 @@ class WebSocketFSMBridge extends EventEmitter {
   private async resolveSeatMapping(
     session: Session,
     tableId: string,
+    command?: any,
   ): Promise<number | undefined> {
-    const canonicalId = await this.getCanonicalId(session);
+    const canonicalId = await this.getCanonicalId(session, command);
     logger.debug(
       `🔍 [SeatResolve] Resolving seat for canonical ID: ${canonicalId}`,
     );
@@ -522,6 +523,16 @@ class WebSocketFSMBridge extends EventEmitter {
 
       case "StartHand":
         this.emit("broadcast", tableId, { type: "HAND_START" });
+        break;
+
+      case "DealHole":
+        // Emit DealHole event - will be sanitized by broadcast() to only show to owner
+        this.emit("broadcast", tableId, {
+          type: "DEAL_HOLE",
+          tableId,
+          // Forward the raw cards map; broadcast() handles per-player filtering
+          cards: (event as any).cards, 
+        } as any);
         break;
 
       case "EnterStreet":
@@ -850,7 +861,7 @@ class WebSocketFSMBridge extends EventEmitter {
       logger.debug(
         `🔍 [ACTION] Resolving seat mapping for session ${session.sessionId}...`,
       );
-      const seatId = await this.resolveSeatMapping(session, session.roomId);
+      const seatId = await this.resolveSeatMapping(session, session.roomId, command);
 
       if (seatId === undefined) {
         logger.error(

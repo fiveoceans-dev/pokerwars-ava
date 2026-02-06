@@ -63,12 +63,14 @@ async function seedTournaments() {
     const startMode = def.startMode === "scheduled" ? TournamentStartMode.SCHEDULED : TournamentStartMode.FULL;
     const buyInCurrency = def.buyIn.currency === "tickets" ? BuyInCurrency.TICKETS : BuyInCurrency.CHIPS;
     const payoutMode = def.payout.mode === "tickets" ? PayoutMode.TICKETS : PayoutMode.TOP_X_SPLIT;
+    // Seed as templates when DB enum supports it; otherwise fall back to a safe live status.
     const status = usesTemplateStatus ? TournamentStatus.TEMPLATE : TournamentStatus.REGISTERING;
     await prisma.tournament.upsert({
       where: { id: def.id },
       update: force
         ? {
             name: def.name,
+            gameType: "No Limit Hold'em",
             type,
             startMode,
             startAt: def.startAt ? new Date(def.startAt) : null,
@@ -88,6 +90,7 @@ async function seedTournaments() {
       create: {
         id: def.id,
         name: def.name,
+        gameType: "No Limit Hold'em",
         type,
         startMode,
         startAt: def.startAt ? new Date(def.startAt) : null,

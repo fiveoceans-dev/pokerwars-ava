@@ -15,6 +15,7 @@ type Props = {
   title?: string;
   showStartColumn?: boolean;
   showPayouts?: boolean;
+  startColumnTitle?: string;
 };
 
 const headerBase = "px-2 py-2 text-left text-[11px] uppercase tracking-wide cursor-pointer select-none";
@@ -62,17 +63,40 @@ function formatLevel(t: Tournament): string {
   return "—";
 }
 
-function formatLateReg(t: Tournament): string {
-  if (t.lateRegEndAt) {
-    const end = new Date(t.lateRegEndAt);
-    if (!Number.isNaN(end.valueOf())) {
-      return `Late reg until ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    }
+const LateRegCountdown = ({ endTime }: { endTime: string }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    const end = new Date(endTime).getTime();
+    
+    const update = () => {
+      const now = Date.now();
+      const diff = end - now;
+      if (diff <= 0) {
+        setTimeLeft("Closed");
+        return;
+      }
+      const mins = Math.floor(diff / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`);
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [endTime]);
+
+  return <span>Late Reg {timeLeft}</span>;
+};
+
+function formatLateReg(t: Tournament): React.ReactNode {
+  if (t.status === "running" && t.lateRegEndAt) {
+    return <LateRegCountdown endTime={t.lateRegEndAt} />;
   }
-  if (typeof t.lateRegMinutes === "number") {
-    return `Late reg ${t.lateRegMinutes}m`;
+  if (typeof t.lateRegMinutes === "number" && t.lateRegMinutes > 0) {
+    return <span>Late reg {t.lateRegMinutes}m</span>;
   }
-  return "";
+  return null;
 }
 
 function formatPayouts(t: Tournament): string {
@@ -94,6 +118,7 @@ export function TournamentTable({
   title,
   showStartColumn = true,
   showPayouts = true,
+  startColumnTitle = "Start",
 }: Props) {
   const router = useRouter();
   const { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds } = useTournamentActions();
@@ -230,8 +255,8 @@ export function TournamentTable({
               <th className={headerBase} onClick={() => toggleSort("level")}>Level</th>
               <th className={headerBase} onClick={() => toggleSort("prize")}>Prize</th>
               {showPayouts ? <th className={headerBase}>Payouts</th> : null}
-              <th className={headerBase}>Status</th>
-              {showStartColumn ? <th className={headerBase}>Start</th> : null}
+              <th className={headerBase}>Register</th>
+              {showStartColumn ? <th className={headerBase}>{startColumnTitle}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -262,7 +287,7 @@ export function TournamentTable({
                     ) : null}
                   </div>
                 </td>
-                <td className={cellBase}>{t.type?.toUpperCase() ?? "MTT"}</td>
+                <td className={cellBase}>No Limit Hold&apos;em</td>
                 <td className={cellBase}>
                   {formatNumber(t.registeredCount)}/{formatNumber(t.maxPlayers)}
                 </td>

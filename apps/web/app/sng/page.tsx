@@ -63,7 +63,7 @@ export default function SngPage() {
         {loading ? (
           <p className="text-sm text-white/60">Loading tournaments…</p>
         ) : (
-          <TournamentTable tournaments={stt} showPayouts={false} />
+          <TournamentTable tournaments={stt} showPayouts={false} startColumnTitle="Beta" />
         )}
       </div>
     </main>

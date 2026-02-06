@@ -174,6 +174,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     // Get current state to preserve player's own cards
     const currentState = get();
     const currentWalletId = currentState.currentWalletId;
+    let mySeatIndex: number | undefined = undefined;
 
     // Populate only seats that have active players
     // Handle both new EventEngine format (seats array) and legacy format (players array)
@@ -190,6 +191,11 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       })();
       room.seats.forEach((seat: any, index: number) => {
         if (seat.pid) {
+          // Track our own seat index for tableSeats update
+          if (currentWalletId && seat.pid.toLowerCase() === currentWalletId.toLowerCase()) {
+            mySeatIndex = index;
+          }
+
           // Always ensure we have a display name - preserve existing name if new snapshot doesn't provide one
           const currentName = currentState.players[index];
           const cached = seatNameCache.get(index);
@@ -316,6 +322,12 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         ? maxPlayers
         : get().tableMaxPlayers;
 
+    const tableId = room.id || get().tableId;
+    const newTableSeats = new Map(get().tableSeats);
+    if (tableId && mySeatIndex !== undefined) {
+      newTableSeats.set(tableId, mySeatIndex);
+    }
+
     set({
       playerHands: hands,
       community: comm,
@@ -329,6 +341,8 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       lastActionLabels: labels,
       dealerIndex: room.dealerIndex ?? null,
       pot,
+      tableSeats: newTableSeats,
+      tableId,
       currentTurn: (() => {
         // Debug logging for currentTurn calculation
         console.log(`🔍 [useGameStore] Calculating currentTurn:`, {
@@ -1342,6 +1356,10 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         } as any;
         socket.send(JSON.stringify(cmd));
         console.log(`🎯 Joining table: ${tableId}`);
+      } else {
+        // Ensure we establish a WS connection; onopen will auto JOIN_TABLE using state.tableId
+        console.log("🔗 WebSocket not connected, connecting before JOIN_TABLE...");
+        connectWebSocket();
       }
     },
 

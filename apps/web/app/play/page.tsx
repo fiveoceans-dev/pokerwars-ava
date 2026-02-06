@@ -23,12 +23,17 @@ function PlayPageInner() {
     currentTurn, 
     chips, 
     playerStates, 
-    minRaise 
+    minRaise,
+    sitOut,
+    sitIn,
+    leaveSeat,
+    playerAction
   } = useGameStore();
   const { baseW, baseH, walletSeatIdx } = useTableViewModel();
   const { timer } = usePlayViewModel();
   const [layoutReady, setLayoutReady] = useState(false);
   const [tableScale, setTableScale] = useState(1);
+  const [isActionPending, setIsActionPending] = useState(false);
 
   useGameEvents();
 
@@ -72,6 +77,30 @@ function PlayPageInner() {
   const validBets = playerBets.filter((b) => typeof b === 'number');
   const currentBet = validBets.length > 0 ? Math.max(...validBets) : 0;
 
+  const handleSitOutToggle = async () => {
+    if (walletSeatIdx < 0 || isActionPending) return;
+    setIsActionPending(true);
+    try {
+      if (isSittingOut) await sitIn();
+      else await sitOut();
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  const handleLeaveTable = async () => {
+    if (walletSeatIdx < 0 || isActionPending) return;
+    setIsActionPending(true);
+    try {
+      if (isMyTurn) {
+        try { await playerAction({ type: "FOLD" }); } catch {}
+      }
+      await leaveSeat();
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
   return (
     <div
       className="play-page-container"
@@ -94,6 +123,38 @@ function PlayPageInner() {
         }}
       >
         <Table timer={timer} />
+      </div>
+
+      {/* Top Right Navigation & Controls - Aligned with Header content-wrap */}
+      <div className="absolute top-[60px] left-0 right-0 z-50 pointer-events-none">
+        <div className="content-wrap flex justify-end">
+          <div className="flex items-center gap-2 pointer-events-auto">
+            {walletSeatIdx >= 0 && (
+              <>
+                <button 
+                  onClick={handleSitOutToggle}
+                  disabled={isActionPending}
+                  className={`tbtn text-[10px] px-2 h-7 flex items-center justify-center min-w-[70px] ${isSittingOut ? "bg-amber-600/20 border-amber-600/50 text-amber-400" : ""}`}
+                >
+                  {isSittingOut ? "Sit In" : "Sit Out"}
+                </button>
+                <button 
+                  onClick={handleLeaveTable}
+                  disabled={isActionPending}
+                  className="tbtn text-[10px] px-2 h-7 flex items-center justify-center text-rose-400 border-rose-400/30 hover:bg-rose-400/10"
+                >
+                  Leave
+                </button>
+              </>
+            )}
+            <button 
+              onClick={() => window.history.back()}
+              className="tbtn text-[10px] px-3 h-7 flex items-center justify-center text-white/60 hover:text-white"
+            >
+              Back
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Dealer Messages (Chat) - Bottom Left */}

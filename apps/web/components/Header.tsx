@@ -11,9 +11,11 @@ import { useWallet } from "~~/components/providers/WalletProvider";
 import { formatWalletLabel } from "~~/components/providers/WalletProvider";
 import { useActiveStatus } from "~~/hooks/useActiveStatus";
 import { formatNumber } from "~~/utils/format";
+import { useLanguageStore, languageLabels, Language } from "~~/stores/useLanguageStore";
+import { translations } from "~~/constants/translations";
 
 type HeaderMenuLink = {
-  label: string;
+  key: string;
   href: string;
 };
 
@@ -50,13 +52,16 @@ const setCookieValue = (name: string, value: string, maxAgeSeconds: number) => {
 };
 
 const AnimatedNavLabel = () => {
-  const [text, setText] = useState("FREE");
+  const { language } = useLanguageStore();
+  const t = translations[language];
+  const [text, setText] = useState(t.free);
+  
   useEffect(() => {
     let mounted = true;
     let stage = 0;
     let shuffleTimer: number | undefined;
     let holdTimer: number | undefined;
-    const targets = ["FREE COINS", "FREE COINS"];
+    const targets = [t.free_coins, t.free_coins];
     const lastPlayedRaw = getCookieValue(NAV_ANIM_COOKIE);
     const lastPlayed = lastPlayedRaw ? Number.parseInt(lastPlayedRaw, 10) : 0;
     if (lastPlayed && !Number.isNaN(lastPlayed)) {
@@ -103,35 +108,38 @@ const AnimatedNavLabel = () => {
       if (holdTimer) window.clearTimeout(holdTimer);
       window.clearTimeout(stopTimer);
     };
-  }, []);
+  }, [t.free_coins]);
 
   return <span aria-hidden="true">{text}</span>;
 };
 
 export const menuLinks: HeaderMenuLink[] = [
-  { label: "Home", href: "/" },
-  { label: "Cash", href: "/cash" },
-  { label: "SNG", href: "/sng" },
-  { label: "MTT", href: "/mtt" },
-  { label: "Learn", href: "/learn" },
-  { label: "Free", href: "/free" },
+  { key: "home", href: "/" },
+  { key: "cash", href: "/cash" },
+  { key: "sng", href: "/sng" },
+  { key: "mtt", href: "/mtt" },
+  { key: "learn", href: "/learn" },
+  { key: "free", href: "/free" },
 ];
 
 export const HeaderMenuLinks = () => {
   const pathname = usePathname();
   const activeStatus = useActiveStatus();
+  const { language } = useLanguageStore();
+  const t = translations[language];
 
   return (
     <>
-      {menuLinks.map(({ label, href }) => {
+      {menuLinks.map(({ key, href }) => {
         const isActive =
           href === "/"
             ? pathname === "/"
             : pathname === href || pathname.startsWith(`${href}/`);
         const showDot =
-          (label === "Cash" && activeStatus.cashActive) ||
-          (label === "SNG" && activeStatus.sngActive) ||
-          (label === "MTT" && activeStatus.mttActive);
+          (key === "cash" && activeStatus.cashActive) ||
+          (key === "sng" && activeStatus.sngActive) ||
+          (key === "mtt" && activeStatus.mttActive);
+        const label = t[key] || key;
         return (
           <li key={href}>
             <LinkComponent
@@ -139,7 +147,7 @@ export const HeaderMenuLinks = () => {
               className={`tbtn tbtn-tight nav-btn ${isActive ? "nav-active" : ""}`}
             >
               <span className="inline-flex items-center gap-2">
-                {label === "Free" ? <AnimatedNavLabel /> : label}
+                {key === "free" ? <AnimatedNavLabel /> : label}
                 {showDot ? (
                   <span
                     className="h-1 w-1 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
@@ -152,6 +160,52 @@ export const HeaderMenuLinks = () => {
         );
       })}
     </>
+  );
+};
+
+const LanguageSwitcher = () => {
+  const { language, setLanguage } = useLanguageStore();
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="dropdown relative" ref={containerRef}>
+      <button
+        type="button"
+        className="tbtn tbtn-tight nav-btn w-[60px]"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {languageLabels[language]}
+      </button>
+      {isOpen && (
+        <ul className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-24 bg-black border border-white/10 right-0 z-[60] shadow-2xl">
+          {(Object.keys(languageLabels) as Language[]).map((lang) => (
+            <li key={lang}>
+              <button
+                type="button"
+                className={`tbtn tbtn-tight nav-btn w-full text-left ${language === lang ? "nav-active" : ""}`}
+                onClick={() => {
+                  setLanguage(lang);
+                  setIsOpen(false);
+                }}
+              >
+                {languageLabels[lang]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 };
 
@@ -169,6 +223,9 @@ export const Header = () => {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || "PokerWars";
   const { balances, hydrated, walletForBalance } = useBalances();
   const { status, address } = useWallet();
+  const { language } = useLanguageStore();
+  const t = translations[language];
+
   const isWalletConnected = status === "connected";
   const showBalances = hydrated && Boolean(walletForBalance);
   const coinsDisplay = showBalances ? formatNumber(balances.coins) : "—";
@@ -267,7 +324,7 @@ export const Header = () => {
             </ul>
           )}
           <div
-            className={`dropdown ${compactNav ? "" : "sm:hidden"}`}
+            className={`dropdown relative ${compactNav ? "" : "sm:hidden"}`}
             ref={burgerMenuRef}
           >
             <button
@@ -277,12 +334,12 @@ export const Header = () => {
               aria-expanded={isDrawerOpen}
               onClick={() => setIsDrawerOpen((prev) => !prev)}
             >
-              Menu
+              {t.menu}
             </button>
             {isDrawerOpen && (
               <ul
                 tabIndex={0}
-                className="nav-list menu menu-compact dropdown-content mt-3 p-2 w-52 bg-black/80 border border-white/10"
+                className="nav-list menu menu-compact dropdown-content mt-3 p-2 w-52 bg-black border border-white/10 left-0 z-50 shadow-2xl"
                 onClick={() => setIsDrawerOpen(false)}
               >
                 <HeaderMenuLinks />
@@ -294,15 +351,15 @@ export const Header = () => {
         {/* Right cluster: balances + wallet */} 
         <div
           ref={rightClusterRef}
-          className={`${compactNav ? "hidden" : "hidden sm:flex"} items-center justify-end ${groupGap} text-white/70`}
+          className={`${compactNav ? "hidden" : "hidden sm:flex"} items-center justify-end ${groupGap} text-white/70 ml-auto`}
         >
           <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-            Coins {coinsDisplay}
+            {t.coins} {coinsDisplay}
           </LinkComponent>
           <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-            Tickets X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
+            {t.tickets} X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
           </LinkComponent>
-          <div className="dropdown" ref={walletMenuRef}>
+          <div className="dropdown relative" ref={walletMenuRef}>
             {isWalletConnected ? (
               <button
                 type="button"
@@ -321,18 +378,18 @@ export const Header = () => {
                   window.dispatchEvent(new Event("open-wallet-connect"));
                 }}
               >
-                Connect wallet
+                {t.connect_wallet}
               </button>
             )}
             {isWalletConnected && isWalletMenuOpen && (
               <ul
                 tabIndex={0}
-                className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-52 bg-black/80 border border-white/10 left-0"
+                className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-52 bg-black border border-white/10 right-0 z-50 shadow-2xl"
                 onClick={() => setIsWalletMenuOpen(false)}
               >
                 <li>
                   <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-                    Account
+                    {t.account}
                   </LinkComponent>
                 </li>
                 <li>
@@ -344,17 +401,18 @@ export const Header = () => {
                       window.dispatchEvent(new Event("open-wallet-disconnect"));
                     }}
                   >
-                    Disconnect
+                    {t.disconnect}
                   </button>
                 </li>
               </ul>
             )}
           </div>
+          <LanguageSwitcher />
         </div>
 
         {/* Mobile right cluster */} 
-        <div className={`flex items-center ${groupGap} text-white/70 ${compactNav ? "" : "sm:hidden"}`}>
-          <div className="dropdown" ref={accountMenuRef}>
+        <div className={`flex items-center ${groupGap} text-white/70 ml-auto ${compactNav ? "" : "sm:hidden"}`}>
+          <div className="dropdown relative" ref={accountMenuRef}>
             <button
               type="button"
               className={navControlClass}
@@ -362,12 +420,12 @@ export const Header = () => {
               aria-expanded={isAccountMenuOpen}
               onClick={() => setIsAccountMenuOpen((prev) => !prev)}
             >
-              {isWalletConnected ? addressLabel : "Account"}
+              {isWalletConnected ? addressLabel : t.account}
             </button>
             {isAccountMenuOpen && (
               <ul
                 tabIndex={0}
-                className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-60 bg-black/80 border border-white/10 left-0"
+                className="nav-list menu menu-compact dropdown-content mt-3 p-2 pl-0 w-60 bg-black border border-white/10 right-0 z-50 shadow-2xl"
                 onClick={() => setIsAccountMenuOpen(false)}
               >
                 {isWalletConnected && (
@@ -379,12 +437,12 @@ export const Header = () => {
                 )}
                 <li>
                   <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-                    Coins {coinsDisplay}
+                    {t.coins} {coinsDisplay}
                   </LinkComponent>
                 </li>
                 <li>
                   <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-                    Tickets X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
+                    {t.tickets} X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
                   </LinkComponent>
                 </li>
                 <li>
@@ -397,7 +455,7 @@ export const Header = () => {
                         window.dispatchEvent(new Event("open-wallet-disconnect"));
                       }}
                     >
-                      Disconnect
+                      {t.disconnect}
                     </button>
                   ) : (
                     <button
@@ -407,13 +465,14 @@ export const Header = () => {
                         window.dispatchEvent(new Event("open-wallet-connect"));
                       }}
                     >
-                      Connect wallet
+                      {t.connect_wallet}
                     </button>
                   )}
                 </li>
               </ul>
             )}
           </div>
+          <LanguageSwitcher />
         </div>
       </div>
       <div className="pointer-events-none absolute left-0 top-0 invisible whitespace-nowrap" aria-hidden="true">
@@ -427,16 +486,20 @@ export const Header = () => {
         </div>
         <div ref={measureRightRef} className="flex items-center  text-white/70">
           <span className="tbtn tbtn-tight nav-btn">
-            Coins {coinsDisplay}
+            {t.coins} {coinsDisplay}
           </span>
           <span className="tbtn tbtn-tight nav-btn">
-            Tickets X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
+            {t.tickets} X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
           </span>
           <span className="tbtn tbtn-tight nav-btn max-w-[140px] truncate">
-            {isWalletConnected ? addressLabel : "Wallet"}
+            {isWalletConnected ? addressLabel : t.connect_wallet}
           </span>
+          <div className="tbtn tbtn-tight nav-btn w-[60px]">
+            {languageLabels[language]}
+          </div>
         </div>
       </div>
     </header>
   );
 };
+

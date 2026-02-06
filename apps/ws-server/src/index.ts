@@ -697,6 +697,19 @@ function sanitizeTableForSession(table: Table, session: Session, roomId: string)
   return { ...table, seats, communityCards, burns };
 }
 
+/**
+ * Send a sanitized TABLE_SNAPSHOT to a specific client
+ */
+function sendSanitizedSnapshot(ws: WebSocket, session: Session, roomId: string, table: Table, maxPlayers?: number) {
+  const sanitized = sanitizeTableForSession(table, session, roomId);
+  ws.send(JSON.stringify({
+    tableId: roomId,
+    type: "TABLE_SNAPSHOT",
+    table: sanitized,
+    maxPlayers,
+  }));
+}
+
 function broadcast(roomId: string, event: ServerEvent): void {
   let sentCount = 0;
 
@@ -704,12 +717,39 @@ function broadcast(roomId: string, event: ServerEvent): void {
     const session = sessions.get(client);
     if (session?.roomId === roomId && client.readyState === WebSocket.OPEN) {
       try {
-        // Sanitize TABLE_SNAPSHOT per viewer to avoid leaking others' hole cards
-        let payload: ServerEvent = event;
+        let payload: any = event;
+
+        // PER-PLAYER SANITIZATION
         if (event.type === "TABLE_SNAPSHOT") {
           const sanitized = sanitizeTableForSession((event as any).table, session, roomId);
-          payload = { ...event, table: sanitized } as ServerEvent;
+          payload = { ...event, table: sanitized };
+        } else if (event.type === "DEAL_HOLE") {
+          // DEAL_HOLE arrives from bridge with all cards in a map: { pid: [c1, c2] }
+          // We must transform it into the client-expected format: { seat, cards }
+          // BUT only if this session is the owner of those cards.
+          const allCards = (event as any).cards || {};
+          const myPid = session.userId || session.sessionId;
+          const myCards = allCards[myPid.toLowerCase()];
+          
+          if (myCards && session.seat !== undefined) {
+            payload = {
+              type: "DEAL_HOLE",
+              tableId: roomId,
+              seat: session.seat,
+              cards: myCards,
+            };
+          } else {
+            // Other players just see that cards were dealt (optional, but good for UI sync)
+            // They don't get the 'cards' field, or get it as 'encrypted'
+            payload = {
+              type: "DEAL_HOLE",
+              tableId: roomId,
+              seat: -1, // Ignore for others
+              cards: "encrypted",
+            };
+          }
         }
+
         const msg = JSON.stringify({ ...payload, tableId: roomId });
         client.send(msg);
         sentCount++;
@@ -1045,6 +1085,7 @@ ws.on("message", async (data) => {
                 const seat = table.seats[i];
                 if (seat?.pid && seat.pid.toLowerCase().trim() === normalizedId) {
                   // Found player in FSM - restore their seat mapping
+                  session.seat = i;
                   const existingMapping = globalSeatMappings.findSeat(command.tableId, normalizedId);
                   if (existingMapping === undefined) {
                     globalSeatMappings.setSeatMapping(command.tableId, normalizedId, i);
@@ -1057,12 +1098,7 @@ ws.on("message", async (data) => {
               }
             }
             
-            ws.send(JSON.stringify({
-              tableId: command.tableId,
-              type: "TABLE_SNAPSHOT",
-              table, // Send Table format directly
-              maxPlayers,
-            } as ServerEvent & { maxPlayers?: number }));
+            sendSanitizedSnapshot(ws, session, command.tableId, table, maxPlayers);
           } catch (error) {
             ws.send(JSON.stringify({
               tableId: command.tableId,
@@ -1120,13 +1156,8 @@ ws.on("message", async (data) => {
             if (existing.roomId) {
               try {
                 const table = bridge.getTableState(existing.roomId);
-              const maxPlayers = bridge.getMaxPlayers(existing.roomId, table);
-              ws.send(JSON.stringify({
-                tableId: existing.roomId,
-                type: "TABLE_SNAPSHOT", 
-                table,
-                maxPlayers,
-              } as ServerEvent & { maxPlayers?: number }));
+                const maxPlayers = bridge.getMaxPlayers(existing.roomId, table);
+                sendSanitizedSnapshot(ws, session, existing.roomId, table, maxPlayers);
               } catch (err) {
                 logger.warn(`⚠️ [REATTACH] Table ${existing.roomId} not found; skipping snapshot`, err);
               }
@@ -1140,6 +1171,21 @@ ws.on("message", async (data) => {
           if (attached) {
             session.userId = attached.userId;
             session.roomId = session.roomId || attached.roomId;
+
+            // Proactively recover seat for immediate snapshot correctly
+            if (session.roomId) {
+              try {
+                const table = bridge.getTableState(session.roomId);
+                for (let i = 0; i < table.seats.length; i++) {
+                  const s = table.seats[i];
+                  if (s?.pid && s.pid.toLowerCase().trim() === normalizedUserId) {
+                    session.seat = i;
+                    break;
+                  }
+                }
+              } catch {}
+            }
+
             sessions.handleReconnect(attached);
             void saveSession(session);
             
@@ -1153,13 +1199,8 @@ ws.on("message", async (data) => {
             if (session.roomId) {
               try {
                 const table = bridge.getTableState(session.roomId);
-              const maxPlayers = bridge.getMaxPlayers(session.roomId, table);
-              ws.send(JSON.stringify({
-                tableId: session.roomId,
-                type: "TABLE_SNAPSHOT",
-                table,
-                maxPlayers,
-              } as ServerEvent & { maxPlayers?: number }));
+                const maxPlayers = bridge.getMaxPlayers(session.roomId, table);
+                sendSanitizedSnapshot(ws, session, session.roomId, table, maxPlayers);
               } catch (err) {
                 logger.warn(`⚠️ [ATTACH] Table ${session.roomId} not found; skipping snapshot`, err);
               }

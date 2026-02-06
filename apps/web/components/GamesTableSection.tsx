@@ -49,10 +49,6 @@ export default function GamesTableSection() {
 
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-xl">Live Tables</h2>
-        <span className="text-[11px] uppercase tracking-[0.4em] text-white/50">Cash</span>
-      </div>
       <div className="rule" aria-hidden="true" />
       <div className="overflow-auto">
         <table className="min-w-full text-sm">

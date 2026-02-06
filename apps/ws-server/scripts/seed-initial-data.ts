@@ -15,8 +15,8 @@ const TREASURY_CONFIG = {
 const LEDGER_CONFIG = {
   id: "DEFAULT",
   coin_supply_total: 5_000_000_000,
-  free_claim_amount: 1000,
-  free_claim_cooldown_ms: 36_000_000,
+  free_claim_amount: 3000,
+  free_claim_cooldown_ms: 18_000_000,
   buy_rate: 250,
   sell_rate: 220,
 };
@@ -177,7 +177,10 @@ async function seedLedger() {
   // Create ledger configuration
   await prisma.ledgerConfig.upsert({
     where: { id: LEDGER_CONFIG.id },
-    update: {},
+    update: {
+      free_claim_amount: LEDGER_CONFIG.free_claim_amount,
+      free_claim_cooldown_ms: LEDGER_CONFIG.free_claim_cooldown_ms,
+    },
     create: LEDGER_CONFIG,
   });
 

@@ -56,7 +56,7 @@ export default function GenericModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${modalId}-title`}
-      className="fixed inset-0 z-[9999] grid place-items-center bg-black/75 backdrop-blur-sm px-4 py-6"
+      className="fixed inset-0 z-[9999] grid place-items-center bg-slate-900/90 backdrop-blur-sm px-4 py-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -64,7 +64,7 @@ export default function GenericModal({
       }}
     >
       <div
-        className={`relative w-full max-w-md p-6 mx-auto rounded-[32px] border border-white/10 bg-[#2a2a2a] text-white shadow-[0_20px_60px_rgba(0,0,0,0.8)] ${className ?? ""}`}
+        className={`relative w-full max-w-md p-6 mx-auto rounded-[32px] border border-white/10 bg-[#1e1e1e] text-white shadow-[0_20px_60px_rgba(0,0,0,0.8)] ${className ?? ""}`}
         onClick={handleContentClick}
       >
         {children}

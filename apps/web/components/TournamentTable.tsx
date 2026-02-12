@@ -7,6 +7,7 @@ import { useTournamentActions } from "~~/hooks/useTournamentActions";
 import { useBalances } from "~~/hooks/useBalances";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { formatNumber } from "~~/utils/format";
+import GenericModal from "~~/components/ui/GenericModal";
 
 type SortKey = "start" | "name" | "buyIn" | "players" | "prize" | "level";
 

@@ -18,7 +18,7 @@ export function WalletDisconnectConfirm({
       modalId="disconnect-confirm"
       open={open}
       onClose={onClose}
-      className="bg-black text-white border border-white/10"
+      className="text-white border border-white/10"
     >
       <div className="space-y-3 text-sm text-white/80">
         <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Confirm</div>

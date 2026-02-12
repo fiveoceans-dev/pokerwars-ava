@@ -45,7 +45,7 @@ export default function MttPage() {
       if (pid && (pid === myId || (!myId && pid === sessionId))) {
           if (!openedTables.current.has(evt.tableId)) {
             openedTables.current.add(evt.tableId);
-            window.open(`/play?table=${evt.tableId}`, "_blank");
+            window.open(`/${evt.tableId}`, "_blank");
           }
       }
     }

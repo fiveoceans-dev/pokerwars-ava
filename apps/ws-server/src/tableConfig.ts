@@ -40,24 +40,24 @@ export function calculateBuyInLimits(bigBlind: number): { min: number; max: numb
  */
 export const TABLES: TableConfig[] = [
   {
-    id: "cash-1-2",
-    name: "1/2 NLH",
+    id: "cash-3a1b",
+    "name": "1/2 NLH",
     blinds: { small: 1, big: 2 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
     buyIn: calculateBuyInLimits(2), // 60–200 chips
     stakeLevel: "low",
   },
   {
-    id: "cash-2-5",
-    name: "2/5 NLH",
+    id: "cash-7c2d",
+    "name": "2/5 NLH",
     blinds: { small: 2, big: 5 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
     buyIn: calculateBuyInLimits(5), // 150–500 chips
     stakeLevel: "mid",
   },
   {
-    id: "cash-5-10",
-    name: "5/10 NLH",
+    id: "cash-9e4f",
+    "name": "5/10 NLH",
     blinds: { small: 5, big: 10 },
     maxPlayers: DEFAULT_MAX_PLAYERS,
     buyIn: calculateBuyInLimits(10), // 300–1,000 chips

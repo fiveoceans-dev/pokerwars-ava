@@ -98,7 +98,7 @@ export default function GamesTableSection() {
                 </td>
                 <td className="px-2 py-2 text-center">
                   <Link
-                    href={`/play?table=${t.id}`}
+                    href={`/${t.id}`}
                     className="tbtn text-xs font-semibold"
                   >
                     Join

@@ -239,7 +239,7 @@ export function TournamentTable({
 
   const openTable = (t: Tournament) => {
     const tableId = (t.tables && t.tables.length > 0) ? t.tables[0] : t.id;
-    router.push(`/play?table=${tableId}`);
+    router.push(`/${tableId}`);
   };
 
   return (

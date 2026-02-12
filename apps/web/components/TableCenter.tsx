@@ -10,6 +10,7 @@ interface TableCenterProps {
   currentRoundBetting: number;
   totalPot: number;
   isMobile: boolean;
+  tableType?: "cash" | "stt" | "mtt";
 }
 
 export default function TableCenter({
@@ -18,6 +19,7 @@ export default function TableCenter({
   currentRoundBetting,
   totalPot,
   isMobile,
+  tableType,
 }: TableCenterProps) {
   const showCommunity = street >= 1;
 
@@ -32,45 +34,86 @@ export default function TableCenter({
     md: "w-20 h-28", // matches Card.tsx 'md'
   }[cardSize];
 
-  return (
-    <div 
-      className={clsx(
-        "absolute top-[15%] left-1/2 -translate-x-1/2 w-full flex flex-col items-center gap-4 z-10 pointer-events-none"
-      )}
-    >
-      {/* Background Title */}
-      <div className="relative pointer-events-auto">
-        <PotDisplayBubbles
-          currentRoundBetting={currentRoundBetting}
-          totalPot={totalPot}
-          isMobile={isMobile}
-        />
+    return (
+
+      <div 
+
+        className={clsx(
+
+          "absolute top-[15%] left-1/2 -translate-x-1/2 w-full flex flex-col items-center gap-4 z-10 pointer-events-none"
+
+        )}
+
+      >
+
+              {/* Pot Display - Fixed Height Container */}
+
+              <div className="relative pointer-events-auto">
+
+                <PotDisplayBubbles
+
+                  currentRoundBetting={currentRoundBetting}
+
+                  totalPot={totalPot}
+
+                  isMobile={isMobile}
+
+                  tableType={tableType}
+
+                />
+
+              </div>
+
+  
+
+        {/* Community Cards - Always render fixed 5-slot layout */}
+
+        <div 
+
+          className={`flex items-center ${gapSize} ${containerPadding} transition-all pointer-events-auto`}
+
+        >
+
+          {[0, 1, 2, 3, 4].map((i) => {
+
+            const code = community[i];
+
+            return (
+
+              <div key={i} className={clsx(slotDimensions, "rounded-md flex-shrink-0")}>
+
+                {code !== null && code !== undefined ? (
+
+                  <Card 
+
+                    card={hashIdToCard(code)} 
+
+                    size={cardSize} 
+
+                    className="animate-in fade-in zoom-in-95 duration-300 shadow-xl"
+
+                  />
+
+                ) : (
+
+                  // Placeholder for undealt cards to maintain fixed positions
+
+                  <div className="w-full h-full border border-white/5 rounded-md" />
+
+                )}
+
+              </div>
+
+            );
+
+          })}
+
+        </div>
+
       </div>
 
-      {/* Community Cards - Fixed 5-slot layout */}
-      {showCommunity && (
-        <div 
-          className={`flex items-center ${gapSize} ${containerPadding} transition-all pointer-events-auto`}
-        >
-          {[0, 1, 2, 3, 4].map((i) => {
-            const code = community[i];
-            return (
-              <div key={i} className={clsx(slotDimensions, "rounded-md flex-shrink-0")}>
-                {code !== null && code !== undefined ? (
-                  <Card 
-                    card={hashIdToCard(code)} 
-                    size={cardSize} 
-                    className="animate-in fade-in zoom-in-95 duration-300 shadow-xl"
-                  />
-                ) : (
-                  // Placeholder for undealt cards to maintain fixed positions
-                  <div className="w-full h-full border border-white/5 rounded-md" />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+    );
+
+  }
+
+  

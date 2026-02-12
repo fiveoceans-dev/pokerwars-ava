@@ -1,6 +1,6 @@
 [
   {
-    "id": "cash-1-2",
+    "id": "cash-3a1b",
     "name": "1/2 NLH",
     "type": "CASH",
     "smallBlind": 1,
@@ -12,7 +12,7 @@
     "currency": "COINS"
   },
   {
-    "id": "cash-2-5",
+    "id": "cash-7c2d",
     "name": "2/5 NLH",
     "type": "CASH",
     "smallBlind": 2,
@@ -24,7 +24,7 @@
     "currency": "COINS"
   },
   {
-    "id": "cash-5-10",
+    "id": "cash-9e4f",
     "name": "5/10 NLH",
     "type": "CASH",
     "smallBlind": 5,
@@ -36,7 +36,7 @@
     "currency": "COINS"
   },
   {
-    "id": "stt-daily-1",
+    "id": "stt-8b5a",
     "name": "Daily SNG 9-Max",
     "type": "SNG",
     "maxPlayers": 9,
@@ -51,7 +51,7 @@
     "startMode": "FULL"
   },
   {
-    "id": "stt-daily-6max",
+    "id": "stt-2d9c",
     "name": "Daily SNG 6-Max",
     "type": "SNG",
     "maxPlayers": 6,
@@ -66,7 +66,7 @@
     "startMode": "FULL"
   },
   {
-    "id": "mtt-daily-pokerwars",
+    "id": "mtt-5f1e",
     "name": "PokerWars Daily MTT",
     "type": "MTT",
     "maxPlayers": 10000,

@@ -7,7 +7,12 @@ import Button from "./Button";
 import { calculatePrizeDistribution } from "../../utils/prizeDistribution";
 import { formatNumber } from "~~/utils/format";
 
-import GenericModal from "./GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalContent,
+  ModalFooter
+} from "./Modal";
 
 export type TournamentItem = {
   title: string;
@@ -34,21 +39,22 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
   const distribution = calculatePrizeDistribution(item.price, item.registered);
   const NextImage = Image as any;
   return (
-    <GenericModal
+    <Modal
       modalId="tournament-details"
       open={true}
       onClose={onClose}
-      className="max-w-md p-4"
     >
-      <div className="space-y-4 relative">
+      <ModalContent className="relative">
         <button
           aria-label="Close"
-          className="absolute top-0 right-0 text-white/60 hover:text-white"
+          className="absolute top-0 right-0 text-white/60 hover:text-white z-10"
           onClick={onClose}
         >
           ✕
         </button>
-        <div className="relative w-full aspect-[63/88] overflow-hidden rounded-md border border-border">
+        <ModalLabel>Tournament Details</ModalLabel>
+        
+        <div className="relative w-full aspect-[63/88] overflow-hidden rounded-md border border-white/10">
           <NextImage
             src={item.image}
             alt={item.title}
@@ -83,12 +89,12 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
             Refunds are available up until the tournament start time.
           </p>
         </div>
-        <div className="pt-2 flex justify-end">
+        <ModalFooter>
           <Button onClick={onClose} variant="secondary">
             Close
           </Button>
-        </div>
-      </div>
-    </GenericModal>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }

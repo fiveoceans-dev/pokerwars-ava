@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { formatNumber } from "~~/utils/format";
-import GenericModal from "~~/components/ui/GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalHeader, 
+  ModalRule, 
+  ModalFooter, 
+  ModalContent 
+} from "~~/components/ui/Modal";
 
 export interface BuyInConfig {
   seat: number;
@@ -28,23 +35,20 @@ export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalPr
     Math.min(config.bbMax, Math.max(config.bbMin, Math.round(coins / config.bigBlind)));
 
   return (
-    <GenericModal 
+    <Modal 
       modalId="buyin-modal" 
       open={true} 
       onClose={onCancel}
-      className="text-white border border-white/10"
     >
-      <div className="space-y-4 text-sm text-white/80">
-        <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Buy In</div>
+      <ModalContent>
+        <ModalLabel>Buy In</ModalLabel>
         
-        <div className="space-y-1">
-          <p className="text-white font-medium">Select Amount</p>
-          <p className="text-xs text-white/50 uppercase tracking-wide">
-            Blinds: {config.bigBlind / 2}/{config.bigBlind}
-          </p>
-        </div>
+        <ModalHeader 
+          title="Select Amount" 
+          subtitle={`Blinds: ${config.bigBlind / 2}/${config.bigBlind}`}
+        />
 
-        <div className="rule" aria-hidden="true" />
+        <ModalRule />
 
         <div className="space-y-6">
           <div className="flex justify-between text-xs text-white/60 font-mono">
@@ -82,7 +86,7 @@ export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalPr
             </span>
           </div>
 
-          <div className="flex justify-end gap-2 text-xs pt-2">
+          <ModalFooter>
             <button className="tbtn-secondary" onClick={onCancel}>
               Cancel
             </button>
@@ -92,9 +96,9 @@ export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalPr
             >
               Confirm
             </button>
-          </div>
+          </ModalFooter>
         </div>
-      </div>
-    </GenericModal>
+      </ModalContent>
+    </Modal>
   );
 }

@@ -152,6 +152,16 @@ function isBettingRoundComplete(table: Table, nextActorIndex: number): boolean {
       return false;
     }
     
+    // If everyone has matched the current bet and everyone has acted, we're done
+    const allMatched = activePlayers.every(seatId => {
+      const seat = seats[seatId];
+      return seat.streetCommitted === currentBet;
+    });
+
+    if (allMatched) {
+      return true;
+    }
+
     // If there's been betting, action must return to the last aggressor
     if (lastAggressor !== undefined) {
       // If next actor would be the last aggressor and others have matched, we're done

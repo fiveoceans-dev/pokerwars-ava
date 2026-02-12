@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import GenericModal from "~~/components/ui/GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalContent,
+  ModalFooter
+} from "~~/components/ui/Modal";
 import { notifyError } from "~~/utils/notifications";
 import { useBalances } from "~~/hooks/useBalances";
 import { formatNumber } from "~~/utils/format";
@@ -77,22 +82,23 @@ export default function FreePage() {
           </div>
         </div>
       </div>
-      <GenericModal
+      <Modal
         modalId="claim-coins-modal"
         open={showCongrats}
         onClose={() => setShowCongrats(false)}
-        className="bg-black text-white border border-white/10"
       >
-        <div className="space-y-4">
-          <h3 className="text-xl text-white">Congrats</h3>
+        <ModalContent>
+          <ModalLabel>Congrats</ModalLabel>
           <p className="text-sm text-white/70">
             {formatNumber(freeClaimAmount)} coins sent to your wallet.
           </p>
-          <button type="button" className="tbtn" onClick={() => setShowCongrats(false)}>
-            Close
-          </button>
-        </div>
-      </GenericModal>
+          <ModalFooter>
+            <button type="button" className="tbtn" onClick={() => setShowCongrats(false)}>
+              Close
+            </button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </main>
   );
 }

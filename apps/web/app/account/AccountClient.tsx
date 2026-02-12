@@ -3,7 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { useBalances } from "~~/hooks/useBalances";
-import GenericModal from "~~/components/ui/GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalFooter, 
+  ModalContent 
+} from "~~/components/ui/Modal";
 import { WalletDisconnectConfirm } from "~~/components/WalletDisconnectConfirm";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { formatNumber } from "~~/utils/format";
@@ -388,97 +393,97 @@ export default function AccountClient() {
         </section>
       </div>
       {convertOpen ? (
-        <GenericModal modalId="convert-modal" open={convertOpen} onClose={() => setConvertOpen(false)}>
-            <div className="space-y-3 text-sm text-white/80">
-              <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Convert</div>
+        <Modal modalId="convert-modal" open={convertOpen} onClose={() => setConvertOpen(false)}>
+          <ModalContent>
+            <ModalLabel>Convert</ModalLabel>
 
-              <div className="space-y-2 text-sm">
-                {convertDirection === "coinsToTickets" ? (
-                  <>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/80 min-w-[110px]">Coins</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={coinQty}
-                        onChange={(e) => {
-                          const next = Math.max(1, Math.floor(Number(e.target.value) / rate) || 1);
-                          setConvertAmount(String(next));
-                        }}
-                        className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/80 min-w-[110px]">Tickets</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={ticketQty}
-                        onChange={(e) => setConvertAmount(String(Math.max(1, Math.floor(Number(e.target.value) || 0))))}
-                        className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
-                        placeholder="0"
-                      />
-                      <span className="text-white/70 text-xs uppercase">{convertTier.replace("ticket_", "").toUpperCase()}</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/80 min-w-[110px]">Tickets</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={ticketQty}
-                        onChange={(e) => setConvertAmount(String(Math.max(1, Math.floor(Number(e.target.value) || 0))))}
-                        className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
-                        placeholder="0"
-                      />
-                      <span className="text-white/70 text-xs uppercase">{convertTier.replace("ticket_", "").toUpperCase()}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-white/80 min-w-[110px]">Coins</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={coinQty}
-                        onChange={(e) => {
-                          const next = Math.max(1, Math.floor(Number(e.target.value) / rate) || 1);
-                          setConvertAmount(String(next));
-                        }}
-                        className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
-                        placeholder="0"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 text-xs text-white/60">
-                <span>{convertDirection === "coinsToTickets" ? "Rate" : "Return"}:</span>
-                <span className="text-white">
-                  {convertDirection === "coinsToTickets" ? `${rate} coins → 1 ticket` : `1 ticket → ${rate} coins`}
-                </span>
-              </div>
-
-              <div className="flex justify-end gap-2 text-xs">
-                <button className="tbtn-secondary" onClick={() => setConvertOpen(false)}>
-                  Cancel
-                </button>
-                <button
-                  className="tbtn"
-                  onClick={async () => {
-                    const ok = await performConversion();
-                    if (ok) {
-                      setConvertOpen(false);
-                    }
-                  }}
-                >
-                  Confirm
-                </button>
-              </div>
+            <div className="space-y-2 text-sm">
+              {convertDirection === "coinsToTickets" ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/80 min-w-[110px]">Coins</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={coinQty}
+                      onChange={(e) => {
+                        const next = Math.max(1, Math.floor(Number(e.target.value) / rate) || 1);
+                        setConvertAmount(String(next));
+                      }}
+                      className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/80 min-w-[110px]">Tickets</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={ticketQty}
+                      onChange={(e) => setConvertAmount(String(Math.max(1, Math.floor(Number(e.target.value) || 0))))}
+                      className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
+                      placeholder="0"
+                    />
+                    <span className="text-white/70 text-xs uppercase">{convertTier.replace("ticket_", "").toUpperCase()}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/80 min-w-[110px]">Tickets</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={ticketQty}
+                      onChange={(e) => setConvertAmount(String(Math.max(1, Math.floor(Number(e.target.value) || 0))))}
+                      className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
+                      placeholder="0"
+                    />
+                    <span className="text-white/70 text-xs uppercase">{convertTier.replace("ticket_", "").toUpperCase()}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white/80 min-w-[110px]">Coins</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={coinQty}
+                      onChange={(e) => {
+                        const next = Math.max(1, Math.floor(Number(e.target.value) / rate) || 1);
+                        setConvertAmount(String(next));
+                      }}
+                      className="w-28 rounded border border-white/10 bg-black px-3 py-1 text-right text-white"
+                      placeholder="0"
+                    />
+                  </div>
+                </>
+              )}
             </div>
-        </GenericModal>
+
+            <div className="flex items-center gap-2 text-xs text-white/60">
+              <span>{convertDirection === "coinsToTickets" ? "Rate" : "Return"}:</span>
+              <span className="text-white">
+                {convertDirection === "coinsToTickets" ? `${rate} coins → 1 ticket` : `1 ticket → ${rate} coins`}
+              </span>
+            </div>
+
+            <ModalFooter>
+              <button className="tbtn-secondary" onClick={() => setConvertOpen(false)}>
+                Cancel
+              </button>
+              <button
+                className="tbtn"
+                onClick={async () => {
+                  const ok = await performConversion();
+                  if (ok) {
+                    setConvertOpen(false);
+                  }
+                }}
+              >
+                Confirm
+              </button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       ) : null}
 
       <WalletDisconnectConfirm

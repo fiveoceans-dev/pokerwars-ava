@@ -121,7 +121,7 @@ export class TournamentOrchestrator {
           
           // 1. Close tables
           t.tables.forEach((tableId) => {
-            this.bridge.closeTable(tableId);
+            void this.bridge.closeTable(tableId);
           });
 
           // 2. Cancel tournament
@@ -460,7 +460,7 @@ export class TournamentOrchestrator {
     return null;
   }
 
-  handleBust(tableId: string, playerId: string) {
+  async handleBust(tableId: string, playerId: string) {
     // Remove from registrations and rebalance; finalize if only one remains
     const t = this.manager.listStates().find((tt) => tt.tables.includes(tableId));
     if (!t) return;
@@ -474,20 +474,22 @@ export class TournamentOrchestrator {
       currency: t.buyIn.currency,
     });
     t.payouts = payouts;
-    void this.manager.persistBust(t.id, playerId, position);
+    await this.manager.persistBust(t.id, playerId, position);
     if (t.registered.size <= 1) {
-      this.finishTournament(t);
+      await this.finishTournament(t);
       return;
     }
     this.balanceIfNeeded(t);
   }
 
-  private finishTournament(t: TournamentState) {
+  private async finishTournament(t: TournamentState) {
     // Explicitly close all remaining tables to ensure DB consistency
-    t.tables.forEach((tableId) => {
-      this.bridge.closeTable(tableId);
-      this.manager.removeTable(t.id, tableId);
-    });
+    await Promise.all(
+      t.tables.map(async (tableId) => {
+        await this.bridge.closeTable(tableId);
+        this.manager.removeTable(t.id, tableId);
+      })
+    );
 
     const winners = Array.from(t.registered);
     // recorded busts are losers first; reverse to get finish order

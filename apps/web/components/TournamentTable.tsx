@@ -7,7 +7,13 @@ import { useTournamentActions } from "~~/hooks/useTournamentActions";
 import { useBalances } from "~~/hooks/useBalances";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { formatNumber } from "~~/utils/format";
-import GenericModal from "~~/components/ui/GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalRule, 
+  ModalFooter, 
+  ModalContent 
+} from "~~/components/ui/Modal";
 
 type SortKey = "start" | "name" | "buyIn" | "players" | "prize" | "level";
 
@@ -373,16 +379,14 @@ export function TournamentTable({
         </table>
       </div>
 
-      <GenericModal
+      <Modal
         modalId="tournament-join-confirm"
         open={modalOpen && !!selected}
         onClose={() => setModalOpen(false)}
       >
-        <div className="space-y-3">
-          <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">
-            Confirm Buy-in
-          </div>
-          <div className="rule" aria-hidden="true" />
+        <ModalContent>
+          <ModalLabel>Confirm Buy-in</ModalLabel>
+          <ModalRule />
           <p className="text-sm text-white/80">
             Join <span className="text-white">{selected?.name}</span> with buy-in{" "}
             {selected?.buyIn.currency === "tickets"
@@ -401,16 +405,16 @@ export function TournamentTable({
             ) : null}
           </div>
           {error ? <div className="text-xs text-red-400">{error}</div> : null}
-          <div className="flex justify-end gap-4 text-xs">
-            <button className="tbtn" onClick={() => setModalOpen(false)}>
+          <ModalFooter>
+            <button className="tbtn-secondary" onClick={() => setModalOpen(false)}>
               Cancel
             </button>
             <button className="tbtn" onClick={confirmJoin}>
               Confirm
             </button>
-          </div>
-        </div>
-      </GenericModal>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

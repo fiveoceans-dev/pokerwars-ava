@@ -184,7 +184,7 @@ export type ClientCommand =
       tableId: string;
       /** desired seat index */
       seat: number;
-      buyIn: number;
+      chips: number;
       /** client wallet address - takes precedence over session */
       playerId?: string;
       /** display name for the player */

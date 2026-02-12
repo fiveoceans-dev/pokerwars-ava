@@ -241,6 +241,23 @@ export function isBettingRoundComplete(
 
   // Check if all active players have matching street commitments
   const activePlayers = seats.filter(isActionable);
+
+  // If using action sequence tracking (preferred)
+  if (table.playersActedThisRound && table.roundStartActor !== undefined) {
+    const allActiveHaveActed = activePlayers.every((s) =>
+      table.playersActedThisRound!.has(s.id),
+    );
+
+    if (allActiveHaveActed) {
+      const allMatched = activePlayers.every(
+        (seat) => seat.streetCommitted === currentBet,
+      );
+      if (allMatched) {
+        return true;
+      }
+    }
+  }
+
   const allMatched = activePlayers.every(
     (seat) => seat.streetCommitted === currentBet,
   );

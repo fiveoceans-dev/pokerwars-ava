@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import GenericModal from "~~/components/ui/GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalFooter, 
+  ModalContent 
+} from "~~/components/ui/Modal";
 import { useWallet } from "~~/components/providers/WalletProvider";
 
 export function WalletDisconnectConfirm({
@@ -14,16 +19,15 @@ export function WalletDisconnectConfirm({
   const { disconnect } = useWallet();
 
   return (
-    <GenericModal
+    <Modal
       modalId="disconnect-confirm"
       open={open}
       onClose={onClose}
-      className="text-white border border-white/10"
     >
-      <div className="space-y-3 text-sm text-white/80">
-        <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Confirm</div>
+      <ModalContent>
+        <ModalLabel>Confirm</ModalLabel>
         <p>Disconnect wallet?</p>
-        <div className="flex justify-end gap-2 text-xs">
+        <ModalFooter>
           <button className="tbtn-secondary" onClick={onClose}>
             Cancel
           </button>
@@ -36,9 +40,9 @@ export function WalletDisconnectConfirm({
           >
             Disconnect
           </button>
-        </div>
-      </div>
-    </GenericModal>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 }
 

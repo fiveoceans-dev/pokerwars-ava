@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import GenericModal from "./ui/GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalContent 
+} from "./ui/Modal";
 import { useTournamentStream } from "../hooks/useTournamentStream";
 import { useWallet } from "./providers/WalletProvider";
 import { formatNumber } from "../utils/format";
@@ -31,17 +35,19 @@ export default function TournamentWinModal() {
   if (!winData) return null;
 
   return (
-    <GenericModal
+    <Modal
       modalId="tournament-win-modal"
       open={!!winData}
       onClose={() => setWinData(null)}
       className="border border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)]"
     >
-      <div className="flex flex-col items-center text-center space-y-6 py-4">
-        <div className="text-6xl animate-bounce">🏆</div>
+      <ModalContent className="items-center text-center py-4">
+        <ModalLabel className="text-amber-500/70">Tournament Result</ModalLabel>
+
+        <div className="text-6xl animate-bounce mb-2">🏆</div>
         
         <div className="space-y-2">
-          <h2 className="text-3xl font-black italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-b from-amber-200 to-amber-500">
+          <h2 className="text-3xl font-black italic uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-b from-amber-200 to-amber-500 mb-0">
             Congratulations!
           </h2>
           <p className="text-lg text-white/90">
@@ -49,7 +55,7 @@ export default function TournamentWinModal() {
           </p>
         </div>
 
-        <div className="bg-white/5 rounded-xl p-6 w-full border border-white/10">
+        <div className="bg-white/5 rounded-xl p-6 w-full border border-white/10 my-4">
           <div className="text-sm text-white/60 uppercase tracking-widest mb-1">Prize Won</div>
           <div className="text-2xl font-mono font-bold text-emerald-400">
             {formatNumber(winData.amount)} {winData.currency === "tickets" ? "Tickets" : "Coins"}
@@ -62,7 +68,7 @@ export default function TournamentWinModal() {
         >
           Collect Winnings
         </button>
-      </div>
-    </GenericModal>
+      </ModalContent>
+    </Modal>
   );
 }

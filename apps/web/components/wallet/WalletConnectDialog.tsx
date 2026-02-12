@@ -1,7 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import GenericModal from "~~/components/ui/GenericModal";
+import { useMemo } from "react";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalHeader, 
+  ModalContent 
+} from "~~/components/ui/Modal";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { notifyError, notifySuccess } from "~~/utils/notifications";
 import {
@@ -137,137 +142,131 @@ export function WalletConnectDialog({ open, onClose }: WalletConnectDialogProps)
   };
 
   return (
-    <GenericModal
+    <Modal
       modalId="connect-modal"
       open={open}
       onClose={closeModal}
-      className="text-white border border-white/10 connect-modal"
+      className="connect-modal"
     >
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl text-white">Connect</h3>
-        <button
-          type="button"
-          onClick={closeModal}
-          className="tbtn text-xs"
-          aria-label="Close connect dialog"
-        >
-          Close
-        </button>
-      </div>
-      <p className="mt-2 text-sm text-white/70">
-        Connect a wallet or explore instantly as a demo player.
-      </p>
-
-      <div className="mt-4 space-y-4">
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="network-select">
-            Network
-          </label>
-          <div className="inputline">
-            <span className="prompt">&gt;</span>
-            <select
-              id="network-select"
-              value={networkId}
-              onChange={(event) => setNetwork(event.target.value as SupportedNetworkId)}
-              className="w-full bg-transparent px-0 py-1 text-sm font-semibold text-white focus:outline-none"
-            >
-            {networksForSelect.map((item) => {
-              const configured = Boolean(item.chainId && item.rpcUrls.length);
-              return (
-                <option key={item.id} value={item.id} disabled={!configured}>
-                  {item.label} {item.isTestnet ? "(Testnet)" : ""}
-                  {!configured ? " – Configure RPC" : ""}
-                </option>
-              );
-            })}
-            </select>
-          </div>
-          {!networkConfigured ? (
-            <p className="text-xs text-white/60">
-              &#9828; &#9825; &#9831; &#9826;
-            </p>
-          ) : null}
-        </div>
-
-        {status === "connected" && address ? (
-          <div className="flex items-center justify-between border-b border-white/10 py-2 text-xs font-semibold text-white/80">
-            <span>{address.slice(0, 6)}...{address.slice(-4)}</span>
-            <button type="button" onClick={copyAddress} className="tbtn text-[11px]">
-              Copy
-            </button>
-          </div>
-        ) : null}
-
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-white/60">
-            Wallets
-          </p>
-
-          <button type="button" onClick={handleDemoPlayer} className={buttonBase}>
-            {demoIcon}
-            <div className="flex flex-1 flex-col text-left leading-tight">
-              <span>Demo Player</span>
-              <span className="text-[11px] font-normal text-white/60">
-                Instant practice seat
-              </span>
-            </div>
-          </button>
-
-          {installedWallets.length === 0 ? (
-            <p className="text-xs text-white/60">
-              No browser wallets detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.
-            </p>
-          ) : (
-            installedWallets.map((wallet) => (
-              <button
-                key={wallet.id}
-                type="button"
-                onClick={() => networkConfigured && wallet.ready && handleConnect(wallet.connector)}
-                className={`${buttonBase} ${!networkConfigured || isConnecting || !wallet.ready ? "opacity-50" : ""}`}
-                disabled={!networkConfigured || isConnecting || !wallet.ready}
-              >
-                <span className={WALLET_BADGE_STYLE}>{wallet.label.slice(0, 1).toUpperCase()}</span>
-                <div className="flex flex-1 flex-col text-left leading-tight">
-                  <span>{wallet.label}</span>
-                  <span className="text-[11px] font-normal text-white/60">
-                    {isConnecting ? "Connecting…" : wallet.ready ? "Installed" : "Unavailable"}
-                  </span>
-                </div>
-              </button>
-            ))
-          )}
-
-          {!networkConfigured && installedWallets.length > 0 ? (
-            <p className="text-xs text-white/60">
-              Configure RPC settings for this network to enable wallet connections.
-            </p>
-          ) : null}
-
-          {/* Additional install prompts intentionally hidden for minimalist flow */}
-        </div>
-
-        {status === "connected" && !isDemo ? (
+      <ModalContent>
+        <div className="flex items-center justify-between">
+          <ModalLabel className="mb-0">Connect</ModalLabel>
           <button
             type="button"
-            onClick={handleDisconnect}
-            className="tbtn text-sm"
+            onClick={closeModal}
+            className="tbtn text-[11px] uppercase tracking-wider opacity-60 hover:opacity-100"
+            aria-label="Close connect dialog"
           >
-            Disconnect {network.shortLabel ? `(${network.shortLabel})` : ""}
+            Close
           </button>
-        ) : null}
+        </div>
 
-        <button
-          type="button"
-          onClick={async () => {
-            clearWalletStorage();
-            await disconnect();
-            closeModal();
-          }}
-          className="tbtn text-sm"
-        >
-          Log Out
-        </button>
-      </div>
-    </GenericModal>
+        <ModalHeader 
+          title="Welcome to PokerWars" 
+          subtitle="Connect a wallet or explore instantly as a demo player."
+          className="mt-2"
+        />
+
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wide text-white/60" htmlFor="network-select">
+              Network
+            </label>
+            <div className="inputline">
+              <span className="prompt">&gt;</span>
+              <select
+                id="network-select"
+                value={networkId}
+                onChange={(event) => setNetwork(event.target.value as SupportedNetworkId)}
+                className="w-full bg-transparent px-0 py-1 text-sm font-semibold text-white focus:outline-none"
+              >
+              {networksForSelect.map((item) => {
+                const configured = Boolean(item.chainId && item.rpcUrls.length);
+                return (
+                  <option key={item.id} value={item.id} disabled={!configured}>
+                    {item.label} {item.isTestnet ? "(Testnet)" : ""}
+                    {!configured ? " – Configure RPC" : ""}
+                  </option>
+                );
+              })}
+              </select>
+            </div>
+          </div>
+
+          {status === "connected" && address ? (
+            <div className="flex items-center justify-between border-b border-white/10 py-2 text-xs font-semibold text-white/80">
+              <span>{address.slice(0, 6)}...{address.slice(-4)}</span>
+              <button type="button" onClick={copyAddress} className="tbtn text-[11px]">
+                Copy
+              </button>
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/60">
+              Wallets
+            </p>
+
+            <button type="button" onClick={handleDemoPlayer} className={buttonBase}>
+              {demoIcon}
+              <div className="flex flex-1 flex-col text-left leading-tight">
+                <span>Demo Player</span>
+                <span className="text-[11px] font-normal text-white/60">
+                  Instant practice seat
+                </span>
+              </div>
+            </button>
+
+            {installedWallets.length === 0 ? (
+              <p className="text-xs text-white/60">
+                No browser wallets detected. Install MetaMask, Coinbase Wallet, or another EVM wallet to continue.
+              </p>
+            ) : (
+              installedWallets.map((wallet) => (
+                <button
+                  key={wallet.id}
+                  type="button"
+                  onClick={() => networkConfigured && wallet.ready && handleConnect(wallet.connector)}
+                  className={`${buttonBase} ${!networkConfigured || isConnecting || !wallet.ready ? "opacity-50" : ""}`}
+                  disabled={!networkConfigured || isConnecting || !wallet.ready}
+                >
+                  <span className={WALLET_BADGE_STYLE}>{wallet.label.slice(0, 1).toUpperCase()}</span>
+                  <div className="flex flex-1 flex-col text-left leading-tight">
+                    <span>{wallet.label}</span>
+                    <span className="text-[11px] font-normal text-white/60">
+                      {isConnecting ? "Connecting…" : wallet.ready ? "Installed" : "Unavailable"}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
+            {status === "connected" && !isDemo ? (
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                className="tbtn text-sm"
+              >
+                Disconnect {network.shortLabel ? `(${network.shortLabel})` : ""}
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={async () => {
+                clearWalletStorage();
+                await disconnect();
+                closeModal();
+              }}
+              className="tbtn text-sm"
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+      </ModalContent>
+    </Modal>
   );
 }

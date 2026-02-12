@@ -654,8 +654,13 @@ const server = createServer(async (req, res) => {
       return;
     }
     const entries = await ledger!.getLedgerForWallet(wallet, Number.isFinite(limit) ? limit : 20);
+    const payload = entries.map((entry) => ({
+      ...entry,
+      amount: entry.amount.toString(),
+      seq: entry.seq.toString(),
+    }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ entries }));
+    res.end(JSON.stringify({ entries: payload }));
     return;
   }
 
@@ -913,7 +918,7 @@ const tournamentOrchestrator = new TournamentOrchestrator(
 // Wire bust detection from engine to tournament orchestrator (placeholder: log for now)
 bridge.setBustHandler((tableId, playerId) => {
   logger.info(`💥 Detected bust: ${playerId} on ${tableId}`);
-  tournamentOrchestrator.handleBust(tableId, playerId);
+  void tournamentOrchestrator.handleBust(tableId, playerId);
 });
 
 // Kick off scheduled tournament checks every minute

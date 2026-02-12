@@ -1,6 +1,11 @@
 import { useState } from "react";
 import Button from "./Button";
-import GenericModal from "./GenericModal";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalContent,
+  ModalFooter
+} from "./Modal";
 
 export function WalletModal(): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -11,13 +16,14 @@ export function WalletModal(): JSX.Element {
       <Button onClick={() => setOpen(true)}>
         {connected ? "Wallet" : "Connect Wallet"}
       </Button>
-      <GenericModal
+      <Modal
         modalId="legacy-wallet-modal"
         open={open}
         onClose={() => setOpen(false)}
-        className="w-80"
+        className="max-w-[320px]"
       >
-        <div className="space-y-4">
+        <ModalContent>
+          <ModalLabel>Wallet</ModalLabel>
           {connected ? (
             <div className="space-y-4">
               <p className="text-white">0x1234...abcd</p>
@@ -33,15 +39,17 @@ export function WalletModal(): JSX.Element {
               </Button>
             </div>
           )}
-          <Button
-            variant="ghost"
-            className="w-full"
-            onClick={() => setOpen(false)}
-          >
-            Close
-          </Button>
-        </div>
-      </GenericModal>
+          <ModalFooter>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setOpen(false)}
+            >
+              Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </div>
   );
 }

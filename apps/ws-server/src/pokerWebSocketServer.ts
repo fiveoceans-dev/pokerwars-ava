@@ -347,22 +347,6 @@ class WebSocketFSMBridge extends EventEmitter {
       );
     }
 
-    // Attach bust detection on every engine (single handler)
-    engine.on("eventProcessed", (event: PokerEvent, table: Table) => {
-      this.handleEventForwarding(event, table, tableId);
-
-      if (event.t === "HandEnd" && this.onPlayerBust) {
-        try {
-          table.seats.forEach((seat) => {
-            if (seat?.pid && seat.chips <= 0) {
-              this.onPlayerBust?.(tableId, seat.pid);
-            }
-          });
-        } catch (err) {
-          logger.error("❌ Failed to detect bust on HandEnd", err);
-        }
-      }
-    });
     return engine;
   }
 
@@ -469,6 +453,19 @@ class WebSocketFSMBridge extends EventEmitter {
     // Game flow events
     engine.on("eventProcessed", (event: PokerEvent, table: Table) => {
       this.handleEventForwarding(event, table, tableId);
+
+      // Attach bust detection
+      if (event.t === "HandEnd" && this.onPlayerBust) {
+        try {
+          table.seats.forEach((seat) => {
+            if (seat?.pid && seat.chips <= 0) {
+              this.onPlayerBust?.(tableId, seat.pid);
+            }
+          });
+        } catch (err) {
+          logger.error("❌ Failed to detect bust on HandEnd", err);
+        }
+      }
     });
 
     // Forward waiting player info so UI can show proper 'waiting' status
@@ -968,22 +965,21 @@ class WebSocketFSMBridge extends EventEmitter {
     }
 
     // Then dispatch PlayerLeave event through FSM
+    const tableStateBeforeLeave = engine.getState();
+    const seatBeforeLeave = tableStateBeforeLeave.seats[seatId];
+    const remaining = seatBeforeLeave?.chips ?? 0;
+
     await engine.dispatch({
       t: "PlayerLeave",
       seat: seatId,
       pid: canonicalId,
     });
 
-    // Refresh state after leave (to get final chip count if they were in a hand)
-    const tableStateAfterLeave = engine.getState();
-
     // Refund remaining stack from escrow to user
     // ONLY for CASH tables. Tournament payouts are handled by the orchestrator.
     const config = getTableConfig(session.roomId);
     if (this.ledgerService && config) {
       try {
-        const seat = tableStateAfterLeave.seats[seatId];
-        const remaining = seat?.chips ?? 0;
         if (remaining > 0) {
           await this.ledgerService.refund(
             canonicalId,
@@ -1219,9 +1215,32 @@ class WebSocketFSMBridge extends EventEmitter {
   /**
    * Close a table and cleanup resources
    */
-  closeTable(tableId: string): void {
+  async closeTable(tableId: string): Promise<void> {
     const engine = this.engines.get(tableId);
     if (engine) {
+      // Professional cleanup: Refund all seated players before destroying engine
+      const table = engine.getState();
+      const config = getTableConfig(tableId);
+      
+      if (this.ledgerService && config) {
+        for (const seat of table.seats) {
+          if (seat?.pid && seat.chips > 0) {
+            try {
+              const pid = seat.pid;
+              const amount = seat.chips;
+              await this.ledgerService.refund(pid, tableId, Asset.COINS, amount);
+              logger.info(`💰 [Cleanup] Refunded ${amount} chips to ${pid} from closed table ${tableId}`);
+              void this.pushBalanceUpdate(pid);
+              void this.pushUserStatusUpdate(pid);
+              // Clean up global seat mapping
+              globalSeatMappings.removePlayer(tableId, pid);
+            } catch (err) {
+              logger.error(`❌ [Cleanup] Failed to refund ${seat.pid} on table close:`, err);
+            }
+          }
+        }
+      }
+
       // Force shutdown of any attached timers
       try {
         // @ts-ignore - accessing internal timer manager if exposed or just letting GC handle it

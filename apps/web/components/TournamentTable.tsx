@@ -372,52 +372,44 @@ export function TournamentTable({
         </table>
       </div>
 
-      {modalOpen && selected ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black px-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setModalOpen(false);
-            }
-          }}
-        >
-          <div
-            className="w-full max-w-md space-y-3 rounded-lg bg-black p-5 border border-white/10 shadow-xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">
-              Confirm Buy-in
+      <GenericModal
+        modalId="tournament-join-confirm"
+        open={modalOpen && !!selected}
+        onClose={() => setModalOpen(false)}
+      >
+        <div className="space-y-3">
+          <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">
+            Confirm Buy-in
+          </div>
+          <div className="rule" aria-hidden="true" />
+          <p className="text-sm text-white/80">
+            Join <span className="text-white">{selected?.name}</span> with buy-in{" "}
+            {selected?.buyIn.currency === "tickets"
+              ? `${selected.buyIn.amount} ticket(s)`
+              : `${formatNumber(selected?.buyIn.amount || 0)} Coins`}
+            .
+          </p>
+          <div className="text-xs text-white/70 space-y-1">
+            <div>
+              Balance: {hydrated ? balances.coins : "—"} chips | Tickets: X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
             </div>
-            <div className="rule" aria-hidden="true" />
-            <p className="text-sm text-white/80">
-              Join <span className="text-white">{selected.name}</span> with buy-in{" "}
-              {selected.buyIn.currency === "tickets"
-                ? `${selected.buyIn.amount} ticket(s)`
-                : `${formatNumber(selected.buyIn.amount)} Coins`}
-              .
-            </p>
-            <div className="text-xs text-white/70 space-y-1">
+            {selected?.lateRegEndAt ? (
               <div>
-                Balance: {hydrated ? balances.coins : "—"} chips | Tickets: X:{hydrated ? balances.tickets.ticket_x : "—"} Y:{hydrated ? balances.tickets.ticket_y : "—"} Z:{hydrated ? balances.tickets.ticket_z : "—"}
+                Late reg until: {new Date(selected.lateRegEndAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </div>
-              {selected.lateRegEndAt ? (
-                <div>
-                  Late reg until: {new Date(selected.lateRegEndAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </div>
-              ) : null}
-            </div>
-            {error ? <div className="text-xs text-red-400">{error}</div> : null}
-            <div className="flex justify-end gap-4 text-xs">
-              <button className="tbtn" onClick={() => setModalOpen(false)}>
-                Cancel
-              </button>
-              <button className="tbtn" onClick={confirmJoin}>
-                Confirm
-              </button>
-            </div>
+            ) : null}
+          </div>
+          {error ? <div className="text-xs text-red-400">{error}</div> : null}
+          <div className="flex justify-end gap-4 text-xs">
+            <button className="tbtn" onClick={() => setModalOpen(false)}>
+              Cancel
+            </button>
+            <button className="tbtn" onClick={confirmJoin}>
+              Confirm
+            </button>
           </div>
         </div>
-      ) : null}
+      </GenericModal>
     </div>
   );
 }

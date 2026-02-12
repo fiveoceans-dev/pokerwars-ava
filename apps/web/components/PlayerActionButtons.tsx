@@ -88,6 +88,7 @@ export default function PlayerActionButtons({
     playerStates,
     cardsRevealed,
     currentWalletId,
+    recentWinners,
     revealCards,
     autoRevealAtShowdown,
     setAutoRevealAtShowdown,
@@ -118,12 +119,14 @@ export default function PlayerActionButtons({
     safePlayerStates[walletSeat] !== "folded" &&
     safePlayerStates[walletSeat] !== "empty";
   const hasCards = hasValidSeat && notFolded;
+  const isWinner = recentWinners.has(walletSeat);
 
   // Show Muck/Show buttons during showdown when player has cards
+  // Winners MUST reveal; Losers can choose to Muck (if not already revealed)
   const canRevealCards =
     isValidPhase && hasCards && !safeCardsRevealed[walletSeat];
   const canMuckCards =
-    isValidPhase && hasCards && safeCardsRevealed[walletSeat];
+    isValidPhase && hasCards && !safeCardsRevealed[walletSeat] && !isWinner;
 
   // Legacy show cards button (keep existing logic for compatibility)
   const canShowCards =

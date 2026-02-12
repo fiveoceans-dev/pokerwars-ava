@@ -288,13 +288,15 @@ export function endHand(table: Table): StateTransition {
       console.log(
         `💸 [Reducer] Player ${seat.pid} busted at seat ${seat.id} — marking sit out (preserving seat)`,
       );
-      // Preserve identity; clear transient per-hand fields if desired
+      // Preserve identity; clear transient per-hand fields and update status
       return {
         ...seat,
         committed: 0,
         streetCommitted: 0,
-        // Status is managed by FSM; do not force to empty to avoid losing identity
-      } as any;
+        status: "sittingOut" as any, // Mark as sitting out due to no chips
+        holeCards: undefined,
+        action: undefined,
+      };
     }
     return seat;
   });

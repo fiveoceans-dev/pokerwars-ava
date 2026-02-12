@@ -7,6 +7,8 @@ import Button from "./Button";
 import { calculatePrizeDistribution } from "../../utils/prizeDistribution";
 import { formatNumber } from "~~/utils/format";
 
+import GenericModal from "./GenericModal";
+
 export type TournamentItem = {
   title: string;
   image: string;
@@ -32,11 +34,16 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
   const distribution = calculatePrizeDistribution(item.price, item.registered);
   const NextImage = Image as any;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-      <div className="bg-primary p-4 rounded-md w-96 max-w-full space-y-4 relative">
+    <GenericModal
+      modalId="tournament-details"
+      open={true}
+      onClose={onClose}
+      className="max-w-md p-4"
+    >
+      <div className="space-y-4 relative">
         <button
           aria-label="Close"
-          className="absolute top-2 right-2 text-background"
+          className="absolute top-0 right-0 text-white/60 hover:text-white"
           onClick={onClose}
         >
           ✕
@@ -50,19 +57,19 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
             className="object-cover"
           />
         </div>
-        <div className="text-background space-y-1">
+        <div className="text-white space-y-1">
           <div className="flex items-center gap-2">
             <Avatar src={item.creatorAvatar} alt={item.creatorName} size={32} />
             <span className="font-semibold">{item.creatorName}</span>
           </div>
-          <p>{item.date}</p>
-          <p>Price: {formatNumber(item.price)} HYPE</p>
-          <p>Registered: {formatNumber(item.registered)}</p>
-          <p>Total Prize: {formatNumber(totalPrize, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} HYPE</p>
+          <p className="text-sm opacity-80">{item.date}</p>
+          <p className="text-sm">Price: {formatNumber(item.price)} HYPE</p>
+          <p className="text-sm">Registered: {formatNumber(item.registered)}</p>
+          <p className="text-sm font-bold">Total Prize: {formatNumber(totalPrize, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} HYPE</p>
         </div>
-        <div className="text-background">
+        <div className="text-white">
           <h4 className="font-semibold mb-1">Prize Distribution</h4>
-          <ul className="text-sm max-h-32 overflow-y-auto space-y-1">
+          <ul className="text-xs max-h-32 overflow-y-auto space-y-1 opacity-80">
             {distribution.map((p, i) => (
               <li key={i}>
                 Place {i + 1}: {formatNumber(p, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} HYPE
@@ -70,9 +77,9 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
             ))}
           </ul>
         </div>
-        <div className="text-background">
+        <div className="text-white">
           <h4 className="font-semibold mb-1">Refund Policy</h4>
-          <p className="text-sm">
+          <p className="text-xs opacity-80">
             Refunds are available up until the tournament start time.
           </p>
         </div>
@@ -82,6 +89,6 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
           </Button>
         </div>
       </div>
-    </div>
+    </GenericModal>
   );
 }

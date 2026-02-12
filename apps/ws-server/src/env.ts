@@ -10,16 +10,21 @@ type ServerEnv = {
   adminWallets: string[];
 };
 
+const stripQuotes = (value: string | undefined | null): string => {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 export const normalizeOrigin = (value?: string | null): string => {
   if (!value) return "";
-  const trimmedRaw = value.trim();
-  if (!trimmedRaw) return "";
-  const trimmed =
-    (trimmedRaw.startsWith('"') && trimmedRaw.endsWith('"')) ||
-    (trimmedRaw.startsWith("'") && trimmedRaw.endsWith("'"))
-      ? trimmedRaw.slice(1, -1).trim()
-      : trimmedRaw;
-  if (!trimmed) return "";
+  const trimmed = value.trim();
   try {
     const url = new URL(trimmed);
     return `${url.protocol}//${url.host}`.toLowerCase();
@@ -34,21 +39,16 @@ export const normalizeOrigin = (value?: string | null): string => {
 };
 
 const parseOrigins = (value?: string | null): string[] =>
-  (value || "")
+  stripQuotes(value || "")
     .split(",")
+    .map((s) => s.trim())
     .map(normalizeOrigin)
     .filter(Boolean);
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
-  if (!value) return fallback;
-  const trimmedRaw = value.trim();
-  const trimmed =
-    (trimmedRaw.startsWith('"') && trimmedRaw.endsWith('"')) ||
-    (trimmedRaw.startsWith("'") && trimmedRaw.endsWith("'"))
-      ? trimmedRaw.slice(1, -1).trim()
-      : trimmedRaw;
-  if (!trimmed) return fallback;
-  const parsed = Number.parseInt(trimmed, 10);
+  const stripped = stripQuotes(value);
+  if (!stripped) return fallback;
+  const parsed = Number.parseInt(stripped, 10);
   return Number.isNaN(parsed) ? fallback : parsed;
 };
 
@@ -56,13 +56,7 @@ export const getServerEnv = (): ServerEnv => {
   const nodeEnv = process.env.NODE_ENV || "development";
   const isProduction = nodeEnv === "production";
 
-  const rawPortValue = process.env.PORT?.trim();
-  const rawPort =
-    rawPortValue &&
-    ((rawPortValue.startsWith('"') && rawPortValue.endsWith('"')) ||
-    (rawPortValue.startsWith("'") && rawPortValue.endsWith("'")))
-      ? rawPortValue.slice(1, -1).trim()
-      : rawPortValue;
+  const rawPort = stripQuotes(process.env.PORT);
   let port: number | undefined;
   if (rawPort) {
     const parsed = Number.parseInt(rawPort, 10);

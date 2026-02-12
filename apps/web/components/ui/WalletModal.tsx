@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Button from "./Button";
+import GenericModal from "./GenericModal";
 
 export function WalletModal(): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -10,30 +11,37 @@ export function WalletModal(): JSX.Element {
       <Button onClick={() => setOpen(true)}>
         {connected ? "Wallet" : "Connect Wallet"}
       </Button>
-      {open && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-          <div className="bg-primary p-6 rounded-md w-80">
-            {connected ? (
-              <div className="space-y-4">
-                <p>0x1234...abcd</p>
-                <Button onClick={() => setConnected(false)}>Disconnect</Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p>Connect your wallet</p>
-                <Button onClick={() => setConnected(true)}>Connect</Button>
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              className="mt-4 w-full"
-              onClick={() => setOpen(false)}
-            >
-              Close
-            </Button>
-          </div>
+      <GenericModal
+        modalId="legacy-wallet-modal"
+        open={open}
+        onClose={() => setOpen(false)}
+        className="w-80"
+      >
+        <div className="space-y-4">
+          {connected ? (
+            <div className="space-y-4">
+              <p className="text-white">0x1234...abcd</p>
+              <Button onClick={() => setConnected(false)} className="w-full">
+                Disconnect
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-white">Connect your wallet</p>
+              <Button onClick={() => setConnected(true)} className="w-full">
+                Connect
+              </Button>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => setOpen(false)}
+          >
+            Close
+          </Button>
         </div>
-      )}
+      </GenericModal>
     </div>
   );
 }

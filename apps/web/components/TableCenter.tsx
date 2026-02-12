@@ -19,15 +19,18 @@ export default function TableCenter({
   totalPot,
   isMobile,
 }: TableCenterProps) {
-  const visibleCommunity = community.filter((c): c is number => c !== null);
-  const showCommunity = street >= 1 && visibleCommunity.length > 0;
+  const showCommunity = street >= 1;
 
   // Responsive Card Sizing
-  // Mobile: 'sm' (64px wide) -> 5 cards = 320px + gaps
-  // Desktop: 'md' (80px wide) -> 5 cards = 400px + gaps
   const cardSize = isMobile ? "sm" : "md";
   const gapSize = isMobile ? "gap-1" : "gap-2";
   const containerPadding = isMobile ? "p-2" : "p-3";
+
+  // Map size to pixel dimensions for the placeholder slots
+  const slotDimensions = {
+    sm: "w-16 h-24", // matches Card.tsx 'sm'
+    md: "w-20 h-28", // matches Card.tsx 'md'
+  }[cardSize];
 
   return (
     <div 
@@ -44,14 +47,28 @@ export default function TableCenter({
         />
       </div>
 
-      {/* Community Cards */}
+      {/* Community Cards - Fixed 5-slot layout */}
       {showCommunity && (
         <div 
-          className={`flex items-center ${gapSize} ${containerPadding} transition-all animate-in fade-in zoom-in-95 duration-300 pointer-events-auto`}
+          className={`flex items-center ${gapSize} ${containerPadding} transition-all pointer-events-auto`}
         >
-          {visibleCommunity.map((code, i) => (
-            <Card key={i} card={hashIdToCard(code)} size={cardSize} />
-          ))}
+          {[0, 1, 2, 3, 4].map((i) => {
+            const code = community[i];
+            return (
+              <div key={i} className={clsx(slotDimensions, "rounded-md flex-shrink-0")}>
+                {code !== null && code !== undefined ? (
+                  <Card 
+                    card={hashIdToCard(code)} 
+                    size={cardSize} 
+                    className="animate-in fade-in zoom-in-95 duration-300 shadow-xl"
+                  />
+                ) : (
+                  // Placeholder for undealt cards to maintain fixed positions
+                  <div className="w-full h-full border border-white/5 rounded-md" />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

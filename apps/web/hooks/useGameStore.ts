@@ -77,6 +77,8 @@ interface GameStoreState {
   tableSeats: Map<string, number>;
   /** current table ID */
   tableId: string | null;
+  /** current table type */
+  tableType: "cash" | "stt" | "mtt" | null;
   /** max seats for current table */
   tableMaxPlayers: number;
   /** unified countdown timer from server (legacy) */
@@ -371,6 +373,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       players: seats,
       playerIds: ids,
       tableMaxPlayers: resolvedMaxPlayers,
+      tableType: room.tableType ?? room.type ?? get().tableType,
       cardsRevealed,
       lastActionLabels: labels,
       dealerIndex: room.dealerIndex ?? null,
@@ -1129,10 +1132,19 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       socket.onerror = (event: Event) => {
         clearTimeout(connectionTimeout);
         const details = event instanceof ErrorEvent ? event.message : "";
-        console.error("🚫 WebSocket error event:", event.type, details);
+        const state = socket?.readyState;
+        const url = socket?.url;
+        
+        console.error("🚫 WebSocket error event:", {
+          type: event.type,
+          details,
+          readyState: state,
+          url,
+        });
+
         set({
           connectionState: "disconnected",
-          connectionError: "Connection error",
+          connectionError: `Connection failed: ${details || "check server status and CORS"}`,
         });
       };
     } catch (error) {
@@ -1237,6 +1249,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     currentWalletId: null,
     tableSeats: new Map<string, number>(),
     tableId: null,
+    tableType: null,
     tableMaxPlayers: DEFAULT_MAX_PLAYERS,
     timer: null,
     countdowns: new Map<CountdownType, CountdownData>(),

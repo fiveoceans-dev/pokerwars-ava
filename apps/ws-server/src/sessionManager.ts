@@ -134,7 +134,7 @@ export class SessionManager {
 
   /** Restore a session from persisted data */
   restore(
-    data: { sessionId: string; userId?: string; roomId?: string; seat?: number; chips?: number; nickname?: string; inActiveHand?: boolean },
+    data: { sessionId: string; userId?: string; roomId?: string; seat?: number; chips?: number; nickname?: string; inActiveHand?: boolean; roles?: GovernanceRole[] },
     ws: WebSocket,
   ): Session {
     const session: Session = {

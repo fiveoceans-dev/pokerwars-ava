@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { useGameStore } from "../hooks/useGameStore";
 import type { SeatUIState } from "../game-engine";
 import type { SeatState } from "../stores/seatStore";
 import { shortAddress } from "../utils/address";
@@ -22,6 +23,7 @@ export default function PlayerSeat({
   actionLabel,
   onClick,
 }: PlayerSeatProps) {
+  const tableType = useGameStore((state) => state.tableType);
   const isPlaceholderAddress = (addr: string) =>
     addr.toLowerCase() === "white" || /^0x0{40}$/.test(addr);
   
@@ -131,7 +133,7 @@ export default function PlayerSeat({
               </div>
               {/* Row 2: Stack */}
               <div className="text-[10px] font-mono font-bold text-[#fbbf24] leading-tight truncate">
-                ${stack.toLocaleString()}
+                {tableType === "cash" ? "$" : ""}{stack.toLocaleString()}
               </div>
             </div>
           </>

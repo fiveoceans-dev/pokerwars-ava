@@ -1,5 +1,17 @@
+const stripQuotes = (value: string | undefined | null): string => {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 const normalizeUrlList = (value: string): string[] => {
-  return value
+  return stripQuotes(value)
     .split(",")
     .map((segment) => segment.trim())
     .filter(Boolean);

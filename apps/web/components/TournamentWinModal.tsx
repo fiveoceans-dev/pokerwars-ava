@@ -35,7 +35,7 @@ export default function TournamentWinModal() {
       modalId="tournament-win-modal"
       open={!!winData}
       onClose={() => setWinData(null)}
-      className="bg-black border border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)]"
+      className="border border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.3)]"
     >
       <div className="flex flex-col items-center text-center space-y-6 py-4">
         <div className="text-6xl animate-bounce">🏆</div>

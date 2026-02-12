@@ -32,7 +32,7 @@ export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalPr
       modalId="buyin-modal" 
       open={true} 
       onClose={onCancel}
-      className="bg-black text-white border border-white/10"
+      className="text-white border border-white/10"
     >
       <div className="space-y-4 text-sm text-white/80">
         <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">Buy In</div>

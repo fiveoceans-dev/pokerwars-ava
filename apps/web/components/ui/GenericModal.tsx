@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface GenericModalProps {
   modalId: string;
@@ -17,6 +18,12 @@ export default function GenericModal({
   children,
   className,
 }: GenericModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
 
@@ -36,7 +43,7 @@ export default function GenericModal({
     };
   }, [open, onClose]);
 
-  if (!open) {
+  if (!open || !mounted) {
     return null;
   }
 
@@ -44,12 +51,12 @@ export default function GenericModal({
     event.stopPropagation();
   };
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${modalId}-title`}
-      className="fixed inset-0 z-50 grid place-items-center bg-black px-4 py-6"
+      className="fixed inset-0 z-[9999] grid place-items-center bg-black/75 backdrop-blur-sm px-4 py-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -57,11 +64,13 @@ export default function GenericModal({
       }}
     >
       <div
-        className={`relative w-full max-w-md p-6 mx-auto ${className ?? ""}`}
+        className={`relative w-full max-w-md p-6 mx-auto rounded-[32px] border border-white/10 bg-[#2a2a2a] text-white shadow-[0_20px_60px_rgba(0,0,0,0.8)] ${className ?? ""}`}
         onClick={handleContentClick}
       >
         {children}
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

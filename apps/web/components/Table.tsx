@@ -210,6 +210,7 @@ export default function Table({ timer }: { timer?: number | null }) {
 
   // Render chips separately to manage z-index
   const chipAt = (idx: number) => {
+    const tableType = gameStore.tableType;
     const pos = layout[idx];
     if (!pos) return null;
     const betAmount = safePlayerBets[idx] ?? 0;
@@ -233,7 +234,7 @@ export default function Table({ timer }: { timer?: number | null }) {
                     px-2 py-0.5 rounded-full border border-black/20 min-w-[32px]`}
       >
         <span className="text-[10px] font-bold text-white font-mono">
-          {formatNumber(betAmount)}
+          {tableType === "cash" ? "$" : ""}{formatNumber(betAmount)}
         </span>
       </div>
     );

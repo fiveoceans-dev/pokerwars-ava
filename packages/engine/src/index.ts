@@ -68,6 +68,7 @@ export type {
   ServerEvent,
   ClientCommand,
   LobbyTable,
+  GovernanceRole,
 } from "./network/networking";
 
 // Hand Evaluation tables are internal-only to avoid naming conflicts

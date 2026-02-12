@@ -48,9 +48,24 @@ export function validateAction(
       return validateCall(table, seat);
 
     case "BET":
+      // Capped betting check: if player is last aggressor but facing a bet (short all-in scenario),
+      // they cannot bet/raise again.
+      if (table.lastAggressor === seatId && table.currentBet > seat.streetCommitted) {
+        return {
+          valid: false,
+          error: "Betting is capped (raise too small to re-open)",
+        };
+      }
       return validateBet(table, seat, amount);
 
     case "RAISE":
+      // Capped betting check
+      if (table.lastAggressor === seatId && table.currentBet > seat.streetCommitted) {
+        return {
+          valid: false,
+          error: "Betting is capped (raise too small to re-open)",
+        };
+      }
       return validateRaise(table, seat, amount);
 
     case "ALLIN":
@@ -409,15 +424,17 @@ export function getAvailableActions(
   }
 
   // Bet
+  const isCapped = table.lastAggressor === seatId && table.currentBet > seat.streetCommitted;
+
   if (table.currentBet === 0 && seat.chips >= getMinimumBet(table)) {
-    actions.push("BET");
+    if (!isCapped) actions.push("BET");
   }
 
   // Raise
   if (table.currentBet > 0 && seat.chips > toCall) {
     const minRaise = calculateMinimumRaise(table);
     if (seat.chips >= toCall + minRaise) {
-      actions.push("RAISE");
+      if (!isCapped) actions.push("RAISE");
     }
   }
 

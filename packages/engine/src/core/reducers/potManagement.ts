@@ -46,17 +46,48 @@ export function processShowdown(table: Table, results: any[]): StateTransition {
   const playersInHand = table.seats.filter(seat => 
     seat.pid && 
     (seat.status === "active" || seat.status === "allin")
-  ).length;
+  );
 
-  console.log(`🃏 [Reducer] Starting showdown with ${playersInHand} players`);
+  console.log(`🃏 [Reducer] Starting showdown with ${playersInHand.length} players`);
+
+  // Determine who MUST show first (Last Aggressor rule)
+  // If no aggressive action on river (checked around), first active player left of button shows.
+  let firstShowerPid: string | undefined;
+  
+  if (table.lastAggressor !== undefined) {
+    const aggressor = table.seats[table.lastAggressor];
+    if (aggressor && aggressor.pid && (aggressor.status === "active" || aggressor.status === "allin")) {
+      firstShowerPid = aggressor.pid;
+    }
+  }
+
+  if (!firstShowerPid && playersInHand.length > 0) {
+    // Find first active player after button
+    const seatCount = table.seats.length;
+    for (let i = 1; i <= seatCount; i++) {
+      const idx = (table.button + i) % seatCount;
+      const seat = table.seats[idx];
+      if (seat && seat.pid && (seat.status === "active" || seat.status === "allin")) {
+        firstShowerPid = seat.pid;
+        break;
+      }
+    }
+  }
+
+  // Add the mandatory shower to the revealed set
+  const revealedSet = new Set((table.revealedPids || []).map((p) => p.toLowerCase()));
+  if (firstShowerPid) {
+    console.log(`🃏 [Reducer] ${firstShowerPid} must show first (Last Aggressor/Position)`);
+    revealedSet.add(firstShowerPid.toLowerCase());
+  }
 
   const nextState = {
     ...table,
     phase: "showdown" as Phase,
     // Clear the actor since no more betting
     actor: undefined,
-    // Keep existing revealedPids (explicit reveals)
-    revealedPids: (table.revealedPids || []).map((p) => p.toLowerCase()),
+    // Keep existing revealedPids (explicit reveals) + mandatory first shower
+    revealedPids: Array.from(revealedSet),
     autoRevealAll: false, // Don't force face-up for everyone
   };
 
@@ -121,7 +152,7 @@ export function processPayout(
     ...table,
     phase: "handEnd" as Phase,
     seats: newSeats,
-    pots: [], // Clear pots after payout
+    // pots: [], // Keep pots for display during payout; cleared in endHand
     actor: undefined,
     lastAggressor: undefined,
     currentBet: 0,

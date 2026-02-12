@@ -23,26 +23,25 @@ export function PotDisplayBubbles({
   }
 
   return (
-    <>
-      {/* Pot (total) above the community cards, fixed position */}
+    <div className="flex flex-col items-center justify-center min-h-[40px]">
+      {/* Pot (total) above the community cards */}
       {showPot && (
-        <div
-          className="absolute left-1/2 z-10"
-          style={{ left: '50%', top: 'calc(50% - 44px)', transform: 'translate(-50%, 0)' }}
-        >
-          <div className="text-white text-sm font-semibold">Pot: ${pot}</div>
+        <div className="text-white text-sm font-bold tracking-tight opacity-90">
+          Pot: ${pot.toLocaleString()}
         </div>
       )}
 
-      {/* Current round bet amount (no label), same style, below pot */}
+      {/* Separator line when both are present */}
+      {showPot && showCurrentRound && (
+        <div className="w-12 h-[1px] bg-white/20 my-1.5" />
+      )}
+
+      {/* Current round bet amount (no label) */}
       {showCurrentRound && (
-        <div
-          className="absolute left-1/2 z-10"
-          style={{ left: '50%', top: 'calc(50% + 32px)', transform: 'translate(-50%, 0)' }}
-        >
-          <div className="text-white text-sm font-semibold">${currentRoundBetting}</div>
+        <div className="text-[#fbbf24] text-sm font-black font-mono animate-in fade-in slide-in-from-bottom-1 duration-300">
+          ${currentRoundBetting.toLocaleString()}
         </div>
       )}
-    </>
+    </div>
   );
 }

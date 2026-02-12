@@ -95,6 +95,11 @@ class WebSocketFSMBridge extends EventEmitter {
     return table?.seats?.length ?? 9;
   }
 
+  private resolveTableType(tableId: string): "cash" | "stt" | "mtt" {
+    if (tableId.startsWith("stt-")) return "stt";
+    if (tableId.startsWith("mtt-")) return "mtt";
+    return "cash";
+  }
 
   /**
    * Get canonical identity for consistent lookups
@@ -372,9 +377,11 @@ class WebSocketFSMBridge extends EventEmitter {
     // State changes - send Table format directly to clients
     engine.on("stateChanged", (table: Table) => {
       const maxPlayers = this.resolveMaxPlayers(tableId, table);
+      const tableType = this.resolveTableType(tableId);
       this.emit("broadcast", tableId, {
         type: "TABLE_SNAPSHOT",
         table, // Send Table directly - clients adapt
+        tableType,
         maxPlayers,
       });
       // Persist table state for crash recovery
@@ -1282,6 +1289,7 @@ class WebSocketFSMBridge extends EventEmitter {
         smallBlind: table.smallBlind,
         bigBlind: table.bigBlind,
         stakeLevel: config?.stakeLevel,
+        tableType: this.resolveTableType(id),
         buyIn: config
           ? {
               min: config.buyIn.min,

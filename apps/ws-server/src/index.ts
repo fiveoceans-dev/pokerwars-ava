@@ -94,23 +94,16 @@ async function refreshGovernanceAssignments() {
   logger.info(`🔐 Loaded governance assignments for ${governanceAssignments.size} wallets`);
 }
 
-function getGovernanceRoles(userId?: string): GovernanceRoleType[] {
+function getDbGovernanceRoles(userId?: string): GovernanceRoleType[] {
   const normalized = normalizeLedgerWallet(userId);
   if (!normalized) return [];
   const assigned = governanceAssignments.get(normalized) ?? [];
-  if (isUserAdmin(userId) && !assigned.includes(GovernanceRoleType.ADMIN)) {
-    return [...assigned, GovernanceRoleType.ADMIN];
-  }
   return assigned;
 }
 
-function applyGovernanceRoles(session: Session) {
-  session.roles = getGovernanceRoles(session.userId);
-}
-
 function isGovernanceAuthorized(wallet?: string): boolean {
-  const roles = getGovernanceRoles(wallet);
-  return roles.length > 0;
+  const roles = getDbGovernanceRoles(wallet);
+  return roles.length > 0 || isUserAdmin(wallet);
 }
 
 async function readRequestBody(req: IncomingMessage): Promise<any> {
@@ -1012,12 +1005,13 @@ function sanitizeTableForSession(table: Table, session: Session, roomId: string)
 /**
  * Send a sanitized TABLE_SNAPSHOT to a specific client
  */
-function sendSanitizedSnapshot(ws: WebSocket, session: Session, roomId: string, table: Table, maxPlayers?: number) {
+function sendSanitizedSnapshot(ws: WebSocket, session: Session, roomId: string, table: Table, tableType: "cash" | "stt" | "mtt", maxPlayers?: number) {
   const sanitized = sanitizeTableForSession(table, session, roomId);
   ws.send(JSON.stringify({
     tableId: roomId,
     type: "TABLE_SNAPSHOT",
     table: sanitized,
+    tableType,
     maxPlayers,
   }));
 }
@@ -1393,6 +1387,7 @@ ws.on("message", async (data) => {
           try {
             const table = bridge.getTableState(command.tableId);
             const maxPlayers = bridge.getMaxPlayers(command.tableId, table);
+            const tableType = command.tableId.startsWith("stt-") ? "stt" : command.tableId.startsWith("mtt-") ? "mtt" : "cash";
             
             // Proactively restore seat mapping on rejoin to prevent action failures
             if (session.userId) {
@@ -1417,7 +1412,7 @@ ws.on("message", async (data) => {
               }
             }
             
-            sendSanitizedSnapshot(ws, session, command.tableId, table, maxPlayers);
+            sendSanitizedSnapshot(ws, session, command.tableId, table, tableType as any, maxPlayers);
           } catch (error) {
             ws.send(JSON.stringify({
               tableId: command.tableId,
@@ -1479,7 +1474,8 @@ ws.on("message", async (data) => {
               try {
                 const table = bridge.getTableState(existing.roomId);
                 const maxPlayers = bridge.getMaxPlayers(existing.roomId, table);
-                sendSanitizedSnapshot(ws, session, existing.roomId, table, maxPlayers);
+                const tableType = existing.roomId.startsWith("stt-") ? "stt" : existing.roomId.startsWith("mtt-") ? "mtt" : "cash";
+                sendSanitizedSnapshot(ws, session, existing.roomId, table, tableType as any, maxPlayers);
               } catch (err) {
                 logger.warn(`⚠️ [REATTACH] Table ${existing.roomId} not found; skipping snapshot`, err);
               }
@@ -1528,7 +1524,8 @@ ws.on("message", async (data) => {
               try {
                 const table = bridge.getTableState(session.roomId);
                 const maxPlayers = bridge.getMaxPlayers(session.roomId, table);
-                sendSanitizedSnapshot(ws, session, session.roomId, table, maxPlayers);
+                const tableType = session.roomId.startsWith("stt-") ? "stt" : session.roomId.startsWith("mtt-") ? "mtt" : "cash";
+                sendSanitizedSnapshot(ws, session, session.roomId, table, tableType as any, maxPlayers);
               } catch (err) {
                 logger.warn(`⚠️ [ATTACH] Table ${session.roomId} not found; skipping snapshot`, err);
               }

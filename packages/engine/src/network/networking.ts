@@ -11,6 +11,7 @@ export interface LobbyTable {
   smallBlind: number;
   bigBlind: number;
   stakeLevel?: string;
+  tableType: "cash" | "stt" | "mtt";
   buyIn?: {
     min: number;
     max: number;
@@ -33,6 +34,7 @@ export type ServerEvent =
       tableId: string;
       type: "TABLE_SNAPSHOT";
       table: Table;
+      tableType: "cash" | "stt" | "mtt";
       maxPlayers?: number;
     }
   | { tableId: ""; type: "TABLE_LIST"; tables: LobbyTable[] }

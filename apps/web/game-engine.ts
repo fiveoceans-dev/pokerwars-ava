@@ -22,6 +22,7 @@ export type {
   ServerEvent,
   ClientCommand,
   LobbyTable,
+  GovernanceRole,
 } from "@hyper-poker/engine";
 
 // Runtime values from local wrapper (to avoid TS analyzing the engine sources)

@@ -16,7 +16,7 @@ export const isWalletConnectConfigured =
 const metadata = {
   name: "PokerWars",
   description: "PokerWars tournaments on Hyperliquid",
-  url: readPublicEnv("NEXT_PUBLIC_APP_URL") || "https://pokerwars.app",
+  url: readPublicEnv("NEXT_PUBLIC_APP_URL") || "http://localhost:8090",
   icons: ["https://avatars.githubusercontent.com/u/37784886?s=200&v=4"],
 };
 
@@ -117,10 +117,8 @@ const transports = Object.fromEntries(
 const wagmiAdapter = new WagmiAdapter({
   projectId: walletConnectProjectId,
   networks: wagmiChains,
-  defaultNetwork: wagmiDefaultChain,
   ssr: true,
   transports,
-  metadata,
   multiInjectedProviderDiscovery: true,
 });
 export const wagmiConfig = wagmiAdapter.wagmiConfig ?? createConfig({
@@ -151,10 +149,9 @@ export function ensureAppKitReady(): AppKit | null {
     return globalScope.__hyperPokerAppKit__;
   }
   const appKit = createAppKit({
-    adapters: [wagmiAdapter],
+    adapters: [wagmiAdapter] as any,
     projectId: walletConnectProjectId,
     networks: wagmiChains,
-    defaultNetwork: wagmiDefaultChain,
     metadata,
     themeVariables: web3ModalThemeVariables,
     features: {

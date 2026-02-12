@@ -43,44 +43,90 @@ if [[ -n "${OVERRIDE_SEED_GAMES}" ]]; then
   export SEED_GAMES
 fi
 
-# Ensure DATABASE_URL exists
-if [[ -z "${DATABASE_URL:-}" ]]; then
-  echo "ERROR: DATABASE_URL is not set. Please add it to ${ENV_FILE}." >&2
-  exit 1
-fi
+# Helper to extract a variable from .env without sourcing it (avoids shell syntax issues)
+get_env_var() {
+    val=$(grep "^$1=" "${ENV_FILE}" | cut -d= -f2-)
+    # Strip leading/trailing quotes (double or single)
+    val=$(echo "$val" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+    echo "$val"
+}
 
-# If DATABASE_URL points to host.docker.internal, rewrite to localhost for non-docker runs
-LOCAL_DATABASE_URL="${DATABASE_URL/host.docker.internal/localhost}"
-export DATABASE_URL="${LOCAL_DATABASE_URL}"
+POSTGRES_USER="${POSTGRES_USER:-$(get_env_var POSTGRES_USER)}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(get_env_var POSTGRES_PASSWORD)}"
+POSTGRES_DB="${POSTGRES_DB:-$(get_env_var POSTGRES_DB)}"
+POSTGRES_PORT_ENV="${POSTGRES_PORT:-$(get_env_var POSTGRES_PORT)}"
 
-# Ensure Postgres exists by optionally launching a lightweight docker container if missing
-DB_PORT="5432"
+# Defaults if missing
+POSTGRES_USER=${POSTGRES_USER:-postgres}
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+POSTGRES_DB=${POSTGRES_DB:-pokerwars}
 DB_CONTAINER="pokerwars-pg"
 
-maybe_start_db() {
-  if nc -z localhost "${DB_PORT}" >/dev/null 2>&1; then
-    echo "Postgres already running on localhost:${DB_PORT}"
-    return
-  fi
+# Dynamic Port Discovery for Local Dev
+if [ -n "$POSTGRES_PORT_ENV" ]; then
+    DB_PORT=$POSTGRES_PORT_ENV
+    echo "Using explicitly configured POSTGRES_PORT: $DB_PORT"
+else
+    # Find first available port starting from 5432
+    SEARCH_PORT=5432
+    MAX_PORT=5440
+    FOUND_PORT=""
+    
+    echo "Searching for an available Postgres port..."
+    while [ $SEARCH_PORT -le $MAX_PORT ]; do
+        if ! nc -z localhost $SEARCH_PORT > /dev/null 2>&1; then
+            FOUND_PORT=$SEARCH_PORT
+            break
+        fi
+        SEARCH_PORT=$((SEARCH_PORT + 1))
+    done
 
-  # Start or reuse named container
+    if [ -z "$FOUND_PORT" ]; then
+        echo "ERROR: No available ports found in range 5432-$MAX_PORT."
+        exit 1
+    fi
+    DB_PORT=$FOUND_PORT
+    echo "Selected available port: $DB_PORT"
+fi
+
+maybe_start_db() {
+  # Check if container exists
   if docker ps -a --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$"; then
-    echo "Starting existing Postgres container '${DB_CONTAINER}'..."
-    docker start "${DB_CONTAINER}" >/dev/null
+    EXISTING_PORT=$(docker inspect "${DB_CONTAINER}" --format='{{(index (index .HostConfig.PortBindings "5432/tcp") 0).HostPort}}' 2>/dev/null || echo "unknown")
+    
+    if [ "$EXISTING_PORT" != "$DB_PORT" ]; then
+        echo "Port mismatch detected: existing container uses $EXISTING_PORT, but we need $DB_PORT."
+        docker stop "${DB_CONTAINER}" >/dev/null 2>&1 || true
+        docker rm "${DB_CONTAINER}" >/dev/null 2>&1 || true
+        
+        echo "Creating new postgres container on port $DB_PORT..."
+        docker run -d \
+          --name "${DB_CONTAINER}" \
+          -e POSTGRES_USER="${POSTGRES_USER}" \
+          -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+          -e POSTGRES_DB="${POSTGRES_DB}" \
+          -p "${DB_PORT}:5432" \
+          postgres:16 >/dev/null
+    elif docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$"; then
+        echo "Postgres container '${DB_CONTAINER}' is already running on port $DB_PORT."
+    else
+        echo "Starting existing stopped postgres container on port $DB_PORT..."
+        docker start "${DB_CONTAINER}" >/dev/null
+    fi
   else
-    echo "No Postgres on localhost:${DB_PORT}; starting docker '${DB_CONTAINER}'..."
+    echo "Creating new postgres container on port $DB_PORT..."
     docker run -d \
       --name "${DB_CONTAINER}" \
-      -e POSTGRES_USER="${POSTGRES_USER:-postgres}" \
-      -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}" \
-      -e POSTGRES_DB="${POSTGRES_DB:-pokerwars}" \
+      -e POSTGRES_USER="${POSTGRES_USER}" \
+      -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+      -e POSTGRES_DB="${POSTGRES_DB}" \
       -p "${DB_PORT}:5432" \
       postgres:16 >/dev/null
   fi
 
   echo "Waiting for Postgres to become ready..."
   for i in $(seq 1 30); do
-    if docker exec "${DB_CONTAINER}" pg_isready -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-pokerwars}" >/dev/null 2>&1; then
+    if docker exec "${DB_CONTAINER}" pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
       echo "Postgres is ready."
       return
     fi
@@ -92,6 +138,9 @@ maybe_start_db() {
 }
 
 maybe_start_db
+
+# Construct DATABASE_URL using the discovered port
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${DB_PORT}/${POSTGRES_DB}?schema=public"
 
 # Run migrations/seed on host DB
 if [[ "${AUTO_MIGRATE}" == "true" ]]; then

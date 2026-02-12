@@ -59,9 +59,10 @@ strip_quotes() {
     echo "$1" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
 }
 
-POSTGRES_USER=$(get_env_var POSTGRES_USER)
-POSTGRES_PASSWORD=$(get_env_var POSTGRES_PASSWORD)
-POSTGRES_DB=$(get_env_var POSTGRES_DB)
+POSTGRES_USER="${POSTGRES_USER:-$(get_env_var POSTGRES_USER)}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(get_env_var POSTGRES_PASSWORD)}"
+POSTGRES_DB="${POSTGRES_DB:-$(get_env_var POSTGRES_DB)}"
+POSTGRES_PORT_ENV="${POSTGRES_PORT:-$(get_env_var POSTGRES_PORT)}"
 HYPERLIQUID_CHECK=$(get_env_var NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID)
 
 # Defaults if missing
@@ -69,6 +70,34 @@ POSTGRES_USER=${POSTGRES_USER:-postgres}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
 POSTGRES_DB=${POSTGRES_DB:-pokerwars}
 CONTAINER_NAME="pokerwars-pg"
+
+# Dynamic Port Discovery for Local Dev
+if [ -n "$POSTGRES_PORT_ENV" ]; then
+    POSTGRES_PORT=$POSTGRES_PORT_ENV
+    echo "Using explicitly configured POSTGRES_PORT: $POSTGRES_PORT"
+else
+    # Find first available port starting from 5432
+    SEARCH_PORT=5432
+    MAX_PORT=5440
+    FOUND_PORT=""
+    
+    echo "Searching for an available Postgres port..."
+    while [ $SEARCH_PORT -le $MAX_PORT ]; do
+        # Use nc -z to check if port is open (busy)
+        if ! nc -z localhost $SEARCH_PORT > /dev/null 2>&1; then
+            FOUND_PORT=$SEARCH_PORT
+            break
+        fi
+        SEARCH_PORT=$((SEARCH_PORT + 1))
+    done
+
+    if [ -z "$FOUND_PORT" ]; then
+        echo "ERROR: No available ports found in range 5432-$MAX_PORT."
+        exit 1
+    fi
+    POSTGRES_PORT=$FOUND_PORT
+    echo "Selected available port: $POSTGRES_PORT"
+fi
 
 # Validation
 if [ -z "$POSTGRES_PASSWORD" ]; then
@@ -87,21 +116,37 @@ fi
 echo "Checking Postgres container status..."
 # Check if container exists (running or stopped)
 if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    # Check if it is currently running
-    if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-        echo "Postgres container '${CONTAINER_NAME}' is already running."
+    # Check if the existing container is using the correct port mapping
+    # Note: we check the host port mapped to the internal 5432/tcp
+    EXISTING_PORT=$(docker inspect "${CONTAINER_NAME}" --format='{{(index (index .HostConfig.PortBindings "5432/tcp") 0).HostPort}}' 2>/dev/null || echo "unknown")
+    
+    if [ "$EXISTING_PORT" != "$POSTGRES_PORT" ]; then
+        echo "Port mismatch detected: existing container uses $EXISTING_PORT, but we need $POSTGRES_PORT."
+        echo "Removing old container to update port mapping..."
+        docker stop "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+        docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+        
+        echo "Creating and starting new postgres container on port $POSTGRES_PORT..."
+        docker run --name "${CONTAINER_NAME}" \
+            -e POSTGRES_USER="${POSTGRES_USER}" \
+            -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            -e POSTGRES_DB="${POSTGRES_DB}" \
+            -p "${POSTGRES_PORT}:5432" \
+            -d postgres:16 > /dev/null
+    elif docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        echo "Postgres container '${CONTAINER_NAME}' is already running on port $POSTGRES_PORT."
     else
-        echo "Starting existing stopped postgres container..."
+        echo "Starting existing stopped postgres container on port $POSTGRES_PORT..."
         docker start "${CONTAINER_NAME}" > /dev/null
     fi
 else
-    echo "Creating and starting new postgres container..."
-    # Explicitly pass the variables we extracted/defaulted to ensure the image gets them.
+    echo "Creating and starting new postgres container on port $POSTGRES_PORT..."
+    # Map the dynamic host port to the standard internal 5432
     docker run --name "${CONTAINER_NAME}" \
         -e POSTGRES_USER="${POSTGRES_USER}" \
         -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
         -e POSTGRES_DB="${POSTGRES_DB}" \
-        -p "5432:5432" \
+        -p "${POSTGRES_PORT}:5432" \
         -d postgres:16 > /dev/null
 fi
 
@@ -110,6 +155,7 @@ echo "Waiting for Postgres to be ready..."
 MAX_RETRIES=30
 count=0
 while [ $count -lt $MAX_RETRIES ]; do
+    # Note: we check readiness via the mapped host port
     if docker exec "${CONTAINER_NAME}" pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" > /dev/null 2>&1; then
         echo "Postgres is ready."
         break
@@ -127,8 +173,8 @@ if [ $count -eq $MAX_RETRIES ]; then
 fi
 
 # Export DATABASE_URL for the script's internal use (migrations) and for docker-compose substitution if needed
-# We construct this manually to ensure it points to the host's docker gateway
-export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/${POSTGRES_DB}?schema=public"
+# We construct this manually to ensure it points to the host's docker gateway via the dynamic port
+export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public"
 
 echo "Restarting web and ws-server containers..."
 # Clean up old containers to ensure a fresh start
@@ -143,7 +189,7 @@ if grep -q "^DATABASE_URL=" "${ENV_FILE}"; then
         postgresql://*|postgres://*)
             if echo "${raw_db_url}" | grep -qE 'localhost|127\.0\.0\.1'; then
                 echo "ERROR: DATABASE_URL points to localhost. For Docker, use host.docker.internal." >&2
-                echo "Example: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/${POSTGRES_DB}?schema=public" >&2
+                echo "Example: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public" >&2
                 exit 1
             fi
             ;;
@@ -157,11 +203,13 @@ else
     exit 1
 fi
 
-# Run migrations before starting services (host connects to Postgres on localhost).
+# Run migrations before starting services (host connects to Postgres on localhost:PORT).
 if [ "${AUTO_MIGRATE}" = "true" ]; then
-    echo "Running database migrations on the host..."
-    export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
+    echo "Running database migrations on the host using port $POSTGRES_PORT..."
+    export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public"
     ./scripts/db_bootstrap.sh
+    echo "Generating Prisma client for latest schema..."
+    npm run db:generate
     if [ "${AUTO_SEED}" = "true" ]; then
         echo "Seeding database (idempotent)..."
         npm run seed:all -w apps/ws-server

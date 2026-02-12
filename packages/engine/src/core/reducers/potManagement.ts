@@ -50,25 +50,14 @@ export function processShowdown(table: Table, results: any[]): StateTransition {
 
   console.log(`🃏 [Reducer] Starting showdown with ${playersInHand} players`);
 
-  // Force all remaining players face-up at showdown start
-  const revealAllPids = table.seats
-    .filter(
-      (seat) =>
-        seat.pid &&
-        seat.holeCards &&
-        (seat.status === "active" || seat.status === "allin"),
-    )
-    .map((s) => s.pid!.toLowerCase());
-
   const nextState = {
     ...table,
     phase: "showdown" as Phase,
     // Clear the actor since no more betting
     actor: undefined,
-    revealedPids: Array.from(
-      new Set([...(table.revealedPids || []).map((p) => p.toLowerCase()), ...revealAllPids]),
-    ),
-    autoRevealAll: true,
+    // Keep existing revealedPids (explicit reveals)
+    revealedPids: (table.revealedPids || []).map((p) => p.toLowerCase()),
+    autoRevealAll: false, // Don't force face-up for everyone
   };
 
   const sideEffects: SideEffect[] = [

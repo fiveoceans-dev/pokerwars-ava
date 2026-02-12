@@ -3,6 +3,7 @@ import { create } from "zustand";
 export interface SeatState {
   playerId: string;
   name?: string | null;
+  chips?: number;
 }
 
 interface SeatStore {

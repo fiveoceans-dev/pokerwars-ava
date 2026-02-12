@@ -111,12 +111,15 @@ JOB_ARGS=(
   --region "$REGION"
   --set-env-vars="$ENV_VARS"
   --set-env-vars="AUTO_SEED=${AUTO_SEED:-}"
+  --set-env-vars="AUTO_GRANT_DB=${AUTO_GRANT_DB:-}"
   --add-cloudsql-instances "$CLOUDSQL_CONN"
   # --command "npm"
   # --args "run,prisma:migrate:deploy,-w,apps/ws-server"
 
   --command "bash"
-  --args "-c,echo '=== DB DEBUG ===' && echo DATABASE_URL: \$DATABASE_URL && echo AUTO_SEED: \$AUTO_SEED && psql \$DATABASE_URL -c 'SELECT 1' >/dev/null 2>&1 && echo 'DB OK' || echo 'DB FAIL' && echo '=== PRISMA ===' && cd /app/apps/ws-server && npx prisma migrate deploy --schema=prisma/schema.prisma 2>&1 && npx prisma generate && if [[ \"\${AUTO_SEED:-}\" == \"1\" || \"\${AUTO_SEED:-}\" == \"true\" ]]; then echo '=== SEEDING ===' && echo 'Running npm run seed:all' && npm run seed:all && echo 'Seeding: SUCCESS' && psql \$DATABASE_URL -c 'SELECT COUNT(*) FROM \"Treasury\";' 2>/dev/null && echo 'Treasury seeded' || echo 'Treasury check failed'; else echo 'Seeding: SKIPPED (AUTO_SEED=false)'; fi && echo 'DONE' || echo 'Migration failed'"
+  # NOTE: The prisma job image may not have `psql`. Prisma is enough to validate DB connectivity.
+  # We intentionally avoid `psql` here and rely on `prisma migrate deploy` to fail fast on connectivity/auth issues.
+  --args "-ceu,echo '=== DB DEBUG ===' && echo DATABASE_URL: \$DATABASE_URL && echo AUTO_SEED: \$AUTO_SEED && echo AUTO_GRANT_DB: \$AUTO_GRANT_DB && if [[ \"\${AUTO_GRANT_DB:-}\" == \"1\" || \"\${AUTO_GRANT_DB:-}\" == \"true\" ]]; then echo '=== GRANTS ===' && echo 'Grants requested but skipped (psql not installed in job image). Ensure DB_USER owns schema or run grants separately.'; fi && echo '=== PRISMA ===' && cd /app/apps/ws-server && npx prisma migrate deploy --schema=prisma/schema.prisma && npx prisma generate && if [[ \"\${AUTO_SEED:-}\" == \"1\" || \"\${AUTO_SEED:-}\" == \"true\" ]]; then echo '=== SEEDING ===' && npm run seed:all && echo 'Seeding: SUCCESS'; else echo 'Seeding: SKIPPED (AUTO_SEED=false)'; fi && echo 'DONE'"
 )
 
 if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then

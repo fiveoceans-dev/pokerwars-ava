@@ -14,17 +14,25 @@ fi
 
 : "${DATABASE_URL:?Missing DATABASE_URL}"
 
+# Mask password for display
+MASKED_URL=$(echo "$DATABASE_URL" | sed 's/:[^/@]*@/:****@/')
+echo "Targeting database: $MASKED_URL"
+
 cd "$ROOT_DIR/apps/ws-server"
 
-if [[ ! -d "prisma/migrations" ]]; then
-  # No migrations checked in yet; create tables directly from schema.
-  echo "No prisma migrations found; running prisma db push..."
-  npx prisma db push --schema=prisma/schema.prisma
+# Check for schema changes and create a new migration automatically if needed.
+# This makes `start_local.sh` non-interactive for migration creation.
+# It uses a timestamped name for the new migration.
+if npx prisma migrate diff --from-schema-datasource=prisma/schema.prisma --to-schema-datasource=prisma/schema.prisma --exit-code; then
+  echo "No schema changes detected, skipping migration creation."
 else
-  # Standard production-safe path when migrations exist.
-  echo "Running prisma migrate deploy..."
-  npx prisma migrate deploy --schema=prisma/schema.prisma
+  echo "Schema changes detected. Creating new migration non-interactively..."
+  npx prisma migrate dev --create-only --name "auto-migration-$(date +%Y%m%d%H%M%S)" --skip-generate --schema=prisma/schema.prisma
 fi
+
+# Now apply all pending migrations. This is idempotent.
+echo "Running prisma migrate deploy..."
+npx prisma migrate deploy --schema=prisma/schema.prisma
 
 echo "Generating Prisma client..."
 npx prisma generate --schema=prisma/schema.prisma

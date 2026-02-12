@@ -60,6 +60,14 @@ IMAGE_URI="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$WS_SERVICE_NAME:$IMAGE
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com >/dev/null
 
+# Ensure the chosen service account can connect to Cloud SQL (required for Cloud Run + Cloud SQL connector).
+if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:${SERVICE_ACCOUNT}" \
+    --role="roles/cloudsql.client" \
+    >/dev/null 2>&1 || true
+fi
+
 # ----------------------------
 # Build image
 # ----------------------------
@@ -112,14 +120,14 @@ if [[ "${SKIP_MIGRATE:-}" == "1" || "${SKIP_MIGRATE:-}" == "true" ]]; then
 elif [[ "${AUTO_MIGRATE:-}" == "1" || "${AUTO_MIGRATE:-}" == "true" ]]; then
   echo "Running Prisma migrations via Cloud Run Job..."
 
-  if [[ "${AUTO_GRANT_DB:-}" == "1" || "${AUTO_GRANT_DB:-}" == "true" ]]; then
-    "$ROOT_DIR/scripts/db_grant.sh"
-  fi
+  # NOTE: For private Cloud SQL (private IP), local `psql` cannot reach the instance.
+  # Grants (if needed) are executed inside the Cloud Run migration job where Cloud SQL sockets are available.
 
   IMAGE_FOR_JOB="$IMAGE_URI" \
   ENV_FILE_FOR_JOB="$WS_ENV_FILE" \
   DB_INSTANCE="$DB_INSTANCE" \
   AUTO_SEED="$AUTO_SEED" \
+  AUTO_GRANT_DB="${AUTO_GRANT_DB:-}" \
   "$ROOT_DIR/scripts/run_prisma_job.sh"
 fi
 
@@ -142,6 +150,10 @@ fi
 if [[ "${USE_VPC_CONNECTOR:-}" == "true" && -n "${VPC_CONNECTOR:-}" ]]; then
   DEPLOY_ARGS+=(--vpc-connector "$VPC_CONNECTOR")
   [[ -n "${VPC_EGRESS:-}" ]] && DEPLOY_ARGS+=(--vpc-egress "$VPC_EGRESS")
+fi
+
+if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+  DEPLOY_ARGS+=(--service-account "$SERVICE_ACCOUNT")
 fi
 
 gcloud run deploy "$WS_SERVICE_NAME" "${DEPLOY_ARGS[@]}"

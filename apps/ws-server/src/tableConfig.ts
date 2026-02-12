@@ -63,14 +63,6 @@ export const TABLES: TableConfig[] = [
     buyIn: calculateBuyInLimits(10), // 300–1,000 chips
     stakeLevel: "high",
   },
-  {
-    id: "cash-50-100",
-    name: "50/100 NLH",
-    blinds: { small: 50, big: 100 },
-    maxPlayers: DEFAULT_MAX_PLAYERS,
-    buyIn: calculateBuyInLimits(100), // 3,000–10,000 chips
-    stakeLevel: "whale",
-  },
 ];
 
 let runtimeTables: TableConfig[] = TABLES;

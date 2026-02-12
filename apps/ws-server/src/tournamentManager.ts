@@ -1,18 +1,26 @@
-import fs from "fs";
-import path from "path";
+
 import { logger } from "@hyper-poker/engine/utils/logger";
+import { schedule as cronSchedule, validate as validateCron, ScheduledTask } from "node-cron";
 import type {
   PrismaClient,
   Tournament as DbTournament,
   TournamentRegistration as DbRegistration,
   TournamentLevel as DbLevel,
   TournamentTable as DbTable,
+  GameTemplate as DbGameTemplate,
+  GameTemplateType,
+  SystemConfig,
+  TournamentType as DbTournamentType,
+  TournamentStartMode as DbTournamentStartMode,
+  BuyInCurrency as DbBuyInCurrency,
+  PayoutMode as DbPayoutMode,
 } from "@prisma/client";
 
-export type TournamentType = "stt" | "mtt";
+// --- Type Definitions ---
+
+export type TournamentType = "stt" | "mtt" | "cash"; 
 export type TournamentStartMode = "full" | "scheduled";
 export type TournamentStatus = "registering" | "scheduled" | "running" | "finished" | "cancelled" | "template";
-
 export type TournamentPayoutMode = "top_x_split" | "tickets";
 
 export interface TournamentPayout {
@@ -29,10 +37,11 @@ export interface TournamentBuyIn {
 export interface TournamentDefinition {
   id: string;
   name: string;
-  gameType?: string;
+  gameType: string;
   type: TournamentType;
   startMode: TournamentStartMode;
-  startAt?: string; // ISO string for scheduled MTTs
+  startAt?: string;
+  schedule?: string;
   buyIn: TournamentBuyIn;
   lateRegMinutes?: number;
   maxPlayers: number;
@@ -46,7 +55,7 @@ export interface TournamentDefinition {
 export interface TournamentState extends TournamentDefinition {
   status: TournamentStatus;
   registered: Set<string>;
-  tables: string[]; // table IDs allocated to the tournament
+  tables: string[];
   createdAt: string;
   updatedAt: string;
   lateRegEndAt?: string;
@@ -65,204 +74,225 @@ export interface PublicTournamentState extends Omit<TournamentState, "registered
 
 export type RegistrationStatus = "REGISTERED" | "SEATED" | "BUSTED" | "CASHED";
 
-type MttSlot = { hour: number; minute: number };
+// --- Helper Functions ---
 
-const defaultTournaments: TournamentDefinition[] = [
-  {
-    id: "stt-daily-1",
-    name: "Daily SNG",
-    type: "stt",
-    startMode: "full",
-    buyIn: { currency: "chips", amount: 100 },
-    maxPlayers: 9,
-    startingStack: 5000,
-    blindScheduleId: "default-stt",
-    payout: { mode: "top_x_split", topX: 3 },
-    tableConfigId: "mid",
-  },
-  {
-    id: "stt-daily-6max",
-    name: "Daily SNG (6-max)",
-    type: "stt",
-    startMode: "full",
-    buyIn: { currency: "chips", amount: 100 },
-    maxPlayers: 6,
-    startingStack: 5000,
-    blindScheduleId: "default-stt",
-    payout: { mode: "top_x_split", topX: 2 },
-    tableConfigId: "mid",
-  },
-  {
-    id: "mtt-daily-1",
-    name: "PokerWars MTT",
-    type: "mtt",
-    startMode: "scheduled",
-    startAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    buyIn: { currency: "chips", amount: 100 },
-    lateRegMinutes: 120,
-    maxPlayers: 10000,
-    startingStack: 15000,
-    blindScheduleId: "default-mtt",
-    payout: { mode: "top_x_split", topX: 1500 },
-    tableConfigId: "mid",
-  },
-];
-
-function parseDailyMttSlots(raw?: string): MttSlot[] {
-  const source = raw?.trim() || "12:00,20:00";
-  const slots = source
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map((entry) => {
-      const [h, m = "0"] = entry.split(":");
-      const hour = Math.min(23, Math.max(0, Number(h)));
-      const minute = Math.min(59, Math.max(0, Number(m)));
-      return { hour, minute };
-    })
-    .filter((slot) => Number.isFinite(slot.hour) && Number.isFinite(slot.minute));
-  return slots.length ? slots : [{ hour: 12, minute: 0 }, { hour: 20, minute: 0 }];
-}
-
-function getNextSlotTimes(now: Date, slots: MttSlot[], count: number): Date[] {
-  const candidates: Date[] = [];
-  const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
-  for (let dayOffset = 0; dayOffset < 3; dayOffset += 1) {
-    slots.forEach((slot) => {
-      const dt = new Date(base.getTime() + dayOffset * 24 * 60 * 60 * 1000);
-      dt.setUTCHours(slot.hour, slot.minute, 0, 0);
-      if (dt.getTime() > now.getTime()) {
-        candidates.push(dt);
-      }
-    });
-  }
-  candidates.sort((a, b) => a.getTime() - b.getTime());
-  return candidates.slice(0, count);
-}
-
-function formatMttId(startAt: Date): string {
+function formatMttId(templateId: string, startAt: Date): string {
   const yyyy = startAt.getUTCFullYear().toString();
   const mm = String(startAt.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(startAt.getUTCDate()).padStart(2, "0");
   const hh = String(startAt.getUTCHours()).padStart(2, "0");
   const min = String(startAt.getUTCMinutes()).padStart(2, "0");
-  return `mtt-${yyyy}${mm}${dd}-${hh}${min}`;
+  return `${templateId}-${yyyy}${mm}${dd}-${hh}${min}`;
 }
 
-function formatUtcLabel(startAt: Date): string {
-  const hh = String(startAt.getUTCHours()).padStart(2, "0");
-  const mm = String(startAt.getUTCMinutes()).padStart(2, "0");
-  return `${hh}:${mm} UTC`;
-}
-
-function applyDailyMttSchedule(defs: TournamentDefinition[]): TournamentDefinition[] {
-  const mttTemplate = defs.find((t) => t.type === "mtt");
-  if (!mttTemplate) return defs;
-  const nonMtt = defs.filter((t) => t.type !== "mtt");
-  const slots = parseDailyMttSlots(process.env.MTT_DAILY_SLOTS);
-  const startTimes = getNextSlotTimes(new Date(), slots, 2);
-  const scheduled = startTimes.map((startAt) => ({
-    ...mttTemplate,
-    id: formatMttId(startAt),
-    name: mttTemplate.name,
-    startMode: "scheduled" as const,
-    startAt: startAt.toISOString(),
-  }));
-  return [...nonMtt, ...scheduled];
-}
-
-function normalizeDefinitions(defs: TournamentDefinition[]): TournamentState[] {
-  const now = new Date().toISOString();
-  return defs.map((def) => ({
-    ...def,
-    status: def.startMode === "scheduled" ? "scheduled" : "registering",
-    registered: new Set<string>(),
-    tables: [],
-    createdAt: now,
-    updatedAt: now,
-  }));
-}
-
-export function loadTournamentDefinitions(): TournamentState[] {
-  const configPath =
-    process.env.TOURNAMENT_CONFIG_PATH ||
-    path.join(process.cwd(), "apps", "ws-server", "tournaments.json");
-
-  try {
-    if (fs.existsSync(configPath)) {
-      const raw = fs.readFileSync(configPath, "utf-8");
-      const parsed = JSON.parse(raw) as TournamentDefinition[];
-      logger.info(`🎯 Loaded tournament config from ${configPath} (${parsed.length} entries)`);
-      return normalizeDefinitions(applyDailyMttSchedule(parsed));
-    }
-    logger.warn(`⚠️ Tournament config not found at ${configPath}, using defaults`);
-  } catch (err) {
-    logger.error(`❌ Failed to load tournament config at ${configPath}:`, err);
-  }
-  return normalizeDefinitions(applyDailyMttSchedule(defaultTournaments));
-}
+// --- TournamentManager Class ---
 
 export class TournamentManager {
   private tournaments = new Map<string, TournamentState>();
-  private prisma?: PrismaClient | null;
-  private mttTemplate?: TournamentDefinition;
+  private templates = new Map<string, TournamentDefinition>();
+  private prisma: PrismaClient;
+  private currentTemplatesVersion: number = 0;
+  private pollingInterval: NodeJS.Timeout | null = null;
+  private cronJobs: ScheduledTask[] = [];
 
-  constructor(initial: TournamentState[], prisma?: PrismaClient | null) {
-    initial.forEach((t) => this.tournaments.set(t.id, t));
-    this.mttTemplate = this.extractTemplate(initial);
-    this.prisma = prisma ?? undefined;
-    if (this.prisma) {
-      void this.loadFromDb();
+  constructor(prisma: PrismaClient) {
+    this.prisma = prisma;
+    void this.initialize();
+  }
+
+  private async initialize() {
+    await this.loadAndScheduleFromDb();
+    this.pollingInterval = setInterval(() => this.pollForTemplateUpdates(), 60 * 1000); // Poll every minute
+  }
+
+  public shutdown() {
+    if (this.pollingInterval) clearInterval(this.pollingInterval);
+    this.cronJobs.forEach(job => job.stop());
+    this.cronJobs = [];
+  }
+
+  private async pollForTemplateUpdates() {
+    try {
+      const systemConfig = await this.prisma.systemConfig.findUnique({ where: { id: "default" } });
+      if (systemConfig && systemConfig.templatesVersion > this.currentTemplatesVersion) {
+        logger.info("New template version detected, reloading...");
+        await this.loadAndScheduleFromDb();
+      }
+    } catch (error) {
+      logger.error("❌ Failed to poll for template updates:", error);
     }
-    this.ensureDailyMttSchedule();
   }
 
-  private extractTemplate(states: TournamentState[]): TournamentDefinition | undefined {
-    const t = states.find((state) => state.type === "mtt");
-    if (!t) return undefined;
+  private async loadAndScheduleFromDb() {
+    try {
+      logger.info("🔄 Loading game templates from DB...");
+      const dbTemplates = await this.prisma.gameTemplate.findMany();
+      const systemConfig = await this.prisma.systemConfig.findUnique({ where: { id: "default" } });
+      this.currentTemplatesVersion = systemConfig?.templatesVersion ?? 1;
+
+      this.templates.clear();
+      dbTemplates.forEach(t => {
+        if (t.type === "SNG" || t.type === "MTT") {
+          this.templates.set(t.id, this.dbGameTemplateToTournamentDefinition(t));
+        }
+      });
+      logger.info(`✅ Loaded ${this.templates.size} SNG/MTT templates.`);
+
+      // Stop existing cron jobs before creating new ones
+      this.cronJobs.forEach(job => job.stop());
+      this.cronJobs = [];
+
+      this.templates.forEach(template => {
+        if (template.type === "mtt" && template.schedule && validateCron(template.schedule)) {
+          const job = cronSchedule(template.schedule, () => {
+            logger.info(`⏰ Cron triggered for MTT template: ${template.name}`);
+            void this.createTournamentFromTemplate(template.id, new Date());
+          });
+          this.cronJobs.push(job);
+          logger.info(`🗓️ Scheduled MTT template "${template.name}" with cron: "${template.schedule}"`);
+
+          // Proactively create an initial instance if none exists for this template
+          const hasActiveInstance = Array.from(this.tournaments.values()).some(t => 
+            t.type === 'mtt' && t.id.startsWith(template.id) && (t.status === 'scheduled' || t.status === 'registering')
+          );
+          if (!hasActiveInstance) {
+            logger.info(`🌱 Creating initial MTT instance for template: ${template.name}`);
+            void this.createTournamentFromTemplate(template.id, new Date());
+          }
+        }
+      });
+      
+      // Load live tournaments
+      const activeTournaments = await this.prisma.tournament.findMany({
+        where: {
+          status: {
+            in: ["REGISTERING", "SCHEDULED", "RUNNING", "LATE_REG", "BREAKING"]
+          }
+        },
+        include: { levels: true, registrations: true, tables: true },
+      });
+      
+      activeTournaments.forEach(t => {
+        const state = this.dbTournamentToTournamentState(t, t.levels, t.registrations, t.tables);
+        this.tournaments.set(state.id, state);
+      });
+      
+    } catch (error) {
+      logger.error("❌ Failed to load templates from DB:", error);
+    }
+  }
+
+  public async createTournamentFromTemplate(templateId: string, scheduledTime?: Date): Promise<TournamentState | null> {
+    const template = this.templates.get(templateId);
+    if (!template) {
+      logger.error(`Template ${templateId} not found`);
+      return null;
+    }
+
+    const startAt = scheduledTime || new Date();
+    const newId = formatMttId(template.id, startAt);
+    
+    // Check if an instance for this slot already exists
+    if (this.tournaments.has(newId)) {
+      logger.info(`Instance ${newId} already exists, skipping creation.`);
+      return this.tournaments.get(newId)!;
+    }
+    
+    const def: TournamentDefinition = {
+      ...template,
+      id: newId,
+      startAt: startAt.toISOString(),
+      startMode: "scheduled"
+    };
+
+    const state = this.normalizeDefinition(def);
+    this.tournaments.set(state.id, state);
+
+    try {
+      await this.prisma.tournament.create({
+        data: {
+          id: state.id,
+          name: state.name,
+          gameType: state.gameType,
+          type: state.type === 'stt' ? 'STT' : 'MTT',
+          startMode: state.startMode === 'scheduled' ? 'SCHEDULED' : 'FULL',
+          startAt: state.startAt ? new Date(state.startAt) : null,
+          lateRegMinutes: state.lateRegMinutes,
+          status: 'SCHEDULED',
+          maxPlayers: state.maxPlayers,
+          startingStack: state.startingStack,
+          blindScheduleId: state.blindScheduleId ?? "default-mtt",
+          buyInCurrency: state.buyIn.currency === 'tickets' ? 'TICKETS' : 'CHIPS',
+          buyInAmount: state.buyIn.amount,
+          payoutMode: state.payout.mode === 'tickets' ? 'TICKETS' : 'TOP_X_SPLIT',
+          payoutTopX: state.payout.topX,
+          payoutTicketCount: state.payout.ticketCount,
+          tableConfigId: state.tableConfigId,
+        }
+      });
+      logger.info(`➕ Created and persisted new tournament instance: ${state.id}`);
+      return state;
+    } catch (error: any) {
+      if (error.code !== 'P2002') { // Ignore unique constraint violations (already exists)
+        logger.error(`❌ Failed to persist tournament ${state.id}:`, error);
+      }
+      this.tournaments.delete(state.id); // Rollback
+      return null;
+    }
+  }
+
+  private dbGameTemplateToTournamentDefinition(t: DbGameTemplate): TournamentDefinition {
+    const type = t.type as GameTemplateType;
+    // We only handle SNG and MTT here for now
+    let mappedType: TournamentType = 'stt';
+    if (type === 'MTT') mappedType = 'mtt';
+    else if (type === 'SNG') mappedType = 'stt';
+    else if (type === 'CASH') mappedType = 'cash';
+
     return {
       id: t.id,
       name: t.name,
-      type: t.type,
-      startMode: t.startMode,
-      startAt: t.startAt,
-      buyIn: t.buyIn,
-      lateRegMinutes: t.lateRegMinutes,
+      gameType: t.gameType ?? "No Limit Hold'em",
+      type: mappedType,
+      startMode: t.startMode!.toLowerCase() as TournamentStartMode,
+      schedule: t.schedule ?? undefined,
+      buyIn: {
+        currency: t.currency === 'COINS' ? 'chips' : 'tickets',
+        amount: t.defaultBuyIn,
+      },
+      lateRegMinutes: t.lateRegMinutes ?? undefined,
       maxPlayers: t.maxPlayers,
-      startingStack: t.startingStack,
-      blindScheduleId: t.blindScheduleId,
-      payout: t.payout,
-      tableConfigId: t.tableConfigId,
-      description: t.description,
+      startingStack: t.startingStack!,
+      blindScheduleId: t.blindScheduleId!,
+      payout: {
+        mode: t.payoutMode as TournamentPayoutMode,
+        topX: t.payoutTopX ?? undefined,
+        ticketCount: t.payoutTicketCount ?? undefined,
+      },
+      tableConfigId: t.tableConfigId ?? undefined,
+      description: undefined,
     };
   }
-
-  private toDefinition(t: TournamentState): TournamentDefinition {
+  
+  private normalizeDefinition(def: TournamentDefinition): TournamentState {
+    const now = new Date().toISOString();
     return {
-      id: t.id,
-      name: t.name,
-      gameType: t.gameType,
-      type: t.type,
-      startMode: t.startMode,
-      startAt: t.startAt,
-      buyIn: t.buyIn,
-      lateRegMinutes: t.lateRegMinutes,
-      maxPlayers: t.maxPlayers,
-      startingStack: t.startingStack,
-      blindScheduleId: t.blindScheduleId,
-      payout: t.payout,
-      tableConfigId: t.tableConfigId,
-      description: t.description,
+      ...def,
+      status: def.startMode === 'scheduled' ? 'scheduled' : 'registering',
+      registered: new Set<string>(),
+      tables: [],
+      createdAt: now,
+      updatedAt: now,
     };
   }
 
-  private fromDb(
+  private dbTournamentToTournamentState(
     t: DbTournament,
     levels: DbLevel[],
     regs: DbRegistration[],
     tables: DbTable[],
   ): TournamentState {
-    const statusMap: Record<DbTournament["status"], TournamentStatus> = {
+    const statusMap: Record<string, TournamentStatus> = {
       REGISTERING: "registering",
       SCHEDULED: "scheduled",
       LATE_REG: "registering",
@@ -272,76 +302,54 @@ export class TournamentManager {
       CANCELLED: "cancelled",
       TEMPLATE: "template",
     };
-    const buyInCurrency = t.buyInCurrency === "TICKETS" ? "tickets" : "chips";
-    const payoutMode = t.payoutMode === "TICKETS" ? "tickets" : "top_x_split";
-    const type = t.type === "MTT" ? "mtt" : "stt";
-    const startMode = t.startMode === "SCHEDULED" ? "scheduled" : "full";
-    const registered = new Set<string>(regs.map((r) => r.playerId.toLowerCase().trim()));
-    const lateRegEndAt =
-      t.startAt && t.lateRegMinutes ? new Date(new Date(t.startAt).getTime() + t.lateRegMinutes * 60000).toISOString() : undefined;
-
+    
     return {
       id: t.id,
       name: t.name,
       gameType: t.gameType,
-      type,
-      startMode,
+      type: t.type === 'MTT' ? 'mtt' : 'stt',
+      startMode: t.startMode === 'SCHEDULED' ? 'scheduled' : 'full',
       startAt: t.startAt?.toISOString(),
-      buyIn: { currency: buyInCurrency, amount: t.buyInAmount },
+      buyIn: {
+        currency: t.buyInCurrency === 'TICKETS' ? 'tickets' : 'chips',
+        amount: t.buyInAmount,
+      },
       lateRegMinutes: t.lateRegMinutes || undefined,
       maxPlayers: t.maxPlayers,
       startingStack: t.startingStack,
       blindScheduleId: t.blindScheduleId,
       payout: {
-        mode: payoutMode,
+        mode: t.payoutMode === 'TICKETS' ? 'tickets' : 'top_x_split',
         topX: t.payoutTopX || undefined,
         ticketCount: t.payoutTicketCount || undefined,
       },
       tableConfigId: t.tableConfigId || undefined,
-      description: undefined,
       status: statusMap[t.status],
-      registered,
-      tables: tables.map((tab) => tab.engineTableId),
+      registered: new Set(regs.map(r => r.playerId)),
+      tables: tables.map(tb => tb.engineTableId),
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
-      lateRegEndAt,
-      currentLevel: levels.length ? Math.min(...levels.map((l) => l.levelIndex)) : undefined,
-      entrants: regs.length || undefined,
+      currentLevel: levels.length > 0 ? Math.max(...levels.map(l => l.levelIndex)) : undefined,
     };
   }
 
-  /**
-   * Load tournaments from the database (if Prisma is configured).
-   * If none exist, fall back to in-memory defaults to keep the system running.
-   */
-  private async loadFromDb() {
-    if (!this.prisma) return;
-    try {
-      const tournaments = await this.prisma.tournament.findMany({
-        include: { levels: true, registrations: true, tables: true },
-        orderBy: { createdAt: "asc" },
-      });
-      if (!tournaments.length) {
-        logger.warn("⚠️ No tournaments found in DB; falling back to defaults");
-        return;
-      }
-      this.tournaments.clear();
-      tournaments.forEach((t) => {
-        const state = this.fromDb(t, t.levels, t.registrations, t.tables);
-        this.tournaments.set(state.id, state);
-      });
-      if (!this.mttTemplate) {
-        this.mttTemplate = this.extractTemplate(this.listStates());
-      }
-      this.ensureDailyMttSchedule();
-      logger.info(`✅ Loaded ${tournaments.length} tournaments from DB`);
-    } catch (err) {
-      logger.error("❌ Failed to load tournaments from DB, using defaults", err);
-    }
-  }
+  // --- Public API ---
 
   list(): PublicTournamentState[] {
-    return Array.from(this.tournaments.values()).map((t) => this.toPublic(t));
+    const sngTemplates = Array.from(this.templates.values()).filter(t => t.type === 'stt');
+    const mttTemplates = Array.from(this.templates.values()).filter(t => t.type === 'mtt');
+
+    const sngInstances = sngTemplates.map(t => {
+       return { ...this.normalizeDefinition(t), status: 'registering' as const };
+    });
+
+    const mttInstances = mttTemplates.map(t => {
+       return { ...this.normalizeDefinition(t), status: 'scheduled' as const };
+    });
+    
+    const liveTournaments = Array.from(this.tournaments.values());
+    
+    return [...sngInstances, ...mttInstances, ...liveTournaments].map(t => this.toPublic(t));
   }
 
   listStates(): TournamentState[] {
@@ -350,120 +358,171 @@ export class TournamentManager {
 
   get(tournamentId: string): PublicTournamentState | undefined {
     const t = this.tournaments.get(tournamentId);
-    return t ? this.toPublic(t) : undefined;
+    if(t) return this.toPublic(t);
+
+    const template = this.templates.get(tournamentId);
+    if(template) return this.toPublic(this.normalizeDefinition(template));
+
+    return undefined;
   }
 
   getState(tournamentId: string): TournamentState | undefined {
-    return this.tournaments.get(tournamentId);
+    const t = this.tournaments.get(tournamentId);
+    if(t) return t;
+
+    const template = this.templates.get(tournamentId);
+    if(template) return this.normalizeDefinition(template);
+
+    return undefined;
   }
+
   upsertState(state: TournamentState) {
     this.tournaments.set(state.id, state);
   }
 
-  createTournament(def: TournamentDefinition): TournamentState {
-    const normalized = normalizeDefinitions([def])[0]!;
-    this.tournaments.set(normalized.id, normalized);
-    if (!this.mttTemplate && normalized.type === "mtt") {
-      this.mttTemplate = def;
-    }
-    if (this.prisma) {
-      const type = def.type === "mtt" ? "MTT" : "STT";
-      const startMode = def.startMode === "scheduled" ? "SCHEDULED" : "FULL";
-      const buyInCurrency = def.buyIn.currency === "tickets" ? "TICKETS" : "CHIPS";
-      const payoutMode = def.payout.mode === "tickets" ? "TICKETS" : "TOP_X_SPLIT";
-      const status = def.startMode === "scheduled" ? "SCHEDULED" : "REGISTERING";
-      void this.prisma.tournament.upsert({
-        where: { id: def.id },
-        update: {
-          name: def.name,
-          gameType: def.gameType ?? "No Limit Hold'em",
-          type,
-          startMode,
-          startAt: def.startAt ? new Date(def.startAt) : null,
-          lateRegMinutes: def.lateRegMinutes ?? null,
-          status,
-          maxPlayers: def.maxPlayers,
-          startingStack: def.startingStack,
-          blindScheduleId: def.blindScheduleId ?? "default-mtt",
-          buyInCurrency,
-          buyInAmount: def.buyIn.amount,
-          payoutMode,
-          payoutTopX: def.payout.topX ?? null,
-          payoutTicketCount: def.payout.ticketCount ?? null,
-          tableConfigId: def.tableConfigId ?? null,
-        },
-        create: {
-          id: def.id,
-          name: def.name,
-          gameType: def.gameType ?? "No Limit Hold'em",
-          type,
-          startMode,
-          startAt: def.startAt ? new Date(def.startAt) : null,
-          lateRegMinutes: def.lateRegMinutes ?? null,
-          status,
-          maxPlayers: def.maxPlayers,
-          startingStack: def.startingStack,
-          blindScheduleId: def.blindScheduleId ?? "default-mtt",
-          buyInCurrency,
-          buyInAmount: def.buyIn.amount,
-          payoutMode,
-          payoutTopX: def.payout.topX ?? null,
-          payoutTicketCount: def.payout.ticketCount ?? null,
-          tableConfigId: def.tableConfigId ?? null,
-        },
-      }).catch((err) => logger.error(`❌ Failed to persist tournament ${def.id}`, err));
-    }
-    return normalized;
+  // --- Methods required by TournamentOrchestrator ---
+
+  toPublic(t: TournamentState): PublicTournamentState {
+    return {
+      ...t,
+      registeredCount: t.registered.size,
+      tables: [...t.tables],
+    };
+  }
+
+  ensureDailyMttSchedule(): TournamentState[] {
+    // This is now handled by cron jobs in loadAndScheduleFromDb
+    // Returning empty array as orchestration is different now
+    return [];
   }
 
   async cancelTournament(tournamentId: string): Promise<TournamentState | null> {
     const t = this.tournaments.get(tournamentId);
     if (!t) return null;
-    const cancelled: TournamentState = { ...t, status: "cancelled", updatedAt: new Date().toISOString() };
-    if (this.prisma) {
-      void this.prisma.tournament.update({
-        where: { id: t.id },
-        data: { status: "CANCELLED" },
-      }).catch((err) => logger.error(`❌ Failed to persist CANCELLED status for ${t.id}`, err));
+    t.status = 'cancelled';
+    t.updatedAt = new Date().toISOString();
+    
+    try {
+      await this.prisma.tournament.update({
+        where: { id: tournamentId },
+        data: { status: 'CANCELLED' }
+      });
+    } catch (e) {
+      logger.error(`Failed to cancel tournament ${tournamentId}`, e);
     }
-    this.tournaments.delete(tournamentId);
-    return cancelled;
+    
+    return t;
   }
 
-  ensureDailyMttSchedule(): TournamentState[] {
-    const template = this.mttTemplate;
-    if (!template) return [];
-    const slots = parseDailyMttSlots(process.env.MTT_DAILY_SLOTS);
-    const now = new Date();
-    const future = this.listStates().filter((t) => {
-      if (t.type !== "mtt" || !t.startAt) return false;
-      const ts = Date.parse(t.startAt);
-      return !Number.isNaN(ts) && ts > now.getTime() && t.status !== "cancelled" && t.status !== "finished";
-    });
-    const needed = Math.max(0, 2 - future.length);
-    if (needed === 0) return [];
-    const existingStartTimes = new Set(future.map((t) => t.startAt));
-    const candidates = getNextSlotTimes(now, slots, 6);
-    const created: TournamentState[] = [];
-    for (const startAt of candidates) {
-      if (created.length >= needed) break;
-      const iso = startAt.toISOString();
-      if (existingStartTimes.has(iso)) continue;
-      const def: TournamentDefinition = {
-        ...template,
-        id: formatMttId(startAt),
-        name: template.name,
-        startMode: "scheduled",
-        startAt: iso,
-      };
-      created.push(this.createTournament(def));
+  markRunning(tournamentId: string) {
+    const t = this.tournaments.get(tournamentId);
+    if (!t) return;
+    t.status = 'running';
+    t.updatedAt = new Date().toISOString();
+    void this.prisma.tournament.update({ where: { id: tournamentId }, data: { status: 'RUNNING' } }).catch(e => logger.error("DB update failed", e));
+  }
+
+  markFinished(tournamentId: string) {
+    const t = this.tournaments.get(tournamentId);
+    if (!t) return;
+    t.status = 'finished';
+    t.updatedAt = new Date().toISOString();
+    void this.prisma.tournament.update({ where: { id: tournamentId }, data: { status: 'FINISHED' } }).catch(e => logger.error("DB update failed", e));
+  }
+
+  addTable(tournamentId: string, tableId: string) {
+    const t = this.tournaments.get(tournamentId);
+    if (!t) return;
+    if (!t.tables.includes(tableId)) {
+      t.tables.push(tableId);
+      void this.prisma.tournamentTable.create({
+        data: { tournamentId, engineTableId: tableId, status: 'ACTIVE' }
+      }).catch(e => logger.error("DB table create failed", e));
     }
-    return created;
+  }
+
+  removeTable(tournamentId: string, tableId: string) {
+    const t = this.tournaments.get(tournamentId);
+    if (!t) return;
+    t.tables = t.tables.filter(id => id !== tableId);
+    void this.prisma.tournamentTable.update({
+        where: { engineTableId: tableId },
+        data: { status: 'CLOSED' }
+    }).catch(e => logger.error("DB table update failed", e));
+  }
+
+  async persistBust(tournamentId: string, playerId: string, position: number) {
+    try {
+      await this.prisma.tournamentRegistration.updateMany({
+        where: { tournamentId, playerId },
+        data: { status: 'BUSTED', position }
+      });
+    } catch (e) {
+      logger.error("Persist bust failed", e);
+    }
+  }
+
+  async persistPayouts(tournamentId: string, payouts: { playerId: string; amount: number; currency: "chips" | "tickets"; position: number }[]) {
+    try {
+      await this.prisma.tournamentPayout.createMany({
+        data: payouts.map(p => ({
+          tournamentId,
+          playerId: p.playerId,
+          amount: p.amount,
+          currency: p.currency === 'tickets' ? 'TICKETS' : 'CHIPS',
+        }))
+      });
+    } catch (e) {
+      logger.error("Persist payouts failed", e);
+    }
+  }
+
+  createTournament(def: TournamentDefinition): TournamentState {
+      // This method is used by orchestrator for creating SNG instances from templates
+      // In new flow, orchestrator passes a definition.
+      // We'll normalize it and add it to our live map.
+      const state = this.normalizeDefinition(def);
+      this.tournaments.set(state.id, state);
+      
+      // Persist SNG instance
+      void this.prisma.tournament.create({
+          data: {
+              id: state.id,
+              name: state.name,
+              gameType: state.gameType,
+              type: state.type === 'stt' ? 'STT' : 'MTT',
+              startMode: state.startMode === 'scheduled' ? 'SCHEDULED' : 'FULL',
+              maxPlayers: state.maxPlayers,
+              startingStack: state.startingStack,
+              blindScheduleId: state.blindScheduleId ?? "default-stt",
+              buyInCurrency: state.buyIn.currency === 'tickets' ? 'TICKETS' : 'CHIPS',
+              buyInAmount: state.buyIn.amount,
+              payoutMode: state.payout.mode === 'tickets' ? 'TICKETS' : 'TOP_X_SPLIT',
+              payoutTopX: state.payout.topX,
+              payoutTicketCount: state.payout.ticketCount,
+              status: 'REGISTERING'
+          }
+      }).catch(e => logger.error("SNG persist failed", e));
+
+      return state;
   }
 
   registerPlayer(tournamentId: string, playerId: string): { ok: boolean; message?: string; tournament?: PublicTournamentState } {
-    const t = this.tournaments.get(tournamentId);
+    let t = this.tournaments.get(tournamentId);
+    
+    // If it's a template SNG, create a new instance on first registration
+    if (!t && this.templates.has(tournamentId)) {
+        const template = this.templates.get(tournamentId)!;
+        if (template.type === 'stt') {
+             // Create dynamic instance for this SNG
+             const newId = `${template.id}-${Date.now()}`;
+             const def: TournamentDefinition = { ...template, id: newId };
+             t = this.createTournament(def);
+        }
+    }
+    
     if (!t) return { ok: false, message: "Tournament not found" };
+
     const normalizedPlayerId = playerId.toLowerCase().trim();
     if (t.status === "finished" || t.status === "cancelled") {
       return { ok: false, message: "Tournament is closed" };
@@ -475,12 +534,16 @@ export class TournamentManager {
       return { ok: false, message: "Tournament is full" };
     }
     t.registered.add(normalizedPlayerId);
-    this.maybeStart(t);
-    this.touch(t);
+    t.updatedAt = new Date().toISOString();
 
-    if (this.prisma) {
-      void this.persistRegistration(t, normalizedPlayerId, "REGISTERED");
-    }
+    void this.prisma.tournamentRegistration.create({
+        data: {
+            tournamentId: t.id,
+            playerId: normalizedPlayerId,
+            status: 'REGISTERED'
+        }
+    }).catch(e => logger.error("Registration persist failed", e));
+
     return { ok: true, tournament: this.toPublic(t) };
   }
 
@@ -492,234 +555,13 @@ export class TournamentManager {
       return { ok: false, message: "Tournament already started" };
     }
     t.registered.delete(normalizedPlayerId);
-    this.touch(t);
-    if (this.prisma) {
-      void this.persistRegistration(t, normalizedPlayerId, "BUSTED", true);
-    }
-    return { ok: true, tournament: this.toPublic(t) };
-  }
-
-  private maybeStart(t: TournamentState) {
-    if (t.type === "stt" && t.startMode === "full" && t.registered.size >= t.maxPlayers) {
-      t.status = "running";
-    }
-    if (t.type === "mtt" && t.startMode === "scheduled" && t.startAt) {
-      const startTs = Date.parse(t.startAt);
-      if (!Number.isNaN(startTs) && startTs <= Date.now()) {
-        t.status = "running";
-      }
-    }
-  }
-
-  toPublic(t: TournamentState): PublicTournamentState {
-    return {
-      ...t,
-      registeredCount: t.registered.size,
-      tables: [...t.tables],
-      lateRegEndAt: t.lateRegEndAt,
-      currentLevel: t.currentLevel,
-      payouts: t.payouts,
-    };
-  }
-
-  private touch(t: TournamentState) {
     t.updatedAt = new Date().toISOString();
-  }
+    
+    void this.prisma.tournamentRegistration.updateMany({
+        where: { tournamentId: t.id, playerId: normalizedPlayerId },
+        data: { status: 'BUSTED' } // Or delete, depending on preference. Using BUSTED/CANCELLED for history.
+    }).catch(e => logger.error("Unregister persist failed", e));
 
-  markRunning(tournamentId: string) {
-    const t = this.tournaments.get(tournamentId);
-    if (!t) return;
-    t.status = "running";
-    if (!t.entrants) {
-      t.entrants = t.registered.size;
-    }
-    this.touch(t);
-    if (this.prisma) {
-      void this.prisma.tournament.update({
-        where: { id: t.id },
-        data: { status: "RUNNING" },
-      }).catch((err) => logger.error(`❌ Failed to persist RUNNING status for ${t.id}`, err));
-    }
-  }
-
-  addTable(tournamentId: string, engineTableId: string) {
-    const t = this.tournaments.get(tournamentId);
-    if (!t) return;
-    if (!t.tables.includes(engineTableId)) {
-      t.tables.push(engineTableId);
-    }
-    this.touch(t);
-    if (this.prisma) {
-      void this.prisma.tournamentTable.upsert({
-        where: { engineTableId },
-        update: { status: "ACTIVE" },
-        create: {
-          engineTableId,
-          tournamentId,
-          status: "ACTIVE",
-        },
-      }).catch((err) => logger.error(`❌ Failed to persist tournament table ${engineTableId}`, err));
-    }
-  }
-
-  removeTable(tournamentId: string, engineTableId: string) {
-    const t = this.tournaments.get(tournamentId);
-    if (!t) return;
-    t.tables = t.tables.filter((id) => id !== engineTableId);
-    this.touch(t);
-    if (this.prisma) {
-      void this.prisma.tournamentTable.updateMany({
-        where: { engineTableId },
-        data: { status: "CLOSED" },
-      }).catch((err) => logger.error(`❌ Failed to mark table ${engineTableId} closed`, err));
-    }
-  }
-
-  markFinished(tournamentId: string) {
-    const t = this.tournaments.get(tournamentId);
-    if (!t) return;
-    t.status = "finished";
-    this.touch(t);
-    if (this.prisma) {
-      void this.prisma.tournament.update({
-        where: { id: t.id },
-        data: { status: "FINISHED" },
-      }).catch((err) => logger.error(`❌ Failed to persist FINISHED status for ${t.id}`, err));
-    }
-  }
-
-  async persistPayouts(
-    tournamentId: string,
-    payouts: { playerId: string; amount: number; currency: "chips" | "tickets"; position: number }[],
-  ) {
-    if (!this.prisma) return;
-    try {
-      await this.prisma.tournamentPayout.createMany({
-        data: payouts.map((p) => ({
-          tournamentId,
-          playerId: p.playerId,
-          amount: p.amount,
-          currency: p.currency === "tickets" ? "TICKETS" : "CHIPS",
-        })),
-      });
-    } catch (err) {
-      logger.error(`❌ Failed to persist payouts for ${tournamentId}`, err);
-    }
-  }
-
-  async persistBust(
-    tournamentId: string,
-    playerId: string,
-    position: number,
-  ) {
-    if (!this.prisma) return;
-    try {
-      const normalizedPlayerId = playerId.toLowerCase().trim();
-      await this.prisma.tournamentRegistration.updateMany({
-        where: { tournamentId, playerId: { equals: normalizedPlayerId, mode: "insensitive" } },
-        data: { status: "BUSTED", position },
-      });
-    } catch (err) {
-      logger.error(`❌ Failed to persist bust for ${playerId} in ${tournamentId}`, err);
-    }
-  }
-
-  private async persistRegistration(
-    t: TournamentState,
-    playerId: string,
-    status: RegistrationStatus,
-    remove = false,
-  ) {
-    if (!this.prisma) return;
-    try {
-      const statusValue = remove ? "BUSTED" : status;
-      const normalizedPlayerId = playerId.toLowerCase().trim();
-      const existing = await this.prisma.tournamentRegistration.findFirst({
-        where: { tournamentId: t.id, playerId: { equals: normalizedPlayerId, mode: "insensitive" } },
-        select: { id: true },
-      });
-      if (existing) {
-        await this.prisma.tournamentRegistration.update({
-          where: { id: existing.id },
-          data: { status: statusValue, playerId: normalizedPlayerId },
-        });
-      } else {
-        await this.prisma.tournamentRegistration.create({
-          data: {
-            tournamentId: t.id,
-            playerId: normalizedPlayerId,
-            status: statusValue,
-          },
-        });
-      }
-      await this.prisma.tournament.update({
-        where: { id: t.id },
-        data: {
-          status:
-            t.status === "scheduled"
-              ? "SCHEDULED"
-              : t.status === "running"
-                ? "RUNNING"
-                : t.status === "finished"
-                  ? "FINISHED"
-                  : "REGISTERING",
-        },
-      });
-    } catch (err) {
-      logger.error(`❌ Failed to persist registration for ${playerId} in ${t.id}`, err);
-    }
-  }
-
-  private async seedDefaultsToDb() {
-    if (!this.prisma) return;
-    const defs = this.listStates().map((t) => this.toDefinition(t));
-    await Promise.all(
-      defs.map(async (def) => {
-        const type = def.type === "mtt" ? "MTT" : "STT";
-        const startMode = def.startMode === "scheduled" ? "SCHEDULED" : "FULL";
-        const buyInCurrency = def.buyIn.currency === "tickets" ? "TICKETS" : "CHIPS";
-        const payoutMode = def.payout.mode === "tickets" ? "TICKETS" : "TOP_X_SPLIT";
-        const status = def.startMode === "scheduled" ? "SCHEDULED" : "REGISTERING";
-        await this.prisma!.tournament.upsert({
-          where: { id: def.id },
-          update: {
-            name: def.name,
-            type,
-            startMode,
-            startAt: def.startAt ? new Date(def.startAt) : null,
-            lateRegMinutes: def.lateRegMinutes ?? null,
-            status,
-            maxPlayers: def.maxPlayers,
-            startingStack: def.startingStack,
-            blindScheduleId: def.blindScheduleId ?? "default-mtt",
-            buyInCurrency,
-            buyInAmount: def.buyIn.amount,
-            payoutMode,
-            payoutTopX: def.payout.topX ?? null,
-            payoutTicketCount: def.payout.ticketCount ?? null,
-            tableConfigId: def.tableConfigId ?? null,
-          },
-          create: {
-            id: def.id,
-            name: def.name,
-            type,
-            startMode,
-            startAt: def.startAt ? new Date(def.startAt) : null,
-            lateRegMinutes: def.lateRegMinutes ?? null,
-            status,
-            maxPlayers: def.maxPlayers,
-            startingStack: def.startingStack,
-            blindScheduleId: def.blindScheduleId ?? "default-mtt",
-            buyInCurrency,
-            buyInAmount: def.buyIn.amount,
-            payoutMode,
-            payoutTopX: def.payout.topX ?? null,
-            payoutTicketCount: def.payout.ticketCount ?? null,
-            tableConfigId: def.tableConfigId ?? null,
-          },
-        });
-      }),
-    );
-    logger.info("✅ Seeded tournaments into DB");
+    return { ok: true, tournament: this.toPublic(t) };
   }
 }

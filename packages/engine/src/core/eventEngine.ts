@@ -171,6 +171,15 @@ export class EventEngine extends EventEmitter {
   }
 
   /**
+   * Rehydrate table state from persistence
+   */
+  rehydrate(table: Table): void {
+    this.table = { ...table };
+    logger.info(`♻️ [EventEngine] Rehydrated table ${this.table.id} state (hand ${this.table.handNumber})`);
+    this.emit("stateChanged", this.getState());
+  }
+
+  /**
    * Get game snapshot for debugging/replay
    */
   getSnapshot(): GameSnapshot {

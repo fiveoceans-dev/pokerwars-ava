@@ -10,9 +10,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const webEnv = getWebEnv();
   const metadataBase = (() => {
     try {
-      return webEnv.appUrl ? new URL(webEnv.appUrl) : undefined;
+      return new URL(webEnv.appUrl || "http://localhost:8090");
     } catch {
-      return undefined;
+      return new URL("http://localhost:8090");
     }
   })();
 

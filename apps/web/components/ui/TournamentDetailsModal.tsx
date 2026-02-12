@@ -30,6 +30,7 @@ type ModalProps = {
 export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
   const totalPrize = item.totalPrize ?? item.price * item.registered;
   const distribution = calculatePrizeDistribution(item.price, item.registered);
+  const NextImage = Image as any;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
       <div className="bg-primary p-4 rounded-md w-96 max-w-full space-y-4 relative">
@@ -41,7 +42,7 @@ export default function TournamentDetailsModal({ item, onClose }: ModalProps) {
           ✕
         </button>
         <div className="relative w-full aspect-[63/88] overflow-hidden rounded-md border border-border">
-          <Image
+          <NextImage
             src={item.image}
             alt={item.title}
             fill

@@ -5,6 +5,7 @@ import {
   type Phase,
   type ServerEvent,
   type ClientCommand,
+  type GovernanceRole,
 } from "../game-engine";
 import { shortAddress } from "../utils/address";
 import { seatStore } from "../stores/seatStore";
@@ -97,12 +98,33 @@ interface GameStoreState {
   connectionError: string | null;
   /** Action history for the current hand */
   actionHistory: Array<{ playerId: string; action: string; amount?: number }>;
+  /** User asset balances (synced via WebSocket) */
+  balances: {
+    coins: number;
+    tickets: {
+      ticket_x: number;
+      ticket_y: number;
+      ticket_z: number;
+    };
+  };
+  /** User active play status (synced via WebSocket) */
+  activeStatus: {
+    cashActive: boolean;
+    cashTableIds: string[];
+    sngActive: boolean;
+    mttActive: boolean;
+  };
+  /** Governance roles granted to this wallet */
+  governanceRoles: GovernanceRole[];
+  setGovernanceRoles: (roles: GovernanceRole[]) => void;
+  /** Whether current user is an admin */
+  isAdmin: boolean;
 
   connectWallet: (address: string) => void;
   handleDisconnect: () => Promise<void>;
   joinTable: (tableId: string) => void;
   createTable: (name: string) => Promise<void>;
-  joinSeat: (seatIdx: number, tableId?: string) => Promise<void>;
+  joinSeat: (seatIdx: number, tableId?: string, chips?: number) => Promise<void>;
   leaveSeat: (tableId?: string) => Promise<void>;
   leaveAllTables: () => Promise<void>;
   sitOut: (tableId?: string) => Promise<void>;
@@ -122,6 +144,8 @@ interface GameStoreState {
   clearWinners: () => void;
   showCards: () => Promise<void>;
   muckCards: () => Promise<void>;
+  setBalances: (balances: GameStoreState["balances"]) => void;
+  setActiveStatus: (status: GameStoreState["activeStatus"]) => void;
 }
 
 export const useGameStore = create<GameStoreState>((set, get) => {
@@ -252,9 +276,19 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             }
           }
 
+          // Update seatStore with latest player data including chips
+          seatStore.getState().assignSeat(index, {
+            playerId: seat.pid,
+            name: seats[index],
+            chips: chips[index], // Sync live chip count
+          });
+
           console.log(
             `👤 Seat ${index}: ${seat.pid?.slice(0, 10)}... (${chips[index]} chips, ${seat.streetCommitted} streetCommitted, state: ${seat.status})`,
           );
+        } else {
+          // Clear seat in store if empty
+          seatStore.getState().clearSeat(index);
         }
       });
     } else if (room.players && Array.isArray(room.players)) {
@@ -377,6 +411,12 @@ export const useGameStore = create<GameStoreState>((set, get) => {
   }
 
   const connectWebSocket = () => {
+    const newCmdId = () =>
+      // Fallback for older browsers / non-secure contexts
+      (globalThis.crypto && "randomUUID" in globalThis.crypto && typeof globalThis.crypto.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
     if (isWebSocketDisabled()) {
       set({ connectionState: "connected", connectionError: null });
       return;
@@ -405,24 +445,29 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         try {
           const msg: ServerEvent = JSON.parse(ev.data as string);
           switch (msg.type) {
-            case "SESSION":
+            case "SESSION": {
               console.log("📨 Received SESSION message:", msg);
               try {
-                // Persist sessionId to enable REATTACH across reloads
+                const roles = msg.roles ?? (msg.isAdmin ? ["admin"] : []);
+                const normalizedWallet = msg.userId?.toLowerCase().trim() || null;
                 if ((msg as any).sessionId) {
                   localStorage.setItem("sessionId", (msg as any).sessionId);
                   console.log("💾 Stored sessionId:", (msg as any).sessionId);
                 }
-                // Persist wallet address (userId) if present
-                if (msg.userId) {
-                  localStorage.setItem("walletAddress", msg.userId);
-                  set({ currentWalletId: msg.userId });
-                  console.log("💾 Stored wallet address:", msg.userId);
+                if (normalizedWallet) {
+                  localStorage.setItem("walletAddress", normalizedWallet);
+                  set({ currentWalletId: normalizedWallet });
+                  console.log("💾 Stored wallet address:", normalizedWallet);
                 }
+                set({
+                  governanceRoles: roles,
+                  isAdmin: msg.isAdmin ?? roles.includes("admin"),
+                });
               } catch (e) {
                 console.error("🚫 Failed to persist session info:", e);
               }
               break;
+            }
             case "TABLE_CREATED":
               // Automatically join the table that was just created
               set({
@@ -942,6 +987,30 @@ export const useGameStore = create<GameStoreState>((set, get) => {
               get().addLog(`⏳ ${msg.msg}`);
               // This is sent directly to the requesting player, so no state updates needed
               break;
+            case "BALANCE_UPDATE":
+              console.log("📨 Received BALANCE_UPDATE message:", msg);
+              set({
+                balances: {
+                  coins: parseInt(msg.coins),
+                  tickets: {
+                    ticket_x: parseInt(msg.tickets.ticket_x),
+                    ticket_y: parseInt(msg.tickets.ticket_y),
+                    ticket_z: parseInt(msg.tickets.ticket_z),
+                  },
+                },
+              });
+              break;
+            case "USER_STATUS_UPDATE":
+              console.log("📨 Received USER_STATUS_UPDATE message:", msg);
+              set({
+                activeStatus: {
+                  cashActive: msg.cashActive,
+                  cashTableIds: msg.cashTableIds,
+                  sngActive: msg.sngActive,
+                  mttActive: msg.mttActive,
+                },
+              });
+              break;
             case "ERROR":
               // Record error and request a fresh snapshot to resync UI
               set({ error: msg.msg });
@@ -994,7 +1063,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         if (persistedSessionId) {
           try {
             const reattach: ClientCommand = {
-              cmdId: crypto.randomUUID(),
+              cmdId: newCmdId(),
               type: "REATTACH",
               sessionId: persistedSessionId,
             } as any;
@@ -1010,14 +1079,15 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         console.log("🔍 Checking for stored wallet address:", address);
         if (address) {
           try {
+            const normalized = address.trim().toLowerCase();
             const cmd: ClientCommand = {
-              cmdId: crypto.randomUUID(),
+              cmdId: newCmdId(),
               type: "ATTACH",
-              userId: address,
+              userId: normalized,
             } as any;
             socket!.send(JSON.stringify(cmd));
-            console.log("📤 Sent ATTACH command with userId:", address);
-            set({ currentWalletId: address });
+            console.log("📤 Sent ATTACH command with userId:", normalized);
+            set({ currentWalletId: normalized });
           } catch (error) {
             console.error("🚫 Failed to attach wallet:", error);
             set({ connectionError: "Failed to attach wallet" });
@@ -1028,7 +1098,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         if (pendingTable) {
           try {
             const joinCmd: ClientCommand = {
-              cmdId: crypto.randomUUID(),
+              cmdId: newCmdId(),
               type: "JOIN_TABLE",
               tableId: pendingTable,
             } as any;
@@ -1173,6 +1243,23 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     connectionState: "disconnected",
     connectionError: null,
     actionHistory: [],
+    balances: {
+      coins: 0,
+      tickets: { ticket_x: 0, ticket_y: 0, ticket_z: 0 },
+    },
+    activeStatus: {
+      cashActive: false,
+      cashTableIds: [],
+      sngActive: false,
+      mttActive: false,
+    },
+    governanceRoles: [],
+    setGovernanceRoles: (roles: GovernanceRole[]) =>
+      set({
+        governanceRoles: roles,
+        isAdmin: roles.includes("admin"),
+      }),
+    isAdmin: false,
 
     connectWallet: (address: string) => {
       const normalized = (address || "").trim().toLowerCase();
@@ -1617,5 +1704,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       socket.send(JSON.stringify(cmd));
       console.log("🃏 [useGameStore] Sent MUCK_CARDS command");
     },
+    setBalances: (balances) => set({ balances }),
+    setActiveStatus: (activeStatus) => set({ activeStatus }),
   };
 });

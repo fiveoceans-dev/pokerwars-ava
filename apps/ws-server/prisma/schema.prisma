@@ -72,6 +72,23 @@ enum AccountOwnerType {
   USER
   TREASURY
   TOURNAMENT
+  PROMO
+}
+
+enum GovernanceRole {
+  ADMIN
+  MANAGER
+  PROMOTER
+}
+
+model UserRole {
+  id        String         @id @default(cuid())
+  userId    String
+  role      GovernanceRole
+  user      User           @relation(fields: [userId], references: [id])
+  createdAt DateTime       @default(now())
+
+  @@unique([userId, role])
 }
 
 enum GameTemplateType {
@@ -81,23 +98,25 @@ enum GameTemplateType {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  walletAddress String?  @unique
-  email         String?  @unique
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id            String     @id @default(cuid())
+  walletAddress String?    @unique
+  email         String?    @unique
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  roles         UserRole[]
 }
 
 model Account {
-  id        String           @id @default(cuid())
-  ownerType AccountOwnerType
-  ownerId   String
-  coins     BigInt           @default(0)
-  ticket_x  BigInt           @default(0)
-  ticket_y  BigInt           @default(0)
-  ticket_z  BigInt           @default(0)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id           String            @id @default(cuid())
+  ownerType    AccountOwnerType
+  ownerId      String
+  coins        BigInt            @default(0)
+  ticket_x     BigInt            @default(0)
+  ticket_y     BigInt            @default(0)
+  ticket_z     BigInt            @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  balancePools BalancePool[]
 
   ledgerFrom LedgerTransaction[] @relation("LedgerFrom")
   ledgerTo   LedgerTransaction[] @relation("LedgerTo")
@@ -272,12 +291,70 @@ model GameTemplate {
   currency          Asset                @default(COINS)
   startMode         TournamentStartMode?
   startAt           DateTime?
+  schedule          String? // Cron-like schedule for recurring MTTs
   lateRegMinutes    Int?
   startingStack     Int?
   blindScheduleId   String?
   payoutMode        PayoutMode?
   payoutTopX        Int?
   payoutTicketCount Int?
+  tableConfigId     String?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
+}
+
+model SystemConfig {
+  id               String   @id @default("default")
+  templatesVersion Int      @default(1)
+  updatedAt        DateTime @updatedAt
+}
+
+enum GovernanceRoleType {
+  DIRECTOR
+  MANAGER
+  PROMOTER
+  ADMIN
+}
+
+enum BalancePoolType {
+  TREASURY
+  PROMO
+  CASH
+  SNG
+  MTT
+}
+
+model GameConfig {
+  id                        String   @id @default("default")
+  actionTimeoutSeconds      Int      @default(15)
+  gameStartCountdownSeconds Int      @default(10)
+  minPlayersToStart         Int      @default(2)
+  maxPlayersPerTable        Int      @default(9)
+  streetDealDelaySeconds    Int      @default(3)
+  newHandDelaySeconds       Int      @default(5)
+  updatedAt                 DateTime @updatedAt
+}
+
+model GovernanceAssignment {
+  id        String             @id @default(cuid())
+  wallet    String
+  role      GovernanceRoleType
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([wallet, role])
+}
+
+model BalancePool {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  type        BalancePoolType
+  asset       Asset
+  accountId   String
+  account     Account          @relation(fields: [accountId], references: [id])
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([type])
 }

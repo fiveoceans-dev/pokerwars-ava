@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import type { WebSocket } from "ws";
+import type { GovernanceRole } from "@hyper-poker/engine";
 
 export interface Session {
   /** Unique identifier for this websocket connection */
@@ -17,6 +18,7 @@ export interface Session {
   /** Whether player is currently in an active hand */
   inActiveHand?: boolean;
   timeout?: NodeJS.Timeout;
+  roles?: GovernanceRole[];
 }
 
 /** Generate a blockchain-style address */
@@ -98,6 +100,10 @@ export class SessionManager {
     this.sessions.set(ws, session);
   }
 
+  getAllSessions(): Session[] {
+    return Array.from(this.sessions.values());
+  }
+
   /**
    * Update user binding for existing session
    * Maintains consistency of byUserId mapping
@@ -140,6 +146,7 @@ export class SessionManager {
       nickname: data.nickname,
       inActiveHand: data.inActiveHand,
       socket: ws,
+      roles: data.roles,
     };
     this.sessions.set(ws, session);
     this.bySessionId.set(session.sessionId, session);

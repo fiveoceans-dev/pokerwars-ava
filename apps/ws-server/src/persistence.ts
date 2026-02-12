@@ -48,6 +48,7 @@ export async function saveSession(session: Session) {
     chips: session.chips,
     nickname: session.nickname,
     inActiveHand: session.inActiveHand,
+    roles: session.roles,
   });
   const c = await getClient();
   if (c) await c.set(`session:${session.sessionId}`, data);
@@ -73,6 +74,12 @@ export async function saveRoom(room: Table) {
   const c = await getClient();
   if (c) await c.set(`room:${room.id}`, JSON.stringify(room));
   memoryRooms.set(room.id, room);
+}
+
+export async function removeRoom(id: string) {
+  const c = await getClient();
+  if (c) await c.del(`room:${id}`);
+  memoryRooms.delete(id);
 }
 
 export async function loadRoom(id: string) {

@@ -58,7 +58,6 @@ export function useTableViewModel(_timer?: number | null) {
     : Array(9).fill("empty");
 
   const isMobile = useIsMobile();
-  const [tableScale, setTableScale] = useState(1);
   const [bet, setBet] = useState(minRaise);
 
   useEffect(() => {
@@ -66,25 +65,9 @@ export function useTableViewModel(_timer?: number | null) {
     setBet(Math.min(minRaise, stack));
   }, [minRaise, currentTurn, chips]);
 
-  useEffect(() => {
-    const baseW = isMobile ? 480 : 820;
-    const baseH = isMobile ? 760 : 520;
-    const minTableWidth = isMobile ? 360 : baseW;
-    // Reserve extra space for action controls so table and buttons remain visible
-    const bottomSpace = isMobile ? 200 : 200;
-    const minScale = minTableWidth / baseW;
-    const handle = () => {
-      const scale = Math.min(
-        Math.max(window.innerWidth / baseW, minScale),
-        (window.innerHeight - bottomSpace) / baseH,
-        1,
-      );
-      setTableScale(isMobile ? scale * 0.95 : scale);
-    };
-    handle();
-    window.addEventListener("resize", handle);
-    return () => window.removeEventListener("resize", handle);
-  }, [isMobile]);
+  // Layout constants - Standardized
+  const baseW = isMobile ? 420 : 820;
+  const baseH = isMobile ? 680 : 520;
 
   const layout = useMemo(
     () => buildLayout(isMobile, tableMaxPlayers),
@@ -133,8 +116,6 @@ export function useTableViewModel(_timer?: number | null) {
     return "sm";
   }, []);
 
-  const baseW = isMobile ? 420 : 820;
-  const baseH = isMobile ? 680 : 520;
   const highestBet = Math.max(0, ...safePlayerBets);
   // Use walletSeatIdx instead of localIdx for current player
   const myBet = walletSeatIdx >= 0 ? safePlayerBets[walletSeatIdx] ?? 0 : 0;
@@ -193,7 +174,6 @@ export function useTableViewModel(_timer?: number | null) {
     layout,
     localIdx,
     walletSeatIdx,
-    tableScale,
     bet,
     setBet,
     communityCardSize,

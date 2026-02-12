@@ -63,8 +63,38 @@ export class BotManager {
       logger.debug(`🤖 [Bot] Skipping (status=${seat.status}) seat ${actor} pid=${seat.pid}`);
       return;
     }
-    if (!["preflop", "flop", "turn", "river"].includes(table.phase)) {
+    if (!["preflop", "flop", "turn", "river", "showdown", "payout"].includes(table.phase)) {
       logger.debug(`🤖 [Bot] Skipping phase ${table.phase}`);
+      return;
+    }
+
+    // Special handling for showdown/payout phases (decide to show or muck)
+    if (["showdown", "payout"].includes(table.phase)) {
+      const winners = new Set((table.winnersPids || []).map((p) => p.toLowerCase()));
+      const isWinner = winners.has(seat.pid.toLowerCase());
+      
+      // If already revealed, nothing to do
+      const revealed = new Set((table.revealedPids || []).map((p) => p.toLowerCase()));
+      if (revealed.has(seat.pid.toLowerCase())) return;
+
+      const token = `${table.handNumber}:${table.phase}:${actor}`;
+      if (this.turnTokens.get(tableId) === token) return;
+      this.turnTokens.set(tableId, token);
+
+      const delay = 500 + Math.floor(Math.random() * 1000);
+      setTimeout(async () => {
+        try {
+          if (isWinner) {
+            // Winners always show
+            await engine.dispatch({ t: "PlayerShowCards", pid: seat.pid! });
+          } else {
+            // Losers muck cards (don't show)
+            await engine.dispatch({ t: "PlayerMuckCards", pid: seat.pid! });
+          }
+        } catch (err) {
+          logger.error(`❌ [Bot] Show/Muck failed for ${seat.pid}`, err);
+        }
+      }, delay);
       return;
     }
 

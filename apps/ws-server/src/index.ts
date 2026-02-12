@@ -21,6 +21,7 @@ import type {
   ServerEvent,
   ClientCommand,
   LobbyTable,
+  GovernanceRole,
 } from "@hyper-poker/engine";
 
 import { SessionManager, Session } from "./sessionManager";
@@ -29,7 +30,7 @@ import { logger } from "@hyper-poker/engine/utils/logger";
 import { getTableConfig, listTableConfigs, setTableConfigs } from "./tableConfig";
 import { globalSeatMappings } from "./seatMappingManager";
 import { getServerEnv, normalizeOrigin } from "./env";
-import { TournamentManager, loadTournamentDefinitions } from "./tournamentManager";
+import { TournamentManager } from "./tournamentManager";
 import { getPrisma } from "./prisma";
 import { TournamentOrchestrator } from "./tournamentOrchestrator";
 import { BotManager } from "./botManager";
@@ -37,7 +38,7 @@ import { LedgerService } from "./ledgerService";
 import { LedgerPort } from "./ledgerPort";
 import { InMemoryLedger } from "./inMemoryLedger";
 import { ChainAdapter } from "./chainAdapter";
-import { Asset } from "@prisma/client";
+import { Asset, GovernanceRoleType } from "@prisma/client";
 import { authNonces, verifiedWallets, issueAuthToken, verifyAuthToken } from "./security";
 import { ethers } from "ethers";
 import {
@@ -46,6 +47,7 @@ import {
   loadAllRooms,
   loadSession,
 } from "./persistence";
+import { applyGovernanceRoles, getGovernanceRoles } from "./governance";
 
 // Environment Configuration
 const env = getServerEnv();
@@ -54,7 +56,85 @@ const RECONNECT_GRACE_MS = env.reconnectGraceMs; // default 30s
 const prisma = getPrisma();
 const ledger: LedgerPort | null = prisma ? new LedgerService(prisma) : new InMemoryLedger();
 const chain = ledger ? new ChainAdapter(ledger) : null;
+
+if (prisma) {
+  refreshGovernanceAssignments().catch((err) => {
+    logger.error("❌ Failed to load governance assignments:", err);
+  });
+}
 const allowUnverifiedWallets = process.env.ALLOW_UNVERIFIED_WALLETS === "1";
+
+const GOVERNANCE_ROLES_LIST: GovernanceRoleType[] = [
+  GovernanceRoleType.DIRECTOR,
+  GovernanceRoleType.MANAGER,
+  GovernanceRoleType.PROMOTER,
+  GovernanceRoleType.ADMIN,
+];
+
+let governanceAssignments = new Map<string, GovernanceRoleType[]>();
+
+function normalizeLedgerWallet(wallet?: string): string | null {
+  return wallet ? wallet.toLowerCase().trim() : null;
+}
+
+async function refreshGovernanceAssignments() {
+  if (!prisma) return;
+  const assignments = await prisma.governanceAssignment.findMany();
+  const next = new Map<string, GovernanceRoleType[]>();
+  for (const entry of assignments) {
+    const wallet = normalizeLedgerWallet(entry.wallet);
+    if (!wallet) continue;
+    const list = next.get(wallet) ?? [];
+    if (!list.includes(entry.role)) {
+      list.push(entry.role);
+    }
+    next.set(wallet, list);
+  }
+  governanceAssignments = next;
+  logger.info(`🔐 Loaded governance assignments for ${governanceAssignments.size} wallets`);
+}
+
+function getGovernanceRoles(userId?: string): GovernanceRoleType[] {
+  const normalized = normalizeLedgerWallet(userId);
+  if (!normalized) return [];
+  const assigned = governanceAssignments.get(normalized) ?? [];
+  if (isUserAdmin(userId) && !assigned.includes(GovernanceRoleType.ADMIN)) {
+    return [...assigned, GovernanceRoleType.ADMIN];
+  }
+  return assigned;
+}
+
+function applyGovernanceRoles(session: Session) {
+  session.roles = getGovernanceRoles(session.userId);
+}
+
+function isGovernanceAuthorized(wallet?: string): boolean {
+  const roles = getGovernanceRoles(wallet);
+  return roles.length > 0;
+}
+
+async function readRequestBody(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      if (!body) return resolve({});
+      try {
+        resolve(JSON.parse(body));
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function isUserAdmin(userId?: string): boolean {
+  if (!userId) return false;
+  return env.adminWallets.includes(userId.toLowerCase().trim());
+}
 
 function getBearerToken(req: IncomingMessage): string | null {
   const header = req.headers.authorization || req.headers.Authorization;
@@ -331,6 +411,236 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Admin: List all game templates
+  if (url.pathname === '/api/admin/templates' && req.method === 'GET') {
+    setCorsHeaders(res, origin);
+    if (!prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const token = getBearerToken(req);
+    const auth = token ? verifyAuthToken(token) : null;
+    if (!auth || !isGovernanceAuthorized(auth.wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    try {
+      const templates = await prisma.gameTemplate.findMany({
+        orderBy: [{ type: 'asc' }, { bigBlind: 'asc' }]
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ templates }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Failed to load templates" }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/templates' && req.method === 'GET') {
+    setCorsHeaders(res, origin);
+    if (!prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    try {
+      const templates = await prisma.gameTemplate.findMany({
+        orderBy: [{ type: 'asc' }, { bigBlind: 'asc' }],
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ templates }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Failed to load templates" }));
+    }
+    return;
+  }
+
+  // Admin: Force template sync (hot-reload)
+  if (url.pathname === '/api/admin/sync' && req.method === 'POST') {
+    setCorsHeaders(res, origin);
+    if (!prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const token = getBearerToken(req);
+    const auth = token ? verifyAuthToken(token) : null;
+    if (!auth || !isGovernanceAuthorized(auth.wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    try {
+      const config = await prisma.systemConfig.upsert({
+        where: { id: 'default' },
+        update: { templatesVersion: { increment: 1 } },
+        create: { id: 'default', templatesVersion: 1 },
+      });
+      logger.info(`🔄 Admin triggered template sync. New version: ${config.templatesVersion}`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, version: config.templatesVersion }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: "Failed to sync templates" }));
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/admin/game-config') {
+    setCorsHeaders(res, origin);
+    if (!prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const token = getBearerToken(req);
+    const auth = token ? verifyAuthToken(token) : null;
+    if (!auth || !isGovernanceAuthorized(auth.wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    if (req.method === 'GET') {
+      const config = await prisma.gameConfig.upsert({
+        where: { id: "default" },
+        update: {},
+        create: {
+          id: "default",
+          actionTimeoutSeconds: 15,
+          gameStartCountdownSeconds: 10,
+          minPlayersToStart: 2,
+          maxPlayersPerTable: 9,
+          streetDealDelaySeconds: 3,
+          newHandDelaySeconds: 5,
+        },
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ config }));
+      return;
+    }
+    if (req.method === 'POST') {
+      try {
+        const payload = await readRequestBody(req);
+        const values = {
+          actionTimeoutSeconds: Number(payload.actionTimeoutSeconds) || 15,
+          gameStartCountdownSeconds: Number(payload.gameStartCountdownSeconds) || 10,
+          minPlayersToStart: Number(payload.minPlayersToStart) || 2,
+          maxPlayersPerTable: Number(payload.maxPlayersPerTable) || 9,
+          streetDealDelaySeconds: Number(payload.streetDealDelaySeconds) || 3,
+          newHandDelaySeconds: Number(payload.newHandDelaySeconds) || 5,
+        };
+        const updated = await prisma.gameConfig.upsert({
+          where: { id: "default" },
+          update: values,
+          create: { id: "default", ...values },
+        });
+        logger.info("🧭 Game config updated", values);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, config: updated }));
+      } catch (err) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: "Invalid config payload" }));
+      }
+      return;
+    }
+    res.writeHead(405);
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
+
+  if (url.pathname === '/api/admin/roles') {
+    setCorsHeaders(res, origin);
+    if (!prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const token = getBearerToken(req);
+    const auth = token ? verifyAuthToken(token) : null;
+    if (!auth || !isGovernanceAuthorized(auth.wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    if (req.method === 'GET') {
+      const assignments = await prisma.governanceAssignment.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ roles: assignments }));
+      return;
+    }
+    if (req.method === 'POST') {
+      try {
+        const payload = await readRequestBody(req);
+        const wallet = normalizeLedgerWallet(payload.wallet);
+        const role = payload.role as GovernanceRoleType;
+        if (!wallet || !role || !GOVERNANCE_ROLES_LIST.includes(role)) {
+          throw new Error("Invalid wallet or role");
+        }
+        await prisma.governanceAssignment.upsert({
+          where: {
+            wallet_role: { wallet, role },
+          },
+          update: {},
+          create: { wallet, role },
+        });
+        await refreshGovernanceAssignments();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (err) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: err instanceof Error ? err.message : "Invalid payload" }));
+      }
+      return;
+    }
+    res.writeHead(405);
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
+
+  if (url.pathname === '/api/admin/balance-pools' && req.method === 'GET') {
+    setCorsHeaders(res, origin);
+    if (!prisma) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: "Database not configured" }));
+      return;
+    }
+    const token = getBearerToken(req);
+    const auth = token ? verifyAuthToken(token) : null;
+    if (!auth || !isGovernanceAuthorized(auth.wallet)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+    const pools = await prisma.balancePool.findMany({
+      include: { account: true },
+      orderBy: { name: "asc" },
+    });
+    const payload = pools.map((pool) => ({
+      id: pool.id,
+      name: pool.name,
+      description: pool.description,
+      type: pool.type,
+      asset: pool.asset,
+      accountId: pool.accountId,
+      account: {
+        coins: pool.account.coins.toString(),
+        ticket_x: pool.account.ticket_x.toString(),
+        ticket_y: pool.account.ticket_y.toString(),
+        ticket_z: pool.account.ticket_z.toString(),
+      },
+      updatedAt: pool.updatedAt,
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ pools: payload }));
+    return;
+  }
+
   if (url.pathname === '/api/user/ledger' && req.method === 'GET') {
     setCorsHeaders(res, origin);
     if (!chain) {
@@ -584,10 +894,10 @@ const wss = new WebSocketServer({
   maxPayload: env.wsMaxPayload,
 });
 const sessions = new SessionManager();
-const bridge = new WebSocketFSMBridge(sessions, ledger);
+const bridge = new WebSocketFSMBridge(sessions, ledger, prisma);
 const botManager = new BotManager();
 bridge.setBotManager(botManager);
-const tournamentManager = new TournamentManager(loadTournamentDefinitions(), prisma);
+const tournamentManager = new TournamentManager(prisma!);
 const tournamentOrchestrator = new TournamentOrchestrator(
   tournamentManager,
   bridge,
@@ -599,6 +909,8 @@ const tournamentOrchestrator = new TournamentOrchestrator(
       const asset = p.currency === "tickets" ? Asset.TICKET_X : Asset.COINS;
       try {
         await ledger.payout(p.playerId, tournamentId, asset, p.amount, p.position);
+        // Push balance update to winner
+        void bridge.pushBalanceUpdate(p.playerId);
       } catch (err) {
         logger.warn(`Payout ledger failed for ${p.playerId}`, err);
       }
@@ -824,6 +1136,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   logger.info(`🔗 [${clientId}] Connected (Total: ${wss.clients.size})`);
   
   let session = sessions.create(ws);
+  applyGovernanceRoles(session);
   void saveSession(session);
   
   // Send session info to client
@@ -832,6 +1145,8 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     type: "SESSION",
     sessionId: session.sessionId,
     userId: session.userId,
+    isAdmin: isUserAdmin(session.userId),
+    roles: session.roles ?? getGovernanceRoles(session.userId),
   } satisfies ServerEvent));
 
   /**
@@ -1007,6 +1322,8 @@ ws.on("message", async (data) => {
             }
           }
           tournamentOrchestrator.handleRegistration(command.tournamentId);
+          // Push real-time status update
+          void bridge.pushUserStatusUpdate(playerId);
           const payload = {
             tableId: "",
             type: "TOURNAMENT_UPDATED",
@@ -1058,6 +1375,8 @@ ws.on("message", async (data) => {
               logger.warn("Refund failed", err);
             }
           }
+          // Push real-time status update
+          void bridge.pushUserStatusUpdate(playerId);
           const payload = {
             tableId: "",
             type: "TOURNAMENT_UPDATED",
@@ -1144,6 +1463,7 @@ ws.on("message", async (data) => {
             sessions.expire(session);
             sessions.replaceSocket(existing, ws);
             session = existing;
+            applyGovernanceRoles(existing);
             void saveSession(existing);
             
             ws.send(JSON.stringify({
@@ -1151,6 +1471,8 @@ ws.on("message", async (data) => {
               type: "SESSION",
               sessionId: existing.sessionId,
               userId: existing.userId,
+              isAdmin: isUserAdmin(existing.userId),
+              roles: existing.roles ?? getGovernanceRoles(existing.userId),
             } satisfies ServerEvent));
             
             if (existing.roomId) {
@@ -1162,6 +1484,9 @@ ws.on("message", async (data) => {
                 logger.warn(`⚠️ [REATTACH] Table ${existing.roomId} not found; skipping snapshot`, err);
               }
             }
+            if (existing.userId) {
+              void bridge.pushUserStatusUpdate(existing.userId);
+            }
           }
           break;
 
@@ -1170,6 +1495,7 @@ ws.on("message", async (data) => {
           const attached = sessions.attach(ws, normalizedUserId);
           if (attached) {
             session.userId = attached.userId;
+            applyGovernanceRoles(session);
             session.roomId = session.roomId || attached.roomId;
 
             // Proactively recover seat for immediate snapshot correctly
@@ -1194,6 +1520,8 @@ ws.on("message", async (data) => {
               type: "SESSION",
               sessionId: attached.sessionId,
               userId: attached.userId,
+              isAdmin: isUserAdmin(attached.userId),
+              roles: session.roles ?? getGovernanceRoles(attached.userId),
             } satisfies ServerEvent));
             
             if (session.roomId) {
@@ -1204,6 +1532,9 @@ ws.on("message", async (data) => {
               } catch (err) {
                 logger.warn(`⚠️ [ATTACH] Table ${session.roomId} not found; skipping snapshot`, err);
               }
+            }
+            if (attached.userId) {
+              void bridge.pushUserStatusUpdate(attached.userId);
             }
           }
           break;
@@ -1285,8 +1616,17 @@ createPersistentTables();
     const rooms = await loadAllRooms();
     logger.info(`📂 Loaded ${rooms.length} persisted rooms`);
     
+    // Rehydrate each room into the bridge
+    for (const room of rooms) {
+      try {
+        bridge.rehydrateEngine(room);
+      } catch (err) {
+        logger.error(`❌ Failed to rehydrate room ${room.id}:`, err);
+      }
+    }
+    
     // Using pure Table format for persistence
-    logger.info('ℹ️ Pure FSM architecture - using Table format only');
+    logger.info(`✅ Pure FSM architecture - rehydrated ${rooms.length} tables`);
   } catch (error) {
     logger.error('❌ Room restoration failed:', error);
     logger.info('ℹ️ Continuing with fresh tables');

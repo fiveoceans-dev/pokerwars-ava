@@ -329,6 +329,10 @@ export class LedgerService {
     return account;
   }
 
+  async ensurePromoAccount(promoId: string) {
+    return this.ensureAccount(AccountOwnerType.PROMO, promoId);
+  }
+
   private async applyTransfer(params: {
     type: LedgerType;
     fromAccountId: string | null;

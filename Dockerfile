@@ -14,11 +14,11 @@ COPY tsconfig.json tsconfig.packages.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN if [ "$BUILD_TARGET" = "ws-server" ]; then \
-      npm install --workspaces --include-workspace-root --workspace apps/ws-server --workspace packages/engine; \
+      npm install --workspace apps/ws-server --workspace packages/engine; \
     elif [ "$BUILD_TARGET" = "web" ]; then \
-      npm install --workspaces --include-workspace-root --workspace apps/web --workspace packages/engine; \
+      npm install --workspace apps/web --workspace packages/engine; \
     else \
-      npm install --workspaces --include-workspace-root; \
+      npm install; \
     fi
 
 FROM node:${NODE_VERSION} AS build

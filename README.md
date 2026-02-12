@@ -26,8 +26,8 @@ Backend uses Postgres via Prisma. After changing schema run:
 
 ```bash
 cd apps/ws-server
-npx prisma migrate dev -n ledger_blockchain
-npx prisma generate
+npm run db:migrate
+npm run db:generate
 ```
 
 For a one-shot local bootstrap (migrate + generate + optional seed), run:
@@ -376,7 +376,7 @@ export ALLOW_UNVERIFIED_WALLETS=1
 | `run_prisma_job.sh` | Run database migrations | After DB creation |
 | `db_grant.sh` | Grant DB permissions | First-time setup |
 | `drop_db_psql.sh` | Drop database safely | Reset operations |
-| `diagnose_deployment.sh` | Debug deployment issues | Troubleshooting |
+| `diagnose_db_deployment.sh` | Debug deployment issues | Troubleshooting |
 
 ### 🌱 Database Seeding
 
@@ -559,7 +559,7 @@ PokerWars uses a strict separation between **Game Templates** and **Active Insta
 
 - Ledger + accounts + treasury act as a “vanilla blockchain” (see `docs/vanilla-blockchain.md`).
 - Treasury total supply: 5,000,000,000 coins. Tickets: `ticket_x`, `ticket_y`, `ticket_z`.
-- Free claim: 1,000 coins every 10 hours (`POST /api/user/claim`).
+- Free claim: 3,000 coins every 5 hours (`POST /api/user/claim`).
 - Conversions: coins ↔ tickets with buy/sell rates (server enforced).
 - **Hardened Payouts:** Tournament payouts are strictly persisted to the DB and distributed via the LedgerPort once a tournament hits the `FINISHED` state.
 
@@ -576,8 +576,6 @@ See `docs/bot-guide.md`.
 - Content width is unified across navbar, hero, and pages.
 - Learn page has 5 authored lessons; Free page offers timed coin claims; Account page uses DB-backed balances and convert modal.
 Details in `docs/mtt_stt.md` and `docs/vanilla-blockchain.md`.
-
-## Template note
 
 ## 🎯 Architecture Overview
 

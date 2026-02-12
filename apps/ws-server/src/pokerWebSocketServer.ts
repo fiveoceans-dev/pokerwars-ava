@@ -23,10 +23,10 @@ import {
   listTableConfigs,
 } from "./tableConfig";
 import { globalSeatMappings } from "./seatMappingManager";
-import { saveSession } from "./persistence";
+import { saveSession, saveRoom, removeRoom } from "./persistence";
 import { BotManager, type BotConfig } from "./botManager";
 import { verifiedWallets } from "./security";
-import { Asset } from "@prisma/client";
+import { Asset, PrismaClient } from "@prisma/client";
 import { LedgerPort } from "./ledgerPort";
 
 /**
@@ -51,7 +51,11 @@ class WebSocketFSMBridge extends EventEmitter {
   private rl = new Map<string, { t: number; c: number }>();
   private onPlayerBust?: (tableId: string, playerId: string) => void;
   private botManager?: BotManager;
-  constructor(sessions: SessionManager, private ledgerService?: LedgerPort | null) {
+  constructor(
+    sessions: SessionManager,
+    private ledgerService?: LedgerPort | null,
+    private prisma?: PrismaClient | null,
+  ) {
     super();
     this.sessions = sessions;
   }
@@ -71,6 +75,12 @@ class WebSocketFSMBridge extends EventEmitter {
   setTableMaxPlayers(tableId: string, maxPlayers: number) {
     if (!Number.isFinite(maxPlayers) || maxPlayers <= 0) return;
     this.tableMaxPlayers.set(tableId, Math.floor(maxPlayers));
+  }
+
+  rehydrateEngine(table: Table) {
+    const engine = this.getEngine(table.id, table.smallBlind, table.bigBlind);
+    engine.rehydrate(table);
+    logger.info(`♻️ [Bridge] Rehydrated engine for table ${table.id}`);
   }
 
   getMaxPlayers(tableId: string, table?: Table): number {
@@ -367,6 +377,8 @@ class WebSocketFSMBridge extends EventEmitter {
         table, // Send Table directly - clients adapt
         maxPlayers,
       });
+      // Persist table state for crash recovery
+      void saveRoom(table);
     });
 
     // Action countdown events (client-driven model)
@@ -786,6 +798,11 @@ class WebSocketFSMBridge extends EventEmitter {
         buyInChips,
       );
 
+      // Push real-time balance update after buy-in
+      void this.pushBalanceUpdate(canonicalId);
+      // Push real-time status update
+      void this.pushUserStatusUpdate(canonicalId);
+
       // Dispatch PlayerJoin event through FSM with canonical ID
       await engine.dispatch({
         t: "PlayerJoin",
@@ -950,10 +967,15 @@ class WebSocketFSMBridge extends EventEmitter {
       pid: canonicalId,
     });
 
+    // Refresh state after leave (to get final chip count if they were in a hand)
+    const tableStateAfterLeave = engine.getState();
+
     // Refund remaining stack from escrow to user
-    if (this.ledgerService) {
+    // ONLY for CASH tables. Tournament payouts are handled by the orchestrator.
+    const config = getTableConfig(session.roomId);
+    if (this.ledgerService && config) {
       try {
-        const seat = tableState.seats[seatId];
+        const seat = tableStateAfterLeave.seats[seatId];
         const remaining = seat?.chips ?? 0;
         if (remaining > 0) {
           await this.ledgerService.refund(
@@ -962,9 +984,13 @@ class WebSocketFSMBridge extends EventEmitter {
             Asset.COINS,
             remaining,
           );
+          // Push real-time balance update after refund
+          void this.pushBalanceUpdate(canonicalId);
+          // Push real-time status update
+          void this.pushUserStatusUpdate(canonicalId);
         }
       } catch (err) {
-        logger.error("Refund on leave failed", err);
+        logger.error(`❌ Refund on leave failed for ${canonicalId} on ${session.roomId}:`, err);
       }
     }
 
@@ -1199,6 +1225,7 @@ class WebSocketFSMBridge extends EventEmitter {
       this.engines.delete(tableId);
       this.tableMaxPlayers.delete(tableId);
       this.botManager?.setTableStyle(tableId, { style: "random" }); // Reset bot style
+      void removeRoom(tableId);
       logger.info(`🗑️ Closed table ${tableId}`);
     }
   }
@@ -1286,6 +1313,95 @@ class WebSocketFSMBridge extends EventEmitter {
     return address.length > 10
       ? `${address.slice(0, 6)}...${address.slice(-4)}`
       : address;
+  }
+
+  async pushBalanceUpdate(playerId: string) {
+    if (!this.ledgerService) return;
+    try {
+      const { account } = await this.ledgerService.getBalanceForWallet(playerId);
+      if (!account) return;
+
+      const event: ServerEvent = {
+        tableId: "",
+        type: "BALANCE_UPDATE",
+        playerId,
+        coins: account.coins.toString(),
+        tickets: {
+          ticket_x: account.ticket_x.toString(),
+          ticket_y: account.ticket_y.toString(),
+          ticket_z: account.ticket_z.toString(),
+        },
+      };
+
+      // Broadcast to all sessions for this player
+      this.sessions.getAllSessions().forEach((s) => {
+        if (
+          s.userId?.toLowerCase() === playerId.toLowerCase() &&
+          s.socket.readyState === WebSocket.OPEN
+        ) {
+          s.socket.send(JSON.stringify(event));
+        }
+      });
+      logger.debug(`💰 [Balance] Pushed update to ${playerId}`);
+    } catch (err) {
+      logger.error(`❌ Failed to push balance update for ${playerId}:`, err);
+    }
+  }
+
+  async pushUserStatusUpdate(playerId: string) {
+    if (!this.prisma) return;
+    try {
+      const registrations = await this.prisma.tournamentRegistration.findMany({
+        where: {
+          playerId: { equals: playerId, mode: "insensitive" },
+          status: { in: ["REGISTERED", "SEATED"] },
+          tournament: {
+            status: {
+              in: [
+                "REGISTERING",
+                "SCHEDULED",
+                "RUNNING",
+                "LATE_REG",
+                "BREAKING",
+              ],
+            },
+          },
+        },
+        select: {
+          tournament: { select: { type: true } },
+        },
+      });
+      const sngActive = registrations.some((r) => r.tournament.type === "STT");
+      const mttActive = registrations.some((r) => r.tournament.type === "MTT");
+
+      const cashTableIds = globalSeatMappings
+        .getTablesForPlayer(playerId)
+        .filter((tableId) => !/^(mtt|stt)-/i.test(tableId));
+      const cashActive = cashTableIds.length > 0;
+
+      const event: ServerEvent = {
+        tableId: "",
+        type: "USER_STATUS_UPDATE",
+        playerId,
+        cashActive,
+        cashTableIds,
+        sngActive,
+        mttActive,
+      };
+
+      // Broadcast to all sessions for this player
+      this.sessions.getAllSessions().forEach((s) => {
+        if (
+          s.userId?.toLowerCase() === playerId.toLowerCase() &&
+          s.socket.readyState === WebSocket.OPEN
+        ) {
+          s.socket.send(JSON.stringify(event));
+        }
+      });
+      logger.debug(`📡 [Status] Pushed update to ${playerId}`);
+    } catch (err) {
+      logger.error(`❌ Failed to push status update for ${playerId}:`, err);
+    }
   }
 }
 

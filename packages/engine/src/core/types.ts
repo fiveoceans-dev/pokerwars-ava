@@ -167,7 +167,8 @@ export type PokerEvent =
   | { t: "PlayerShowCards"; pid: string }
   | { t: "PlayerMuckCards"; pid: string }
   | { t: "GameCountdownStart"; countdown: number }
-  | { t: "GameCountdownStop"; reason: string };
+  | { t: "GameCountdownStop"; reason: string }
+  | { t: "UpdateBlinds"; smallBlind: number; bigBlind: number };
 
 /**
  * Supporting types for complex events

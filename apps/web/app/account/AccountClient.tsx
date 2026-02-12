@@ -7,6 +7,8 @@ import GenericModal from "~~/components/ui/GenericModal";
 import { WalletDisconnectConfirm } from "~~/components/WalletDisconnectConfirm";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { formatNumber } from "~~/utils/format";
+import { useGameStore } from "~~/hooks/useGameStore";
+import Link from "next/link";
 
 type GameHistoryRow = {
   id: string;
@@ -20,6 +22,7 @@ type GameHistoryRow = {
 export default function AccountClient() {
   const { status, address, formatAddress, disconnect } = useWallet();
   const { balances, hydrated, convert, walletForBalance } = useBalances();
+  const { isAdmin } = useGameStore();
   const isConnected = status === "connected" && !!address;
   const showBalances = hydrated && Boolean(walletForBalance);
   const [storedEmail, setStoredEmail] = useState("");
@@ -162,7 +165,15 @@ export default function AccountClient() {
       <div className="content-wrap space-y-10">
         <div className="space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h1 className="text-2xl md:text-3xl">Account</h1>
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl md:text-3xl">Account</h1>
+              <Link
+                href="/governance"
+                className="tbtn text-[10px] uppercase tracking-widest px-2 h-6 flex items-center justify-center bg-amber-600/20 border-amber-600/50 text-amber-400 hover:bg-amber-600/30 transition-colors"
+              >
+                Governance
+              </Link>
+            </div>
           </div>
           <div className="rule" aria-hidden="true" />
           <div className="space-y-3 text-sm text-white/70">

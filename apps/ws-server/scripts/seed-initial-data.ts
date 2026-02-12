@@ -1,4 +1,11 @@
-import { PrismaClient, AccountOwnerType, Asset, LedgerType } from "@prisma/client";
+import {
+  PrismaClient,
+  AccountOwnerType,
+  Asset,
+  LedgerType,
+  BalancePoolType,
+  GovernanceRoleType,
+} from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -194,8 +201,125 @@ async function seedLedger() {
   console.log("✅ Ledger seeded");
 }
 
-async function seedBlindSchedules() {
-  console.log("⏰ Skipping blind schedule seeding (schedules are defined in code)");
+async function seedSystemConfig() {
+  console.log("⚙️ Seeding system config...");
+  await prisma.systemConfig.upsert({
+    where: { id: "default" },
+    update: { templatesVersion: 1 },
+    create: { id: "default", templatesVersion: 1 },
+  });
+  console.log("✅ System config seeded");
+}
+
+async function seedGameConfig() {
+  console.log("🧮 Seeding game configuration...");
+  await prisma.gameConfig.upsert({
+    where: { id: "default" },
+    update: {},
+    create: {
+      id: "default",
+      actionTimeoutSeconds: 15,
+      gameStartCountdownSeconds: 10,
+      minPlayersToStart: 2,
+      maxPlayersPerTable: 9,
+      streetDealDelaySeconds: 3,
+      newHandDelaySeconds: 5,
+    },
+  });
+  console.log("✅ Game configuration seeded");
+}
+
+async function seedGovernanceAssignments() {
+  console.log("👥 Seeding governance assignments...");
+  const envWallets = (process.env.ADMIN_WALLETS || "")
+    .split(",")
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean);
+  for (const wallet of envWallets) {
+    await prisma.governanceAssignment.upsert({
+      where: {
+        wallet_role: { wallet, role: GovernanceRoleType.ADMIN },
+      },
+      update: {},
+      create: {
+        wallet,
+        role: GovernanceRoleType.ADMIN,
+      },
+    });
+  }
+  console.log("✅ Governance assignments seeded");
+}
+
+const BALANCE_POOLS = [
+  {
+    name: "Treasury Vault",
+    description: "Primary reserve backing all coins",
+    type: BalancePoolType.TREASURY,
+    asset: Asset.COINS,
+    ownerId: TREASURY_CONFIG.id,
+    initialCoins: TREASURY_CONFIG.initialCoinSupply,
+  },
+  {
+    name: "Promo Daily Bank",
+    description: "Daily promotions, bonusing, and giveaways",
+    type: BalancePoolType.PROMO,
+    asset: Asset.COINS,
+    ownerId: "promo-daily",
+    initialCoins: 250_000,
+  },
+  {
+    name: "Promo Weekly Bank",
+    description: "Weekly campaign funds",
+    type: BalancePoolType.PROMO,
+    asset: Asset.COINS,
+    ownerId: "promo-weekly",
+    initialCoins: 750_000,
+  },
+];
+
+async function seedBalancePools() {
+  console.log("🏦 Seeding balance pools...");
+  for (const pool of BALANCE_POOLS) {
+    const account = (
+      await prisma.account.upsert({
+        where: {
+          ownerType_ownerId: {
+            ownerType: AccountOwnerType.TREASURY,
+            ownerId: pool.ownerId,
+          },
+        },
+        update: {
+          coins: pool.initialCoins,
+        },
+        create: {
+          id: `account-${pool.ownerId}`,
+          ownerType: AccountOwnerType.TREASURY,
+          ownerId: pool.ownerId,
+          coins: pool.initialCoins,
+        },
+      })
+    );
+    await prisma.balancePool.upsert({
+      where: { name: pool.name },
+      update: {
+        description: pool.description,
+        type: pool.type,
+        asset: pool.asset,
+        accountId: account.id,
+      },
+      create: {
+        name: pool.name,
+        description: pool.description,
+        type: pool.type,
+        asset: pool.asset,
+        accountId: account.id,
+      },
+    });
+  }
+  console.log("✅ Balance pools seeded");
+}
+
+async function seedBlindSchedules() {  console.log("⏰ Skipping blind schedule seeding (schedules are defined in code)");
 }
 
 async function seedTestData() {
@@ -242,6 +366,10 @@ async function main() {
   try {
     await seedTreasury();
     await seedLedger();
+    await seedSystemConfig();
+    await seedGameConfig();
+    await seedGovernanceAssignments();
+    await seedBalancePools();
     await seedBlindSchedules();
 
     // Optional: seed test data for development

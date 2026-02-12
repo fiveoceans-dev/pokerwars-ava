@@ -133,138 +133,135 @@ export default function PlayerActionButtons({
 
   if (!hasAnythingToShow) return null;
 
+  const btnMinWidth = isMobile ? "60px" : "70px";
+
   return (
     <div
       className={`${isMobile ? "w-full" : "w-auto"} max-w-[420px] h-full flex flex-col justify-between ${
-        isMobile ? "text-[10px] min-h-[120px]" : "text-xs min-h-[120px]"
-      } ${className ?? ""}`}
+        isMobile ? "text-[10px] min-h-[140px]" : "text-xs min-h-[120px]"
+      } overflow-hidden ${className ?? ""}`}
     >
       {/* Row 1 - Action Buttons (Fixed positions) */}
-      <div
-        className={`flex mb-2 ${
-          isMobile ? "flex-wrap justify-center gap-1" : "justify-center gap-1"
-        }`}
-        style={{ minHeight: "36px" }}
-      >
+      <div className="flex flex-wrap mb-2 justify-center gap-1">
         {/* Fold - Position 1 */}
-        <div className="flex justify-center" style={{ minWidth: "70px" }}>
+        <div className="flex justify-center" style={{ minWidth: btnMinWidth }}>
           {showActions ? (
             <button
               onClick={() => handleAction("FOLD")}
               disabled={isActionPending}
-              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-white flex items-center justify-center ${
-                isActionPending ? "bg-rose-400 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-400"
+              className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
+                isActionPending ? "bg-red-600/50 cursor-not-allowed" : "bg-red-700 hover:bg-red-600"
               }`}
             >
               Fold
             </button>
           ) : (
-            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
+            <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
               Fold
             </div>
           )}
         </div>
 
         {/* Check - Position 2 */}
-        <div className="flex justify-center" style={{ minWidth: "70px" }}>
+        <div className="flex justify-center" style={{ minWidth: btnMinWidth }}>
           {showActions && canCheck ? (
             <button
               onClick={() => handleAction("CHECK")}
               disabled={isActionPending}
-              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
+              className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-sky-300 cursor-not-allowed"
-                  : "bg-sky-400 hover:bg-sky-300"
+                  ? "bg-sky-600/50 cursor-not-allowed"
+                  : "bg-sky-700 hover:bg-sky-600"
               }`}
             >
               Check
             </button>
           ) : (
-            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
+            <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
               Check
             </div>
           )}
         </div>
 
         {/* Call - Position 3 */}
-        <div className="flex justify-center" style={{ minWidth: "70px" }}>
+        <div className="flex justify-center" style={{ minWidth: btnMinWidth }}>
           {showActions && canCall ? (
             <button
               onClick={() => handleAction("CALL")}
               disabled={isActionPending}
-              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
+              className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-teal-300 cursor-not-allowed"
-                  : "bg-teal-400 hover:bg-teal-300"
+                  ? "bg-teal-600/50 cursor-not-allowed"
+                  : "bg-teal-700 hover:bg-teal-600"
               }`}
             >
-              Call {playerChips < toCall ? `${playerChips} (All-in)` : toCall}
+              {isMobile ? "Call" : `Call ${playerChips < toCall ? "All-in" : toCall}`}
             </button>
           ) : (
-            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
+            <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
               Call
             </div>
           )}
         </div>
 
         {/* Bet - Position 4 */}
-        <div className="flex justify-center" style={{ minWidth: "70px" }}>
+        <div className="flex justify-center" style={{ minWidth: btnMinWidth }}>
           {showActions && canRaise && toCall === 0 ? (
             <button
               onClick={() => handleAction("BET", raiseAmount)}
               disabled={isActionPending}
-              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
+              className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-emerald-300 cursor-not-allowed"
-                  : "bg-emerald-400 hover:bg-emerald-300"
+                  ? "bg-green-600/50 cursor-not-allowed"
+                  : "bg-green-700 hover:bg-green-600"
               }`}
             >
               Bet
             </button>
           ) : (
-            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
+            <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
               Bet
             </div>
           )}
         </div>
 
         {/* Raise - Position 5 */}
-        <div className="flex justify-center" style={{ minWidth: "70px" }}>
+        <div className="flex justify-center" style={{ minWidth: btnMinWidth }}>
           {showActions && canRaise && toCall > 0 ? (
             <button
               onClick={() => handleAction("RAISE", raiseAmount)}
               disabled={isActionPending}
-              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-black flex items-center justify-center ${
+              className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-emerald-300 cursor-not-allowed"
-                  : "bg-emerald-500 hover:bg-emerald-400"
+                  ? "bg-green-600/50 cursor-not-allowed"
+                  : "bg-green-700 hover:bg-green-600"
               }`}
             >
               Raise
             </button>
           ) : (
-            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
+            <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
               Raise
             </div>
           )}
         </div>
 
         {/* All-in - Position 6 */}
-        <div className="flex justify-center" style={{ minWidth: "70px" }}>
+        <div className="flex justify-center" style={{ minWidth: btnMinWidth }}>
           {showActions && playerChips > 0 ? (
             <button
               onClick={() => handleAction("ALLIN")}
               disabled={isActionPending}
-              className={`min-w-[70px] h-8 px-3 rounded font-semibold text-xs text-white flex items-center justify-center ${
+              className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-orange-400 cursor-not-allowed"
-                  : "bg-orange-500 hover:bg-orange-400"
+                  ? "bg-orange-600/50 cursor-not-allowed"
+                  : "bg-orange-700 hover:bg-orange-600"
               }`}
             >
               All-in
             </button>
           ) : (
-            <div className="min-w-[70px] h-8 px-3 opacity-0 pointer-events-none">
+            <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
               All-in
             </div>
           )}

@@ -37,6 +37,7 @@ export class TournamentOrchestrator {
       const def = {
         id: newId,
         name: template.name,
+        gameType: template.gameType || "No Limit Hold'em",
         type: "stt" as const,
         startMode: template.startMode,
         buyIn: template.buyIn,

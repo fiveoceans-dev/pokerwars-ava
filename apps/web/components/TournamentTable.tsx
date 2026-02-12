@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Tournament } from "~~/hooks/useTournaments";
 import { useTournamentActions } from "~~/hooks/useTournamentActions";

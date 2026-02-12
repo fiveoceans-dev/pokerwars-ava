@@ -14,11 +14,12 @@ export type TournamentCardProps = TournamentItem;
 export default function TournamentCard(props: TournamentCardProps) {
   const [open, setOpen] = useState(false);
   const totalPrize = props.totalPrize ?? props.price * props.registered;
+  const NextImage = Image as any;
 
   return (
     <div className="max-w-[10rem] w-full">
       <div className="relative w-full aspect-[63/88] overflow-hidden rounded-lg bg-base-300 border border-border">
-        <Image
+        <NextImage
           src={props.image}
           alt={props.title}
           fill

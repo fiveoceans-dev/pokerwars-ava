@@ -9,7 +9,7 @@ export function useTournamentActions() {
   const socket = useGameStore((s) => s.socket);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<
-    { id: string; type: "register" | "unregister"; onSuccess?: () => void; onError?: () => void } | null
+    { id: string; type: "register" | "unregister"; onSuccess?: () => void; onError?: (message?: string) => void } | null
   >(null);
   const [startLoadingId, setStartLoadingId] = useState<string | null>(null);
   const [pendingStart, setPendingStart] = useState<

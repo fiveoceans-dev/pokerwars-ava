@@ -1,5 +1,7 @@
 import type { Card, Table, ActionType, Phase } from "../core/types";
 
+export type GovernanceRole = "director" | "manager" | "admin" | "promoter";
+
 export interface LobbyTable {
   id: string;
   name: string;
@@ -19,8 +21,20 @@ export interface LobbyTable {
 export type BlindType = "SMALL" | "BIG";
 
 export type ServerEvent =
-  | { tableId: string; type: "SESSION"; sessionId: string; userId?: string }
-  | { tableId: string; type: "TABLE_SNAPSHOT"; table: Table; maxPlayers?: number }
+  | {
+      tableId: string;
+      type: "SESSION";
+      sessionId: string;
+      userId?: string;
+      isAdmin?: boolean;
+      roles?: GovernanceRole[];
+    }
+  | {
+      tableId: string;
+      type: "TABLE_SNAPSHOT";
+      table: Table;
+      maxPlayers?: number;
+    }
   | { tableId: ""; type: "TABLE_LIST"; tables: LobbyTable[] }
   | {
       tableId: "";
@@ -137,6 +151,22 @@ export type ServerEvent =
       type: "WINNER_ANNOUNCEMENT";
       winners: Array<{ seat: number; playerId: string }>;
       potAmount: number;
+    }
+  | {
+      tableId: "";
+      type: "BALANCE_UPDATE";
+      playerId: string;
+      coins: string;
+      tickets: Record<string, string>;
+    }
+  | {
+      tableId: "";
+      type: "USER_STATUS_UPDATE";
+      playerId: string;
+      cashActive: boolean;
+      cashTableIds: string[];
+      sngActive: boolean;
+      mttActive: boolean;
     }
   | { tableId: string; type: "ERROR"; code: string; msg: string };
 

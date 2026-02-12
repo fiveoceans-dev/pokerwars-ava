@@ -59,14 +59,18 @@ function PlayPageInner() {
       const optimalScale = Math.min(scaleByWidth, scaleByHeight, 1);
       const minScale = isMobile ? 0.38 : 0.5;
       const finalScale = isMobile ? Math.max(optimalScale * 0.85, minScale) : Math.max(optimalScale, minScale);
-      setTableScale(finalScale);
+      
+      setTableScale((prev) => {
+        if (Math.abs(prev - finalScale) < 0.001) return prev;
+        return finalScale;
+      });
       setLayoutReady(true);
     };
 
     calculateLayout();
     window.addEventListener("resize", calculateLayout);
     return () => window.removeEventListener("resize", calculateLayout);
-  }, [baseW, baseH, isMobile, playerBets]);
+  }, [baseW, baseH, isMobile]);
 
   // Derived state for controls
   const isMyTurn = currentTurn !== null && currentTurn === walletSeatIdx;

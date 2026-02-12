@@ -8,11 +8,11 @@ export default function LearnPage() {
   const t = learnTranslations[language];
 
   const lessons = [
-    t.lesson_01,
-    t.lesson_02,
-    t.lesson_03,
-    t.lesson_04,
-    t.lesson_05,
+    t.poker_basics,
+    t.basic_strategy,
+    t.player_types,
+    t.hand_range,
+    t.tournament,
   ];
 
   return (
@@ -24,27 +24,37 @@ export default function LearnPage() {
         <div className="flex flex-col gap-10 md:flex-row">
           <nav className="w-full md:w-56 flex flex-col gap-2 text-sm">
             <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">{t.lessons}</div>
-            {lessons.map((lesson) => (
-              <a key={lesson.id} href={`#${lesson.anchor}`} className="tbtn text-xs font-semibold">
+            {lessons.map((lesson, index) => (
+              <a key={lesson.title} href={`#lesson-${index + 1}`} className="tbtn text-xs font-semibold">
                 {lesson.title}
               </a>
             ))}
           </nav>
 
           <div className="flex-1 space-y-10 text-sm text-white/70">
-            {lessons.map((lesson, idx) => (
-              <article key={lesson.id} id={lesson.anchor} className="space-y-3">
+            {lessons.map((lesson, lessonIndex) => (
+              <article key={lesson.title} id={`lesson-${lessonIndex + 1}`} className="space-y-3">
                 <div className="text-[11px] uppercase tracking-[0.4em] text-white/50">
-                  Lesson {String(idx + 1).padStart(2, "0")}
+                  Lesson {String(lessonIndex + 1).padStart(2, "0")}
                 </div>
                 <h2 className="text-xl text-white">{lesson.title}</h2>
                 <p>
                   {lesson.description}
                 </p>
-                <a href={lesson.href} className="tbtn text-xs font-semibold">
-                  {t.open_article}
-                </a>
-                {idx < lessons.length - 1 && <div className="rule" aria-hidden="true" />}
+                {lesson.sections && lesson.sections.map((section: any, sectionIndex: number) => (
+                  <div key={sectionIndex} className="space-y-2">
+                    {section.title && <h3 className="text-lg font-semibold text-white/90">{section.title}</h3>}
+                    {section.body && <p>{section.body}</p>}
+                    {section.bullets && (
+                      <ul className="list-disc list-inside pl-4">
+                        {section.bullets.map((bullet: string, bulletIndex: number) => (
+                          <li key={bulletIndex}>{bullet}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+                {lessonIndex < lessons.length - 1 && <div className="rule" aria-hidden="true" />}
               </article>
             ))}
           </div>

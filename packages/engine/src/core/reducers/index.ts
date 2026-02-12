@@ -9,7 +9,7 @@
 import { Table, PokerEvent, SideEffect, StateTransition } from "../types";
 
 // Import all specialized reducer functions
-import { startHand, postBlinds, endHand } from "./handLifecycle";
+import { startHand, postBlinds, endHand, updateBlinds } from "./handLifecycle";
 import { applyHoleCards, enterStreet } from "./cardDealing";
 import { applyAction, handleTimeoutAutoFold } from "./actionProcessing";
 import { closeStreet, processShowdown, processPayout } from "./potManagement";
@@ -127,6 +127,9 @@ export function reduce(table: Table, event: PokerEvent): StateTransition {
     case "PlayerMuckCards":
       return playerMuckCards(table, event.pid);
 
+    case "UpdateBlinds":
+      return updateBlinds(table, event.smallBlind, event.bigBlind);
+
     default:
       // TypeScript ensures all cases are handled
       return { nextState: table, sideEffects: [] };
@@ -139,6 +142,7 @@ export {
   startHand,
   postBlinds,
   endHand,
+  updateBlinds,
   
   // Card dealing
   applyHoleCards,

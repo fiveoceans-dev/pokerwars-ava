@@ -3,6 +3,7 @@ import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { useWallet } from "~~/components/providers/WalletProvider";
 import { clearAuthToken, getAuthToken } from "~~/utils/auth";
 import { getLocalIdentity, resolveEffectiveId } from "~~/utils/identity";
+import { useGameStore } from "./useGameStore";
 
 type TicketBalances = {
   ticket_x: number;
@@ -19,8 +20,8 @@ const DEFAULT_BALANCES: Balances = {
   coins: 0,
   tickets: { ticket_x: 0, ticket_y: 0, ticket_z: 0 },
 };
-const FREE_CLAIM_AMOUNT = 1_000;
-const FREE_CLAIM_COOLDOWN_MS = 10 * 60 * 60 * 1000;
+const FREE_CLAIM_AMOUNT = 3_000;
+const FREE_CLAIM_COOLDOWN_MS = 5 * 60 * 60 * 1000;
 
 function resolveApiBase(): string | null {
   try {
@@ -34,11 +35,9 @@ function resolveApiBase(): string | null {
 }
 
 export function useBalances() {
-  const { address, isAuthenticated } = useWallet();
-  const [balances, setBalances] = useState<Balances>({
-    coins: 0,
-    tickets: { ticket_x: 0, ticket_y: 0, ticket_z: 0 },
-  });
+  const { address, isAuthenticated, ensureAuth } = useWallet();
+  const { balances: storeBalances, setBalances: setStoreBalances } = useGameStore();
+  const [balances, setBalances] = useState<Balances>(storeBalances);
   const [hydrated, setHydrated] = useState(false);
   const [lastClaimAt, setLastClaimAt] = useState<number | null>(null);
   const apiBase = useMemo(() => resolveApiBase(), []);
@@ -47,6 +46,11 @@ export function useBalances() {
     resolveEffectiveId(address, localIdentity.walletAddress) ||
     resolveEffectiveId(null, localIdentity.sessionId) ||
     null;
+
+  // Sync local state when store balances change (e.g. via WebSocket)
+  useEffect(() => {
+    setBalances(storeBalances);
+  }, [storeBalances]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,19 +66,47 @@ export function useBalances() {
         });
         if (res.status === 401) {
           clearAuthToken();
+          // In production, this typically means the user hasn't signed in yet.
+          // Attempt an auth handshake once (will prompt a signature) and retry.
+          if (address) {
+            const authed = await ensureAuth().catch(() => false);
+            if (authed) {
+              const retryToken = getAuthToken();
+              const retryRes = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
+                headers: retryToken ? { Authorization: `Bearer ${retryToken}` } : undefined,
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.json();
+                if (!cancelled && retryData?.balance) {
+                  const next = {
+                    coins: retryData.balance.coins ?? 0,
+                    tickets: {
+                      ticket_x: retryData.balance.ticket_x ?? 0,
+                      ticket_y: retryData.balance.ticket_y ?? 0,
+                      ticket_z: retryData.balance.ticket_z ?? 0,
+                    },
+                  };
+                  setBalances(next);
+                  setStoreBalances(next);
+                }
+              }
+            }
+          }
           setHydrated(true);
           return;
         }
         const data = await res.json();
         if (!cancelled && data?.balance) {
-          setBalances({
+          const next = {
             coins: data.balance.coins ?? 0,
             tickets: {
               ticket_x: data.balance.ticket_x ?? 0,
               ticket_y: data.balance.ticket_y ?? 0,
               ticket_z: data.balance.ticket_z ?? 0,
             },
-          });
+          };
+          setBalances(next);
+          setStoreBalances(next);
         }
       } catch {
         if (!cancelled) setBalances(DEFAULT_BALANCES);
@@ -102,37 +134,45 @@ export function useBalances() {
   const spend = useCallback(
     (buyIn: { currency: "chips" | "tickets"; amount: number }) => {
       setBalances((prev) => {
+        let next;
         if (buyIn.currency === "chips") {
-          return { ...prev, coins: Math.max(0, prev.coins - buyIn.amount) };
+          next = { ...prev, coins: Math.max(0, prev.coins - buyIn.amount) };
+        } else {
+          next = {
+            ...prev,
+            tickets: {
+              ...prev.tickets,
+              ticket_x: Math.max(0, prev.tickets.ticket_x - buyIn.amount),
+            },
+          };
         }
-        return {
-          ...prev,
-          tickets: {
-            ...prev.tickets,
-            ticket_x: Math.max(0, prev.tickets.ticket_x - buyIn.amount),
-          },
-        };
+        setStoreBalances(next);
+        return next;
       });
     },
-    [],
+    [setStoreBalances],
   );
 
   const refund = useCallback(
     (buyIn: { currency: "chips" | "tickets"; amount: number }) => {
       setBalances((prev) => {
+        let next;
         if (buyIn.currency === "chips") {
-          return { ...prev, coins: prev.coins + buyIn.amount };
+          next = { ...prev, coins: prev.coins + buyIn.amount };
+        } else {
+          next = {
+            ...prev,
+            tickets: {
+              ...prev.tickets,
+              ticket_x: prev.tickets.ticket_x + buyIn.amount,
+            },
+          };
         }
-        return {
-          ...prev,
-          tickets: {
-            ...prev.tickets,
-            ticket_x: prev.tickets.ticket_x + buyIn.amount,
-          },
-        };
+        setStoreBalances(next);
+        return next;
       });
     },
-    [],
+    [setStoreBalances],
   );
 
   const refreshBalances = useCallback(async (): Promise<Balances | null> => {
@@ -156,10 +196,11 @@ export function useBalances() {
         },
       };
       setBalances(next);
+      setStoreBalances(next);
       return next;
     }
     return null;
-  }, [apiBase, walletForBalance]);
+  }, [apiBase, walletForBalance, setStoreBalances]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -183,7 +224,7 @@ export function useBalances() {
     };
   }, [apiBase, refreshBalances, walletForBalance]);
 
-  const claimFreeCoins = useCallback(async () => {
+  const claimFreeCoins = useCallback(async (): Promise<{ ok: boolean; nextAvailableInMs?: number; error?: string }> => {
     if (!address || !apiBase) return { ok: false, nextAvailableInMs: 0 };
     const token = getAuthToken();
     const res = await fetch(`${apiBase}/api/user/claim?wallet=${address}`, {
@@ -199,21 +240,23 @@ export function useBalances() {
         const now = Date.now();
         setLastClaimAt(now - (FREE_CLAIM_COOLDOWN_MS - data.nextAvailableInMs));
       }
-      return { ok: false, nextAvailableInMs: data?.nextAvailableInMs ?? 0 };
+      return { ok: false, nextAvailableInMs: data?.nextAvailableInMs ?? 0, error: data?.error };
     }
     if (data?.balance) {
-      setBalances({
+      const next = {
         coins: data.balance.coins ?? 0,
         tickets: {
           ticket_x: data.balance.ticket_x ?? 0,
           ticket_y: data.balance.ticket_y ?? 0,
           ticket_z: data.balance.ticket_z ?? 0,
         },
-      });
+      };
+      setBalances(next);
+      setStoreBalances(next);
     }
     setLastClaimAt(Date.now());
-    return { ok: true, nextAvailableInMs: data?.nextAvailableInMs ?? 0 };
-  }, [address, apiBase]);
+    return { ok: true, nextAvailableInMs: 0 };
+  }, [address, apiBase, setStoreBalances]);
 
   const convert = useCallback(
     async (direction: "coinsToTickets" | "ticketsToCoins", tier: "ticket_x" | "ticket_y" | "ticket_z", amount: number) => {
@@ -233,18 +276,20 @@ export function useBalances() {
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data?.error };
       if (data?.balance) {
-        setBalances({
+        const next = {
           coins: data.balance.coins ?? 0,
           tickets: {
             ticket_x: data.balance.ticket_x ?? 0,
             ticket_y: data.balance.ticket_y ?? 0,
             ticket_z: data.balance.ticket_z ?? 0,
           },
-        });
+        };
+        setBalances(next);
+        setStoreBalances(next);
       }
       return { ok: true };
     },
-    [address, apiBase],
+    [address, apiBase, setStoreBalances],
   );
 
   return {

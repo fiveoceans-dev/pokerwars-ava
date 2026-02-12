@@ -7,6 +7,7 @@ type ServerEnv = {
   devAllowedOrigins: string[];
   reconnectGraceMs: number;
   wsMaxPayload: number;
+  adminWallets: string[];
 };
 
 export const normalizeOrigin = (value?: string | null): string => {
@@ -78,6 +79,11 @@ export const getServerEnv = (): ServerEnv => {
     throw new Error("ALLOWED_WS_ORIGINS must be configured when NODE_ENV=production");
   }
 
+  const adminWallets = (process.env.ADMIN_WALLETS || "")
+    .split(",")
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean);
+
   return {
     nodeEnv,
     isProduction,
@@ -87,5 +93,6 @@ export const getServerEnv = (): ServerEnv => {
     devAllowedOrigins,
     reconnectGraceMs: parseNumber(process.env.RECONNECT_GRACE_SECONDS, 30) * 1000,
     wsMaxPayload: parseNumber(process.env.WS_MAX_PAYLOAD, 64 * 1024),
+    adminWallets,
   };
 };

@@ -21,11 +21,11 @@
 
 body {
   color: var(--text);
+  background-color: var(--bg);
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-weight: 300;
   line-height: 1.55;
   letter-spacing: 0.01em;
-  overflow: hidden;
 }
 
 h1,

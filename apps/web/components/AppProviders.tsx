@@ -32,44 +32,44 @@ function ConsoleErrorForwarder() {
     const original = console.error;
     const recent = new Map<string, number>();
 
-    console.error = (...args: unknown[]) => {
-      original.apply(console, args as any);
+    const isExtensionError = (arg: unknown): boolean => {
+      if (arg instanceof Error) {
+        const stack = arg.stack ?? "";
+        if (
+          stack.includes("chrome-extension://") ||
+          stack.includes("moz-extension://")
+        ) {
+          return true;
+        }
+        if (
+          arg.message.includes("chrome.runtime.sendMessage") &&
+          arg.message.includes("Extension ID")
+        ) {
+          return true;
+        }
+      }
+      if (typeof arg === "string") {
+        if (
+          arg.includes("chrome-extension://") ||
+          arg.includes("moz-extension://")
+        ) {
+          return true;
+        }
+        if (
+          arg.includes("chrome.runtime.sendMessage") &&
+          arg.includes("Extension ID")
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
 
-      const shouldIgnore = args.some((arg) => {
-        if (arg instanceof Error) {
-          const stack = arg.stack ?? "";
-          if (
-            stack.includes("chrome-extension://") ||
-            stack.includes("moz-extension://")
-          ) {
-            return true;
-          }
-          if (
-            arg.message.includes("chrome.runtime.sendMessage") &&
-            arg.message.includes("Extension ID")
-          ) {
-            return true;
-          }
-        }
-        if (typeof arg === "string") {
-          if (
-            arg.includes("chrome-extension://") ||
-            arg.includes("moz-extension://")
-          ) {
-            return true;
-          }
-          if (
-            arg.includes("chrome.runtime.sendMessage") &&
-            arg.includes("Extension ID")
-          ) {
-            return true;
-          }
-        }
-        return false;
-      });
-      if (shouldIgnore) {
+    console.error = (...args: unknown[]) => {
+      if (args.some(isExtensionError)) {
         return;
       }
+      original.apply(console, args as any);
 
       const message = args
         .map((arg) => {
@@ -100,8 +100,29 @@ function ConsoleErrorForwarder() {
       notifyError(truncated);
     };
 
+    const handleWindowError = (event: ErrorEvent) => {
+      if (isExtensionError(event.error) || isExtensionError(event.message)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+    };
+
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      if (isExtensionError(event.reason)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+    };
+
+    window.addEventListener("error", handleWindowError, true);
+    window.addEventListener("unhandledrejection", handleRejection, true);
+
     return () => {
       console.error = original;
+      window.removeEventListener("error", handleWindowError, true);
+      window.removeEventListener("unhandledrejection", handleRejection, true);
     };
   }, []);
 

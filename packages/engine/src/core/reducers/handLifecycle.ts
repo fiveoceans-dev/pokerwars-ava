@@ -87,6 +87,7 @@ export function startHand(
       if (!seat.pid) {
         return {
           ...seat,
+          chips: seat.chips || 0, // Preserve existing chips or 0
           committed: 0,
           streetCommitted: 0,
           status: "empty" as SeatStatus,
@@ -97,14 +98,16 @@ export function startHand(
 
       // Players participating in hand are always active
       // Players sitting out should NOT participate in hands at all
-      const shouldParticipate =
-        seat.chips > 0 && !sitOutManager.isPlayerSittingOut(seat.pid);
+      const isSittingOut = sitOutManager.isPlayerSittingOut(seat.pid);
+      const hasChips = seat.chips > 0;
+      const shouldParticipate = hasChips && !isSittingOut;
 
       return {
         ...seat,
+        chips: seat.chips, // EXPLICITLY PRESERVE CHIPS
         committed: 0,
         streetCommitted: 0,
-        status: shouldParticipate ? "active" : ("empty" as SeatStatus),
+        status: shouldParticipate ? ("active" as SeatStatus) : (isSittingOut ? "sittingOut" as any : "empty" as SeatStatus),
         holeCards: undefined,
         action: undefined,
       };
@@ -352,6 +355,30 @@ export function endHand(table: Table): StateTransition {
   // standard game-start countdown logic. This preserves FSM flow and avoids
   // ad-hoc triggers from outside the reducer.
   sideEffects.push({ type: "CHECK_GAME_START", payload: { delayMs: 0 } });
+
+  return { nextState, sideEffects };
+}
+
+/**
+ * Update the blind levels for the table
+ */
+export function updateBlinds(table: Table, smallBlind: number, bigBlind: number): StateTransition {
+  console.log(`⬆️ [Reducer] Updating blinds to ${smallBlind}/${bigBlind}`);
+
+  const nextState: Table = {
+    ...table,
+    smallBlind,
+    bigBlind,
+    blinds: {
+      ...table.blinds,
+      sb: smallBlind,
+      bb: bigBlind,
+    },
+  };
+
+  const sideEffects: SideEffect[] = [
+    { type: "EMIT_STATE_CHANGE", payload: { reason: "blinds_updated" } },
+  ];
 
   return { nextState, sideEffects };
 }

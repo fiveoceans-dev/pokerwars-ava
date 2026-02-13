@@ -2,32 +2,35 @@
 
 ARG NODE_VERSION=20-bookworm-slim
 
+# Stage 1: Install dependencies
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /repo
 ENV NODE_ENV=development
-ARG BUILD_TARGET=all
+
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
   python3 make g++ openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
-COPY tsconfig.json tsconfig.packages.json ./
-COPY apps ./apps
-COPY packages ./packages
-RUN if [ "$BUILD_TARGET" = "ws-server" ]; then \
-      npm install --workspace apps/ws-server --workspace packages/engine; \
-    elif [ "$BUILD_TARGET" = "web" ]; then \
-      npm install --workspace apps/web --workspace packages/engine; \
-    else \
-      npm install; \
-    fi
 
+# Copy root package files
+COPY package*.json ./
+
+# Copy workspace package files (to optimize layer caching)
+COPY apps/web/package*.json ./apps/web/
+COPY apps/ws-server/package*.json ./apps/ws-server/
+COPY packages/engine/package*.json ./packages/engine/
+
+# Install ALL dependencies (monorepo usually needs all for workspace links)
+RUN npm install
+
+# Stage 2: Build the application
 FROM node:${NODE_VERSION} AS build
 WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_SKIP_LOCKFILE_CHECK=true
 ARG BUILD_TARGET=all
 
-# ARGs for build-time environment variables
+# Build-time environment variables (required for Next.js static optimization)
 ARG NEXT_PUBLIC_APP_NAME
 ARG NEXT_PUBLIC_APP_DESCRIPTION
 ARG NEXT_PUBLIC_APP_URL
@@ -51,7 +54,7 @@ ARG NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL
 ARG NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS
 ARG NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL
 
-# Set ENV vars from ARGs so they are available to the build process
+# Set ENV vars from ARGs
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 ENV NEXT_PUBLIC_APP_DESCRIPTION=$NEXT_PUBLIC_APP_DESCRIPTION
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
@@ -75,30 +78,37 @@ ENV NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL=$NEXT_PUBLIC_HYPERLIQUID_TES
 ENV NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS=$NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS
 ENV NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL=$NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL
 
-# Runtime envs are injected on Cloud Run; no build-time NEXT_PUBLIC_* required.
-COPY --from=deps /repo .
+# Copy deps and source code
+COPY --from=deps /repo/node_modules ./node_modules
+COPY . .
 
+# Run build based on target
 RUN if [ "$BUILD_TARGET" = "ws-server" ]; then \
       npm run build:packages && npm run build -w apps/ws-server; \
     elif [ "$BUILD_TARGET" = "web" ]; then \
       npm run build:packages && npm run build -w apps/web; \
     else \
-      npm run build:packages && npm run build -w apps/web && npm run build -w apps/ws-server; \
+      npm run build; \
     fi
 
+# Stage 3: Final runner
 FROM node:${NODE_VERSION} AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV SERVICE=web
 ENV PORT=8090
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
   openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+# Copy only necessary artifacts from build stage
 COPY --from=build /repo/apps ./apps
 COPY --from=build /repo/packages ./packages
-COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=build /repo/node_modules ./node_modules
 COPY package*.json ./
 COPY start.sh ./
+
 RUN chmod +x start.sh
 CMD ["./start.sh"]
 

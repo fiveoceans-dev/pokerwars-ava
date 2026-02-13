@@ -18,6 +18,10 @@ if [ ! -f "${ENV_FILE}" ]; then
     exit 1
 fi
 
+# Synchronize environment variables to workspaces
+echo "Synchronizing environment variables..."
+ENV_FILE="${ENV_FILE}" ./scripts/sync_env.sh
+
 # Export variables from the env file so docker-compose build args are populated.
 # Preserve explicit CLI overrides (e.g., AUTO_MIGRATE=true ./scripts/start_local.sh).
 OVERRIDE_AUTO_MIGRATE="${AUTO_MIGRATE:-}"

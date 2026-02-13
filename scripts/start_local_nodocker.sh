@@ -22,6 +22,10 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+# Synchronize environment variables to workspaces
+echo "Synchronizing environment variables..."
+ENV_FILE="${ENV_FILE}" ./scripts/sync_env.sh
+
 # Preserve CLI overrides
 OVERRIDE_AUTO_MIGRATE="${AUTO_MIGRATE:-}"
 OVERRIDE_SEED_GAMES="${SEED_GAMES:-}"

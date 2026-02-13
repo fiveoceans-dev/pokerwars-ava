@@ -741,6 +741,13 @@ export const useGameStore = create<GameStoreState>((set, get) => {
                   if (amt !== undefined && Number.isFinite(amt)) {
                     bets[seatIdx] = (bets[seatIdx] ?? 0) + amt;
                     chips[seatIdx] = Math.max(0, (chips[seatIdx] ?? 0) - amt);
+                    
+                    // Sync updated chips to seatStore for rendering
+                    seatStore.getState().assignSeat(seatIdx, {
+                      playerId: msg.playerId,
+                      name: s.players[seatIdx],
+                      chips: chips[seatIdx],
+                    });
                   }
                 }
                 return {
@@ -945,6 +952,22 @@ export const useGameStore = create<GameStoreState>((set, get) => {
                   return { recentWinners: newWinners };
                 });
               }, 5000);
+
+              // NEW: Request a fresh snapshot after payout to ensure chip counts are correct
+              setTimeout(() => {
+                try {
+                  const tableId = get().tableId;
+                  if (tableId && socket && socket.readyState === WebSocket.OPEN) {
+                    const cmd: ClientCommand = {
+                      cmdId: crypto.randomUUID(),
+                      type: "JOIN_TABLE",
+                      tableId,
+                    } as any;
+                    socket.send(JSON.stringify(cmd));
+                    console.log("🔄 [useGameStore] Requested fresh TABLE_SNAPSHOT after winners announced");
+                  }
+                } catch (e) {}
+              }, 2000);
               break;
             case "PLAYER_REVEALED":
               set((s) => {

@@ -6,6 +6,7 @@ import { Tournament } from "~~/hooks/useTournaments";
 import { useTournamentActions } from "~~/hooks/useTournamentActions";
 import { useBalances } from "~~/hooks/useBalances";
 import { useWallet } from "~~/components/providers/WalletProvider";
+import { useGameStore } from "~~/hooks/useGameStore";
 import { formatNumber } from "~~/utils/format";
 import { 
   Modal, 
@@ -131,6 +132,7 @@ export function TournamentTable({
   const { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds } = useTournamentActions();
   const { balances, hydrated, refreshBalances } = useBalances();
   const { status, isAuthenticated, ensureAuth } = useWallet();
+  const tableSeats = useGameStore(s => s.tableSeats);
   const [selected, setSelected] = useState<Tournament | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -139,39 +141,76 @@ export function TournamentTable({
     dir: "asc",
   });
 
+  const isLateRegOpen = (t: Tournament) => {
+    if (t.status === "registering" || t.status === "scheduled") return true;
+    if (t.status === "running") {
+      if (!t.lateRegEndAt) return false;
+      const end = new Date(t.lateRegEndAt).getTime();
+      return Date.now() < end;
+    }
+    return false;
+  };
+
   const sorted = useMemo(() => {
     const items = tournaments.filter((t) => t.status !== "finished");
-    const rank = (t: Tournament) => {
+    
+    const { key, dir } = sort;
+    const factor = dir === "asc" ? 1 : -1;
+
+    const getRank = (t: Tournament) => {
       const isRegistered = registeredIds.has(t.id);
       if (isRegistered) return 0;
       if (t.status === "running") return 1;
       if (t.status === "scheduled" || t.status === "registering") return 2;
       return 3;
     };
-    const { key, dir } = sort;
+
     items.sort((a, b) => {
-      const factor = dir === "asc" ? 1 : -1;
-      const rdiff = rank(a) - rank(b);
-      if (rdiff !== 0) return rdiff;
-      if (key === "start") {
-        return factor * formatStart(a).localeCompare(formatStart(b));
+      const aReg = registeredIds.has(a.id);
+      const bReg = registeredIds.has(b.id);
+
+      // 1. Registered tournaments ALWAYS stay at the top
+      if (aReg && !bReg) return -1;
+      if (!aReg && bReg) return 1;
+
+      // 2. If user explicitly sorted, use that as primary (within registered vs non-registered)
+      // Note: We already handled 'Registered' above, so this applies to the rest.
+      
+      const compareBySortKey = () => {
+        if (key === "start") {
+          const aTime = a.startAt ? new Date(a.startAt).getTime() : (a.startMode === "full" ? 0 : Infinity);
+          const bTime = b.startAt ? new Date(b.startAt).getTime() : (b.startMode === "full" ? 0 : Infinity);
+          return factor * (aTime - bTime);
+        }
+        if (key === "name") return factor * a.name.localeCompare(b.name);
+        if (key === "buyIn") return factor * ((a.buyIn?.amount ?? 0) - (b.buyIn?.amount ?? 0));
+        if (key === "players") {
+          const aPerc = a.registeredCount / (a.maxPlayers || 1);
+          const bPerc = b.registeredCount / (b.maxPlayers || 1);
+          return factor * (aPerc - bPerc);
+        }
+        if (key === "prize") return factor * (estimatePrizePool(a) - estimatePrizePool(b));
+        if (key === "level") return factor * ((a.currentLevel ?? 0) - (b.currentLevel ?? 0));
+        return 0;
+      };
+
+      const sortResult = compareBySortKey();
+      if (sortResult !== 0) return sortResult;
+
+      // 3. Default fallback: Rank (Running > Scheduled)
+      const rankDiff = getRank(a) - getRank(b);
+      if (rankDiff !== 0) return rankDiff;
+
+      // 4. Secondary fallback: Fullness for SNG, Time for MTT
+      if (a.type === "stt") {
+        const aPerc = a.registeredCount / (a.maxPlayers || 1);
+        const bPerc = b.registeredCount / (b.maxPlayers || 1);
+        return bPerc - aPerc; // More full first
+      } else {
+        const aTime = a.startAt ? new Date(a.startAt).getTime() : Infinity;
+        const bTime = b.startAt ? new Date(b.startAt).getTime() : Infinity;
+        return aTime - bTime; // Closest start first
       }
-      if (key === "name") {
-        return factor * a.name.localeCompare(b.name);
-      }
-      if (key === "buyIn") {
-        return factor * ((a.buyIn?.amount ?? 0) - (b.buyIn?.amount ?? 0));
-      }
-      if (key === "players") {
-        return factor * (a.registeredCount - b.registeredCount || a.maxPlayers - b.maxPlayers);
-      }
-      if (key === "prize") {
-        return factor * (estimatePrizePool(a) - estimatePrizePool(b));
-      }
-      if (key === "level") {
-        return factor * ((a.currentLevel ?? 0) - (b.currentLevel ?? 0));
-      }
-      return 0;
     });
     return items;
   }, [tournaments, sort, registeredIds]);
@@ -244,8 +283,33 @@ export function TournamentTable({
   };
 
   const openTable = (t: Tournament) => {
-    const tableId = (t.tables && t.tables.length > 0) ? t.tables[0] : t.id;
-    router.push(`/${tableId}`);
+    // Requirement: "open a table where users is sittted or a random table"
+    // 1. Find if seated at any table of this tournament
+    const seatedTableId = t.tables?.find(tid => tableSeats.has(tid));
+    if (seatedTableId) {
+      router.push(`/${seatedTableId}`);
+      return;
+    }
+    
+    // 2. Otherwise open a random (first) table if any exist
+    if (t.tables && t.tables.length > 0) {
+      router.push(`/${t.tables[0]}`);
+      return;
+    }
+    
+    // 3. Fallback to tournament lobby/waiting page
+    router.push(`/${t.id}`);
+  };
+
+  const handleRowClick = (t: Tournament) => {
+    const isRegistered = registeredIds.has(t.id);
+    const hasStarted = t.status === "running";
+    
+    if (isRegistered || hasStarted) {
+      openTable(t);
+    } else if (t.status === "registering" || t.status === "scheduled") {
+      openModal(t);
+    }
   };
 
   return (
@@ -269,23 +333,19 @@ export function TournamentTable({
           <tbody>
             {sorted.map((t) => {
               const isRegistered = registeredIds.has(t.id);
-              const isActive = isRegistered;
+              const isActive = isRegistered || t.status === "running";
               const hasStarted = t.status === "running";
+              const canJoin = !isRegistered && isLateRegOpen(t);
               
               return (
-              <tr key={t.id} className={`border-b border-white/10 ${isActive ? "bg-white/5" : ""}`}>
+              <tr 
+                key={t.id} 
+                className={`border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${isRegistered ? "bg-white/5" : ""}`}
+                onClick={() => handleRowClick(t)}
+              >
                 <td className={cellBase}>
                   <div className="flex items-center gap-2">
-                    {isRegistered ? (
-                      <button 
-                        onClick={() => openTable(t)}
-                        className="font-bold text-white hover:text-[var(--brand-accent)] hover:underline transition-colors text-left"
-                      >
-                        {t.name}
-                      </button>
-                    ) : (
-                      <span>{t.name}</span>
-                    )}
+                    <span className={isActive ? "font-bold text-white" : ""}>{t.name}</span>
                     {isRegistered ? (
                       <span
                         className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
@@ -317,7 +377,7 @@ export function TournamentTable({
                     )}
                   </td>
                 ) : null}
-                <td className={cellBase}>
+                <td className={cellBase} onClick={(e) => e.stopPropagation()}>
                   {isRegistered ? (
                     <div className="flex items-center gap-2">
                       <button
@@ -335,18 +395,18 @@ export function TournamentTable({
                         </button>
                       )}
                     </div>
-                  ) : (
+                  ) : canJoin ? (
                     <button
                       onClick={() => openModal(t)}
                       className="tbtn text-xs font-semibold"
                     >
                       Join
                     </button>
-                  )}
+                  ) : null}
                 </td>
                 {showStartColumn ? (
-                  <td className={cellBase}>
-                    {t.type === "stt" ? (
+                  <td className={cellBase} onClick={(e) => e.stopPropagation()}>
+                    {t.type === "stt" && (t.status === "registering" || t.status === "scheduled") ? (
                       <button
                         onClick={() => handleStartWithBots(t)}
                         className="tbtn text-xs font-semibold"

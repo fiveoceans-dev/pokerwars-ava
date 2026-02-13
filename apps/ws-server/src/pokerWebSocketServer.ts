@@ -51,6 +51,9 @@ class WebSocketFSMBridge extends EventEmitter {
   private rl = new Map<string, { t: number; c: number }>();
   private onPlayerBust?: (tableId: string, playerId: string) => void;
   private botManager?: BotManager;
+  private idleTables = new Map<string, number>(); // tableId -> lastActiveTimestamp
+  private reaperInterval: NodeJS.Timeout;
+
   constructor(
     sessions: SessionManager,
     private ledgerService?: LedgerPort | null,
@@ -58,6 +61,37 @@ class WebSocketFSMBridge extends EventEmitter {
   ) {
     super();
     this.sessions = sessions;
+    this.reaperInterval = setInterval(() => this.checkIdleTables(), 60_000); // Check every minute
+  }
+
+  shutdown() {
+    if (this.reaperInterval) clearInterval(this.reaperInterval);
+  }
+
+  private async checkIdleTables() {
+    const IDLE_TIMEOUT_MS = 5 * 60_000; // 5 minutes
+    const now = Date.now();
+
+    for (const [tableId, engine] of this.engines.entries()) {
+      // Only reap cash tables; tournaments are managed by TournamentOrchestrator
+      if (!tableId.startsWith("cash-")) continue;
+
+      const table = engine.getState();
+      const activePlayers = table.seats.filter(s => s.pid).length;
+
+      if (activePlayers === 0) {
+        const lastActive = this.idleTables.get(tableId) || now;
+        if (!this.idleTables.has(tableId)) {
+          this.idleTables.set(tableId, now);
+        } else if (now - lastActive > IDLE_TIMEOUT_MS) {
+          logger.info(`🧹 [Reaper] Closing idle cash table ${tableId} (empty for 5m)`);
+          await this.closeTable(tableId);
+          this.idleTables.delete(tableId);
+        }
+      } else {
+        this.idleTables.delete(tableId);
+      }
+    }
   }
 
   setBustHandler(handler: (tableId: string, playerId: string) => void) {

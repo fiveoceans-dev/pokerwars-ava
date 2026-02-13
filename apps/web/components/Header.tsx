@@ -305,7 +305,7 @@ export const Header = () => {
   }, []);
 
   return (
-    <header className="topbar">
+    <header className="topbar relative">
       <div
         ref={containerRef}
         className="topbar-inner content-wrap py-2 flex items-center whitespace-nowrap"
@@ -407,7 +407,6 @@ export const Header = () => {
               </ul>
             )}
           </div>
-          <LanguageSwitcher />
         </div>
 
         {/* Mobile right cluster */} 
@@ -472,9 +471,14 @@ export const Header = () => {
               </ul>
             )}
           </div>
-          <LanguageSwitcher />
         </div>
       </div>
+
+      {/* Far right: language switcher positioned way outside main column */}
+      <div className="absolute right-4 lg:right-10 top-1/2 -translate-y-1/2 flex items-center z-[60]">
+        <LanguageSwitcher />
+      </div>
+
       <div className="pointer-events-none absolute left-0 top-0 invisible whitespace-nowrap" aria-hidden="true">
         <div ref={measureLeftRef} className="flex items-center ">
           <span className="text-white text-[var(--btn-font-size)] tracking-[var(--btn-letter)] uppercase font-semibold leading-none">
@@ -484,7 +488,7 @@ export const Header = () => {
             <HeaderMenuLinks />
           </ul>
         </div>
-        <div ref={measureRightRef} className="flex items-center  text-white/70">
+        <div ref={measureRightRef} className="flex items-center text-white/70">
           <span className="tbtn tbtn-tight nav-btn">
             {t.coins} {coinsDisplay}
           </span>
@@ -494,9 +498,9 @@ export const Header = () => {
           <span className="tbtn tbtn-tight nav-btn max-w-[140px] truncate">
             {isWalletConnected ? addressLabel : t.connect_wallet}
           </span>
-          <div className="tbtn tbtn-tight nav-btn w-[60px]">
+          <span className="tbtn tbtn-tight nav-btn w-[60px] ml-4">
             {languageLabels[language]}
-          </div>
+          </span>
         </div>
       </div>
     </header>

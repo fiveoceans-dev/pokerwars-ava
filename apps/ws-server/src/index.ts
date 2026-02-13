@@ -1641,6 +1641,10 @@ createPersistentTables();
 function gracefulShutdown(signal: string): void {
   logger.info(`📶 Received ${signal}, starting graceful shutdown...`);
   
+  // Clear background intervals
+  bridge.shutdown();
+  tournamentManager.shutdown();
+
   // Close WebSocket server
   wss.close(() => {
     logger.info('🔌 WebSocket server closed');

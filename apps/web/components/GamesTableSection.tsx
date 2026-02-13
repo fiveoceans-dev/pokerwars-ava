@@ -1,27 +1,72 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { LobbyTable } from "~~/game-engine";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { useActiveStatus } from "~~/hooks/useActiveStatus";
 
 export default function GamesTableSection() {
+  const router = useRouter();
   const [tables, setTables] = useState<LobbyTable[]>([]);
+  const [sort, setSort] = useState<{ key: "name" | "players" | "blinds" | "prize"; dir: "asc" | "desc" } | null>(null);
   const activeStatus = useActiveStatus();
   const activeCashTables = useMemo(
     () => new Set(activeStatus.cashTableIds || []),
     [activeStatus.cashTableIds],
   );
+
+  const toggleSort = (key: "name" | "players" | "blinds" | "prize") => {
+    setSort(prev => {
+      if (prev?.key === key) {
+        return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
+      }
+      return { key, dir: "asc" };
+    });
+  };
+
+  const openTable = (clickedTableId: string) => {
+    // Requirement: "open a table where users is sittted or a random table"
+    if (activeStatus.cashTableIds && activeStatus.cashTableIds.length > 0) {
+      // If we are seated at the clicked table, go there
+      if (activeStatus.cashTableIds.includes(clickedTableId)) {
+        router.push(`/${clickedTableId}`);
+      } else {
+        // If seated elsewhere, prefer the first active table
+        router.push(`/${activeStatus.cashTableIds[0]}`);
+      }
+    } else {
+      // Not playing, go to clicked table
+      router.push(`/${clickedTableId}`);
+    }
+  };
+
   const visibleTables = useMemo(() => {
     const cash = tables.filter((t) => !/^mtt-|^stt-/i.test(t.id));
-    if (activeCashTables.size === 0) return cash;
+    
     return [...cash].sort((a, b) => {
-      if (activeCashTables.has(a.id)) return -1;
-      if (activeCashTables.has(b.id)) return 1;
-      return 0;
+      // 1. Always prioritize active (seated) tables
+      const aActive = activeCashTables.has(a.id);
+      const bActive = activeCashTables.has(b.id);
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+
+      // 2. Apply manual sort if selected
+      if (sort) {
+        const { key, dir } = sort;
+        const factor = dir === "asc" ? 1 : -1;
+        if (key === "name") return factor * a.name.localeCompare(b.name);
+        if (key === "players") return factor * (a.playerCount - b.playerCount);
+        if (key === "blinds") return factor * (a.bigBlind - b.bigBlind);
+        if (key === "prize") return factor * ((a.prizePool || 0) - (b.prizePool || 0));
+      }
+
+      // 3. Default sort: Stakes (BB) ASC, then most players DESC
+      if (a.bigBlind !== b.bigBlind) return a.bigBlind - b.bigBlind;
+      return b.playerCount - a.playerCount;
     });
-  }, [tables, activeCashTables]);
+  }, [tables, activeCashTables, sort]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.WebSocket) return;
@@ -47,30 +92,36 @@ export default function GamesTableSection() {
     return () => ws.close();
   }, []);
 
+  const headerClass = "px-2 py-2 text-left cursor-pointer select-none hover:text-white transition-colors uppercase text-[11px] tracking-[0.14em]";
+
   return (
     <section className="space-y-3">
       <div className="rule" aria-hidden="true" />
       <div className="overflow-auto">
         <table className="min-w-full text-sm">
-          <thead className="text-white/60 uppercase text-[11px] tracking-[0.14em]">
+          <thead className="text-white/60">
             <tr>
-              <th className="px-2 py-2 text-left">Table</th>
-              <th className="px-2 py-2 text-left">Game</th>
-              <th className="px-2 py-2 text-center">Players</th>
-              <th className="px-2 py-2 text-center">Buy-in</th>
-              <th className="px-2 py-2 text-center">Blinds</th>
-              <th className="px-2 py-2 text-center">Prize</th>
-              <th className="px-2 py-2 text-center">Join</th>
+              <th className={headerClass} onClick={() => toggleSort("name")}>Table</th>
+              <th className="px-2 py-2 text-left uppercase text-[11px] tracking-[0.14em]">Game</th>
+              <th className={`${headerClass} text-center`} onClick={() => toggleSort("players")}>Players</th>
+              <th className="px-2 py-2 text-center uppercase text-[11px] tracking-[0.14em]">Buy-in</th>
+              <th className={`${headerClass} text-center`} onClick={() => toggleSort("blinds")}>Blinds</th>
+              <th className={`${headerClass} text-center`} onClick={() => toggleSort("prize")}>Prize</th>
+              <th className="px-2 py-2 text-center uppercase text-[11px] tracking-[0.14em]">Join</th>
             </tr>
           </thead>
           <tbody>
             {visibleTables.map((t) => {
               const isActive = activeCashTables.has(t.id);
               return (
-              <tr key={t.id} className={`border-b border-white/10 ${isActive ? "bg-white/5" : ""}`}>
+              <tr 
+                key={t.id} 
+                className={`border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${isActive ? "bg-white/5" : ""}`}
+                onClick={() => openTable(t.id)}
+              >
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">
-                    <span>{t.name}</span>
+                    <span className={isActive ? "font-bold text-white" : ""}>{t.name}</span>
                     {isActive ? (
                       <span
                         className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
@@ -96,7 +147,7 @@ export default function GamesTableSection() {
                 <td className="px-2 py-2 text-center">
                   {t.prizePool ? `${t.prizePool}` : "—"}
                 </td>
-                <td className="px-2 py-2 text-center">
+                <td className="px-2 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                   <Link
                     href={`/${t.id}`}
                     className="tbtn text-xs font-semibold"

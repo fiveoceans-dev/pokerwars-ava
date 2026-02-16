@@ -1,0 +1,37 @@
+{
+  "id": "demo-hand-1",
+  "name": "Quick Steal",
+  "config": {
+    "smallBlind": 10,
+    "bigBlind": 20,
+    "maxPlayers": 9
+  },
+  "initialSeats": [
+    { "id": 0, "pid": "0x111", "nickname": "AggroCat", "chips": 1000 },
+    { "id": 1, "pid": "0x222", "nickname": "TightDog", "chips": 1200 },
+    { "id": 2, "pid": "0x333", "nickname": "FishyFish", "chips": 800 },
+    { "id": 8, "pid": "0x999", "nickname": "DealerDon", "chips": 1500 }
+  ],
+  "events": [
+    { "type": "HAND_START", "delay": 1000 },
+    { "type": "TABLE_SNAPSHOT", "data": { "phase": "deal", "button": 8, "smallBlind": 10, "bigBlind": 20, "pot": 0, "seats": [
+      { "id": 0, "pid": "0x111", "chips": 1000, "status": "active" },
+      { "id": 1, "pid": "0x222", "chips": 1200, "status": "active" },
+      { "id": 2, "pid": "0x333", "chips": 800, "status": "active" },
+      { "id": 8, "pid": "0x999", "chips": 1500, "status": "active" }
+    ]}},
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0x111", "action": "POST_SB", "amount": 10, "seat": 0 }, "delay": 500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0x222", "action": "POST_BB", "amount": 20, "seat": 1 }, "delay": 500 },
+    { "type": "DEAL_HOLE", "data": { "seat": 0, "cards": [1, 14] }, "delay": 800 },
+    { "type": "DEAL_HOLE", "data": { "seat": 1, "cards": [25, 26] }, "delay": 200 },
+    { "type": "DEAL_HOLE", "data": { "seat": 2, "cards": [10, 11] }, "delay": 200 },
+    { "type": "DEAL_HOLE", "data": { "seat": 8, "cards": [40, 41] }, "delay": 200 },
+    { "type": "TABLE_SNAPSHOT", "data": { "phase": "preflop", "actor": 2, "currentBet": 20, "pot": 30 }},
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0x333", "action": "FOLD", "seat": 2 }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0x999", "action": "RAISE", "amount": 80, "seat": 8 }, "delay": 1200 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0x111", "action": "FOLD", "seat": 0 }, "delay": 1000 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0x222", "action": "FOLD", "seat": 1 }, "delay": 1000 },
+    { "type": "WINNER_ANNOUNCEMENT", "data": { "winners": [{ "seat": 8, "playerId": "0x999" }], "potAmount": 110 }, "delay": 1000 },
+    { "type": "HAND_END", "delay": 2000 }
+  ]
+}

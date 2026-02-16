@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const LinkComponent = Link as any;
@@ -238,13 +238,7 @@ export const Header = () => {
     () => (address ? formatWalletLabel(address) : "0xdemo...ef33"),
     [address],
   );
-  const [compactNav, setCompactNav] = useState(false);
   const pathname = usePathname();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const leftClusterRef = useRef<HTMLDivElement>(null);
-  const rightClusterRef = useRef<HTMLDivElement>(null);
-  const measureLeftRef = useRef<HTMLDivElement>(null);
-  const measureRightRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setIsDrawerOpen(false);
@@ -280,51 +274,26 @@ export const Header = () => {
     };
   }, []);
 
-  useLayoutEffect(() => {
-    const update = () => {
-      const cw = containerRef.current?.clientWidth ?? 0;
-      const lw =
-        measureLeftRef.current?.scrollWidth ??
-        leftClusterRef.current?.scrollWidth ??
-        0;
-      const rw =
-        measureRightRef.current?.scrollWidth ??
-        rightClusterRef.current?.scrollWidth ??
-        0;
-      const gap = 5;
-      // Pseudo elements ([ ]) and gaps aren't included in scrollWidth; add buffer.
-      const buffer = 20;
-      setCompactNav(lw + rw + gap + buffer > cw);
-    };
-    update();
-    const resizeObserver = new ResizeObserver(update);
-    if (containerRef.current) resizeObserver.observe(containerRef.current);
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
   return (
     <header className="topbar relative">
       <div
-        ref={containerRef}
         className="topbar-inner content-wrap py-2 flex items-center whitespace-nowrap"
       >
         {/* Left cluster: brand + nav links */} 
-        <div ref={leftClusterRef} className={`flex items-center ${groupGap}`}>
+        <div className={`flex items-center ${groupGap}`}>
           <LinkComponent
             href="/"
-            className="text-white text-[var(--btn-font-size)] tracking-[var(--btn-letter)] uppercase font-semibold leading-none"
+            className="text-white text-[var(--btn-font-size)] tracking-[var(--btn-letter)] uppercase font-semibold leading-none mr-2"
           >
             {appName}
           </LinkComponent>
-          {!compactNav && (
-            <ul className="nav-list hidden sm:flex items-center">
-              <HeaderMenuLinks />
-            </ul>
-          )}
+          
+          <ul className="nav-list hidden lg:flex items-center">
+            <HeaderMenuLinks />
+          </ul>
+
           <div
-            className={`dropdown relative ${compactNav ? "" : "sm:hidden"}`}
+            className="dropdown relative lg:hidden"
             ref={burgerMenuRef}
           >
             <button
@@ -348,17 +317,19 @@ export const Header = () => {
           </div>
         </div>
 
-        {/* Right cluster: balances + wallet */} 
+        {/* Right cluster: balances + wallet (Desktop) */} 
         <div
-          ref={rightClusterRef}
-          className={`${compactNav ? "hidden" : "hidden sm:flex"} items-center justify-end ${groupGap} text-white/70 ml-auto`}
+          className="hidden sm:flex items-center justify-end text-white/70 ml-auto"
         >
-          <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-            {t.coins} {coinsDisplay}
-          </LinkComponent>
-          <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
-            {t.tickets} X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
-          </LinkComponent>
+          <div className="flex items-center gap-1">
+            <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
+              {t.coins} {coinsDisplay}
+            </LinkComponent>
+            <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
+              {t.tickets} X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
+            </LinkComponent>
+          </div>
+
           <div className="dropdown relative" ref={walletMenuRef}>
             {isWalletConnected ? (
               <button
@@ -409,8 +380,8 @@ export const Header = () => {
           </div>
         </div>
 
-        {/* Mobile right cluster */} 
-        <div className={`flex items-center ${groupGap} text-white/70 ml-auto ${compactNav ? "" : "sm:hidden"}`}>
+        {/* Mobile right cluster (Balances only, wallet inside Menu) */} 
+        <div className="flex sm:hidden items-center gap-1 text-white/70 ml-auto mr-2">
           <div className="dropdown relative" ref={accountMenuRef}>
             <button
               type="button"
@@ -419,7 +390,7 @@ export const Header = () => {
               aria-expanded={isAccountMenuOpen}
               onClick={() => setIsAccountMenuOpen((prev) => !prev)}
             >
-              {isWalletConnected ? addressLabel : t.account}
+              {t.account}
             </button>
             {isAccountMenuOpen && (
               <ul
@@ -478,32 +449,6 @@ export const Header = () => {
       <div className="absolute right-4 lg:right-10 top-1/2 -translate-y-1/2 flex items-center z-[60]">
         <LanguageSwitcher />
       </div>
-
-      <div className="pointer-events-none absolute left-0 top-0 invisible whitespace-nowrap" aria-hidden="true">
-        <div ref={measureLeftRef} className="flex items-center ">
-          <span className="text-white text-[var(--btn-font-size)] tracking-[var(--btn-letter)] uppercase font-semibold leading-none">
-            {appName}
-          </span>
-          <ul className="nav-list flex items-center ">
-            <HeaderMenuLinks />
-          </ul>
-        </div>
-        <div ref={measureRightRef} className="flex items-center text-white/70">
-          <span className="tbtn tbtn-tight nav-btn">
-            {t.coins} {coinsDisplay}
-          </span>
-          <span className="tbtn tbtn-tight nav-btn">
-            {t.tickets} X:{ticketXDisplay} Y:{ticketYDisplay} Z:{ticketZDisplay}
-          </span>
-          <span className="tbtn tbtn-tight nav-btn max-w-[140px] truncate">
-            {isWalletConnected ? addressLabel : t.connect_wallet}
-          </span>
-          <span className="tbtn tbtn-tight nav-btn w-[60px] ml-4">
-            {languageLabels[language]}
-          </span>
-        </div>
-      </div>
     </header>
   );
 };
-

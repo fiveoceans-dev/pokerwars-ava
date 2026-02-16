@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PlayPageStyles } from "./PlayPageStyles";
-import Table from "./Table";
+import TableWithLottie from "./TableWithLottie";
 import DealerWindow from "./DealerWindow";
 import ChatWindow from "./ChatWindow";
 import PlayerActionButtons from "./PlayerActionButtons";
@@ -11,13 +11,12 @@ import { useGameStore } from "../hooks/useGameStore";
 import { usePlayViewModel } from "../hooks/usePlayViewModel";
 import useIsMobile from "../hooks/useIsMobile";
 import useGameEvents from "../hooks/useGameEvents";
-import { captureAndDownloadScreen } from "../utils/screenCapture";
 
 interface PlayTableContainerProps {
   tableId: string | null;
 }
 
-export default function PlayTableContainer({ tableId }: PlayTableContainerProps) {
+export default function PlayTableContainerWithLottie({ tableId }: PlayTableContainerProps) {
   const isMobile = useIsMobile();
   const { 
     joinTable, 
@@ -25,22 +24,11 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
     currentTurn, 
     chips, 
     playerStates, 
-    playerIds,
-    cardsRevealed,
-    recentWinners,
     minRaise,
     sitOut,
     sitIn,
     leaveSeat,
-    playerAction,
-    currentWalletId,
-    autoRevealAtShowdown,
-    setAutoRevealAtShowdown,
-    showCards,
-    muckCards,
-    phase,
-    showCardsIntent,
-    setShowCardsIntent
+    playerAction
   } = useGameStore();
   const { baseW, baseH, walletSeatIdx } = useTableViewModel();
   const { timer } = usePlayViewModel();
@@ -49,24 +37,6 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
   const [isActionPending, setIsActionPending] = useState(false);
 
   useGameEvents();
-
-  // Derived show-cards state
-  const safePlayerIds = Array.isArray(playerIds) ? playerIds : Array(9).fill(null);
-  const safePlayerStates = Array.isArray(playerStates) ? playerStates : Array(9).fill("empty");
-  const safeCardsRevealed = Array.isArray(cardsRevealed) ? cardsRevealed : Array(9).fill(false);
-
-  const walletSeat = currentWalletId
-    ? safePlayerIds.findIndex((id) => id?.toLowerCase() === currentWalletId.toLowerCase())
-    : -1;
-
-  const isValidPhase = ["showdown", "payout"].includes(phase || "");
-  const hasValidSeat = walletSeat >= 0;
-  const notFolded = safePlayerStates[walletSeat] !== "folded" && safePlayerStates[walletSeat] !== "empty";
-  const hasCards = hasValidSeat && notFolded;
-  const isWinner = recentWinners.has(walletSeat);
-
-  const canRevealCards = isValidPhase && hasCards && !safeCardsRevealed[walletSeat];
-  const canMuckCards = isValidPhase && hasCards && !safeCardsRevealed[walletSeat] && !isWinner;
 
   useEffect(() => {
     if (tableId) {
@@ -108,7 +78,6 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
   const isSittingOut = walletSeatIdx >= 0 && playerStates[walletSeatIdx] === "sittingOut";
   const myChips = walletSeatIdx >= 0 ? chips[walletSeatIdx] : 0;
   const myCommitted = walletSeatIdx >= 0 ? playerBets[walletSeatIdx] : 0;
-  // Filter out null/undefined bets before calculating max
   const validBets = playerBets.filter((b) => typeof b === 'number');
   const currentBet = validBets.length > 0 ? Math.max(...validBets) : 0;
 
@@ -136,24 +105,6 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
     }
   };
 
-  const handleScreenCapture = async () => {
-    try {
-      await captureAndDownloadScreen();
-    } catch (error) {
-      console.error("Failed to capture screen:", error);
-    }
-  };
-
-  const handleShowCardsToggle = () => {
-    const newIntent = !showCardsIntent;
-    setShowCardsIntent(newIntent);
-    
-    // If we're already in showdown/payout and turning it ON, trigger immediate reveal
-    if (newIntent && isValidPhase && hasCards && !safeCardsRevealed[walletSeat]) {
-      void showCards();
-    }
-  };
-
   return (
     <div
       className="play-page-container"
@@ -175,7 +126,7 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
           transition: "opacity 0.2s ease, transform 0.3s ease",
         }}
       >
-        <Table timer={timer} />
+        <TableWithLottie timer={timer} />
       </div>
 
       {/* Top Right Navigation & Controls */}
@@ -217,70 +168,13 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
         <DealerWindow isMobile={isMobile} />
       </div>
 
-            {/* Bottom Right Controls (Social & Info) */}
-            <div 
-              className={`absolute bottom-0 right-0 z-50 flex items-end gap-2 ${isMobile ? "m-1.5" : "m-3"}`}
-            >
-              {/* Social/Utility Column - Mini Scale */}
-              <div className="flex flex-col gap-1 items-stretch mb-0.5 min-w-[65px]">
-                {/* SHOW CARDS - Mini */}
-                {hasCards && !safeCardsRevealed[walletSeat] ? (
-                  <button
-                    onClick={handleShowCardsToggle}
-                    className="tbtn tbtn-mini font-black border border-white/5 bg-black/40 text-white/50 transition-colors flex items-center justify-between gap-1.5"
-                  >
-                    <span>SHOW</span>
-                    <div 
-                      className={`w-1 h-1 rounded-[1px] transition-all ${
-                        showCardsIntent 
-                          ? "bg-[var(--brand-accent)] shadow-[0_0_6px_rgba(251,191,36,0.6)]" 
-                          : "bg-white/5 border border-white/10"
-                      }`} 
-                    />
-                  </button>
-                ) : (
-                  <div className="h-4 invisible" />
-                )}
-      
-                {/* MUCK CARDS - Mini */}
-                {canMuckCards && (
-                  <button
-                    onClick={() => muckCards()}
-                    className="tbtn tbtn-mini font-bold bg-white/5 text-white/40 hover:bg-white/10"
-                  >
-                    MUCK
-                  </button>
-                )}
-                
-                {/* AUTO-SHOW - Mini */}
-                <button
-                  onClick={() => setAutoRevealAtShowdown(!autoRevealAtShowdown)}
-                  className="tbtn tbtn-mini font-black border border-white/5 bg-black/40 text-white/50 transition-colors flex items-center justify-between gap-1.5"
-                >
-                  <span>AUTO</span>
-                  <div 
-                    className={`w-1 h-1 rounded-[1px] transition-all ${
-                      autoRevealAtShowdown 
-                        ? "bg-[var(--brand-accent)] shadow-[0_0_6px_rgba(251,191,36,0.6)]" 
-                        : "bg-white/5 border border-white/10"
-                    }`} 
-                  />
-                </button>
-      
-                {/* SCREENSHOT - Mini */}
-                <button
-                  onClick={handleScreenCapture}
-                  className="tbtn tbtn-mini font-bold bg-white/5 border border-white/5 text-white/40 hover:bg-white/10 hover:text-white/70"
-                >
-                  PHOTO
-                </button>
-              </div>
-      
-              {/* Chat Component */}
-              <div className={isMobile ? "w-40 h-24" : "w-64 h-32"}>
-                <ChatWindow />
-              </div>
-            </div>
+      {/* Chat Component - Bottom Right */}
+      <div 
+        className={`absolute bottom-0 right-0 ${isMobile ? "w-40 h-24 m-2" : "w-64 h-32 m-4"} overflow-hidden z-50`}
+      >
+        <ChatWindow />
+      </div>
+
       {/* Player Actions - Bottom Center */}
       {walletSeatIdx >= 0 && (
         <div 

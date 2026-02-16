@@ -1,0 +1,37 @@
+{
+  "id": "demo-hand-3",
+  "name": "The River Bluff",
+  "config": {
+    "smallBlind": 10,
+    "bigBlind": 20,
+    "maxPlayers": 9
+  },
+  "initialSeats": [
+    { "id": 1, "pid": "0xABC", "nickname": "Hero", "chips": 2000 },
+    { "id": 4, "pid": "0xDEF", "nickname": "Villain", "chips": 2000 }
+  ],
+  "events": [
+    { "type": "HAND_START", "delay": 1000 },
+    { "type": "TABLE_SNAPSHOT", "data": { "phase": "deal", "button": 1, "seats": [
+      { "id": 1, "pid": "0xABC", "chips": 2000, "status": "active" },
+      { "id": 4, "pid": "0xDEF", "chips": 2000, "status": "active" }
+    ]}},
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xDEF", "action": "POST_SB", "amount": 10, "seat": 4 }, "delay": 500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xABC", "action": "POST_BB", "amount": 20, "seat": 1 }, "delay": 500 },
+    { "type": "DEAL_HOLE", "data": { "seat": 1, "cards": [48, 35] }, "delay": 500 },
+    { "type": "DEAL_HOLE", "data": { "seat": 4, "cards": [10, 22] }, "delay": 500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xDEF", "action": "CALL", "amount": 10, "seat": 4 }, "delay": 1000 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xABC", "action": "CHECK", "seat": 1 }, "delay": 800 },
+    { "type": "DEAL_FLOP", "data": { "cards": [5, 18, 31] }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xABC", "action": "BET", "amount": 30, "seat": 1 }, "delay": 1200 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xDEF", "action": "CALL", "amount": 30, "seat": 4 }, "delay": 1000 },
+    { "type": "DEAL_TURN", "data": { "card": 44 }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xABC", "action": "CHECK", "seat": 1 }, "delay": 1000 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xDEF", "action": "CHECK", "seat": 4 }, "delay": 1000 },
+    { "type": "DEAL_RIVER", "data": { "card": 1 }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xABC", "action": "BET", "amount": 150, "seat": 1 }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xDEF", "action": "FOLD", "seat": 4 }, "delay": 2000 },
+    { "type": "WINNER_ANNOUNCEMENT", "data": { "winners": [{ "seat": 1, "playerId": "0xABC" }], "potAmount": 250 }, "delay": 1500 },
+    { "type": "HAND_END", "delay": 2000 }
+  ]
+}

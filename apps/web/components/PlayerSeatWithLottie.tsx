@@ -1,10 +1,15 @@
+"use client";
+
 import clsx from "clsx";
+import Lottie from "lottie-react";
+const LottiePlayer = Lottie as any;
 import { useGameStore } from "../hooks/useGameStore";
 import type { SeatUIState } from "../game-engine";
 import type { SeatState } from "../stores/seatStore";
 import { shortAddress } from "../utils/address";
+import animationData from "@/public/animations/poker-chip-shuffle.json";
 
-interface PlayerSeatProps {
+interface PlayerSeatWithLottieProps {
   seat?: SeatState;
   status?: SeatUIState;
   isDealer?: boolean;
@@ -14,7 +19,7 @@ interface PlayerSeatProps {
   onClick?: () => void;
 }
 
-export default function PlayerSeat({
+export default function PlayerSeatWithLottie({
   seat,
   status = "active",
   isDealer = false,
@@ -22,7 +27,7 @@ export default function PlayerSeat({
   isWinner = false,
   actionLabel,
   onClick,
-}: PlayerSeatProps) {
+}: PlayerSeatWithLottieProps) {
   const tableType = useGameStore((state) => state.tableType);
   const isPlaceholderAddress = (addr: string) =>
     addr.toLowerCase() === "white" || /^0x0{40}$/.test(addr);
@@ -52,6 +57,13 @@ export default function PlayerSeat({
   // Determine Avatar Content based on Action
   const getAvatarContent = () => {
     if (!actionLabel) {
+      if (hasSeat && !dim) {
+        return (
+          <div className="w-8 h-8 opacity-80 group-hover:opacity-100 transition-opacity">
+            <LottiePlayer animationData={animationData} loop={true} />
+          </div>
+        );
+      }
       return (
         <svg className="w-5 h-5 text-white/30" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -93,7 +105,7 @@ export default function PlayerSeat({
   return (
     <div
       className={clsx(
-        "relative flex items-center justify-center transition-all duration-200 w-[140px] h-[50px]",
+        "relative flex items-center justify-center transition-all duration-200 w-[140px] h-[50px] group",
         dim ? "opacity-50 grayscale" : "opacity-100",
         isActive && "scale-105"
       )}

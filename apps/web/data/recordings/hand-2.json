@@ -1,0 +1,40 @@
+{
+  "id": "demo-hand-2",
+  "name": "The Cooler",
+  "config": {
+    "smallBlind": 50,
+    "bigBlind": 100,
+    "maxPlayers": 9
+  },
+  "initialSeats": [
+    { "id": 0, "pid": "0xAAA", "nickname": "AceKing", "chips": 1000 },
+    { "id": 3, "pid": "0xBBB", "nickname": "PocketTens", "chips": 1000 },
+    { "id": 5, "pid": "0xCCC", "nickname": "BigStack", "chips": 5000 }
+  ],
+  "events": [
+    { "type": "HAND_START", "delay": 1000 },
+    { "type": "TABLE_SNAPSHOT", "data": { "phase": "deal", "button": 5, "seats": [
+      { "id": 0, "pid": "0xAAA", "chips": 1000, "status": "active" },
+      { "id": 3, "pid": "0xBBB", "chips": 1000, "status": "active" },
+      { "id": 5, "pid": "0xCCC", "chips": 5000, "status": "active" }
+    ]}},
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xAAA", "action": "POST_SB", "amount": 50, "seat": 0 }, "delay": 500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xBBB", "action": "POST_BB", "amount": 100, "seat": 3 }, "delay": 500 },
+    { "type": "DEAL_HOLE", "data": { "seat": 0, "cards": [51, 47] }, "delay": 500 },
+    { "type": "DEAL_HOLE", "data": { "seat": 3, "cards": [33, 34] }, "delay": 500 },
+    { "type": "DEAL_HOLE", "data": { "seat": 5, "cards": [12, 13] }, "delay": 500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xCCC", "action": "RAISE", "amount": 300, "seat": 5 }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xAAA", "action": "ALLIN", "amount": 950, "seat": 0 }, "delay": 1500 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xBBB", "action": "ALLIN", "amount": 900, "seat": 3 }, "delay": 1000 },
+    { "type": "PLAYER_ACTION_APPLIED", "data": { "playerId": "0xCCC", "action": "CALL", "amount": 700, "seat": 5 }, "delay": 1000 },
+    { "type": "DEAL_FLOP", "data": { "cards": [2, 15, 28] }, "delay": 2000 },
+    { "type": "DEAL_TURN", "data": { "card": 41 }, "delay": 1500 },
+    { "type": "DEAL_RIVER", "data": { "card": 50 }, "delay": 1500 },
+    { "type": "SHOWDOWN", "delay": 1000 },
+    { "type": "PLAYER_REVEALED", "data": { "seat": 0, "playerId": "0xAAA" }, "delay": 500 },
+    { "type": "PLAYER_REVEALED", "data": { "seat": 3, "playerId": "0xBBB" }, "delay": 500 },
+    { "type": "PLAYER_REVEALED", "data": { "seat": 5, "playerId": "0xCCC" }, "delay": 500 },
+    { "type": "WINNER_ANNOUNCEMENT", "data": { "winners": [{ "seat": 0, "playerId": "0xAAA" }], "potAmount": 3000 }, "delay": 2000 },
+    { "type": "HAND_END", "delay": 2000 }
+  ]
+}

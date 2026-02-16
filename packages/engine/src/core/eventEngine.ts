@@ -298,10 +298,19 @@ export class EventEngine extends EventEmitter {
         logger.debug(
           `   📨 Processing event ${processedCount}: ${queuedEvent.event.t} (${this.eventQueue.length} remaining)`,
         );
-        await this.processEvent(queuedEvent);
-        logger.debug(
-          `   ✅ Completed event ${processedCount}: ${queuedEvent.event.t} (${this.eventQueue.length} remaining)`,
-        );
+        try {
+          await this.processEvent(queuedEvent);
+          logger.debug(
+            `   ✅ Completed event ${processedCount}: ${queuedEvent.event.t} (${this.eventQueue.length} remaining)`,
+          );
+        } catch (error) {
+          logger.error(
+            `❌ [EventEngine] Critical error processing event ${queuedEvent.event.t}:`,
+            error,
+          );
+          // Don't rethrow - we want to continue processing other events if possible
+          // though some errors might be fatal to the hand state
+        }
 
         // Continue processing any events that were added during processEvent
         // (e.g., from automatic transitions)
@@ -422,73 +431,36 @@ export class EventEngine extends EventEmitter {
             ? this.table.seats[this.table.actor]
             : null;
 
-        // Log full validation context for debugging
-        logger.error(
-          `❌ [EventEngine] Action validation failed - Full Context:`,
+        // Log validation context as warning instead of error to avoid noise
+        logger.warn(
+          `⚠️ [EventEngine] Action validation failed (No state change) - Phase: ${this.table.phase}, Actor: ${this.table.actor}, Target: ${event.seat}`,
         );
-        logger.error(`   Table Phase: ${this.table.phase}`);
-        logger.error(
-          `   Current Actor: seat ${this.table.actor} (${actorSeat?.pid || "none"})`,
-        );
-        logger.error(
-          `   Action Details: seat ${event.seat}, action ${event.action}, amount ${event.amount}`,
-        );
-        logger.error(
-          `   Player Status: ${seat?.pid || "EMPTY"} (status: ${seat?.status || "N/A"})`,
-        );
-        logger.error(
-          `   Current Bet: ${this.table.currentBet}, Player Street Committed: ${seat?.streetCommitted || 0}`,
+        logger.warn(
+          `   Details: ${seat?.pid || "EMPTY"}(${seat?.status}) tried ${event.action} - Current Actor: ${actorSeat?.pid || "none"}`,
         );
 
-        // Specific validation failure detection
+        // Emit current state so clients can reconcile their UI
+        this.emit("stateChanged", this.getState());
+        this.emit("eventProcessed", event, this.table);
+        return;
+      }
+
+      // For PlayerJoin events, keep throwing as these are usually synchronous setup requests
+      if (event.t === "PlayerJoin") {
+        const seat = this.table.seats[event.seat];
+
+        // Check specific validation failures
         if (event.seat < 0 || event.seat >= this.table.seats.length) {
-          throw new Error(
-            `Invalid seat index: ${event.seat} (valid range: 0-${this.table.seats.length - 1})`,
-          );
+          throw new Error("Invalid seat index");
+        } else if (seat.pid) {
+          throw new Error("Seat already taken");
+        } else if (this.table.seats.find((s) => s.pid === event.pid)) {
+          throw new Error("Player already seated");
+        } else if (event.chips <= 0) {
+          throw new Error("Invalid chips amount");
+        } else {
+          throw new Error("Failed to add player");
         }
-
-        if (!seat) {
-          throw new Error(`Seat ${event.seat} does not exist`);
-        }
-
-        if (!seat.pid) {
-          throw new Error(`Seat ${event.seat} is empty - no player seated`);
-        }
-
-        if (seat.status !== "active") {
-          throw new Error(
-            `Player ${seat.pid} cannot act - status is '${seat.status}' (must be 'active')`,
-          );
-        }
-
-        if (this.table.actor === undefined) {
-          throw new Error(
-            `No current actor defined - phase '${this.table.phase}' may not allow actions`,
-          );
-        }
-
-        if (this.table.actor !== event.seat) {
-          throw new Error(
-            `Not player's turn: current actor is seat ${this.table.actor} (${actorSeat?.pid}), but seat ${event.seat} (${seat.pid}) tried to act`,
-          );
-        }
-
-        // Phase validation
-        const bettingPhases = ["preflop", "flop", "turn", "river"];
-        if (!bettingPhases.includes(this.table.phase)) {
-          throw new Error(
-            `Cannot take actions during '${this.table.phase}' phase - actions only allowed in: ${bettingPhases.join(", ")}`,
-          );
-        }
-
-        // If we reach here, it's likely a specific action validation failure (betting amounts, etc.)
-        const toCall = Math.max(
-          0,
-          this.table.currentBet - (seat.streetCommitted || 0),
-        );
-        throw new Error(
-          `Invalid ${event.action} action: ${seat.pid} (${event.amount || "no amount"}) - Current bet: ${this.table.currentBet}, To call: ${toCall}, Chips: ${seat.chips}`,
-        );
       }
 
       // For other events, throw generic validation error

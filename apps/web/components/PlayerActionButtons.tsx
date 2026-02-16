@@ -132,7 +132,7 @@ export default function PlayerActionButtons({
   const canShowCards =
     street === 4 && hasCards && !safeCardsRevealed[walletSeat];
 
-  const hasAnythingToShow = showActions || canRevealCards || canMuckCards;
+  const hasAnythingToShow = showActions;
 
   if (!hasAnythingToShow) return null;
 
@@ -141,7 +141,7 @@ export default function PlayerActionButtons({
   return (
     <div
       className={`${isMobile ? "w-full" : "w-auto"} max-w-[420px] h-full flex flex-col justify-between ${
-        isMobile ? "text-[10px] min-h-[140px]" : "text-xs min-h-[120px]"
+        isMobile ? "text-[10px] min-h-[100px]" : "text-xs min-h-[80px]"
       } overflow-hidden ${className ?? ""}`}
     >
       {/* Row 1 - Action Buttons (Fixed positions) */}
@@ -271,70 +271,8 @@ export default function PlayerActionButtons({
         </div>
       </div>
 
-      {/* Row 2 - Camera Button + Quick Bet Buttons */}
-      <div className="flex items-center justify-between gap-1 mb-2" style={{ minHeight: "32px" }}>
-        {/* Left cluster: Screenshot + Reveal Cluster */}
-        <div className="flex items-center gap-2">
-          {/* Camera Capture Button */}
-          <button
-            onClick={handleScreenCapture}
-            className="w-8 h-8 flex items-center justify-center rounded font-semibold text-[#0a1124] bg-[var(--brand-accent)] hover:bg-[#6ccf9b] transition-colors"
-            title="Capture Screenshot"
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M12 15.5c1.93 0 3.5-1.57 3.5-3.5S13.93 8.5 12 8.5 8.5 10.07 8.5 12s1.57 3.5 3.5 3.5zM17.5 9c.28 0 .5-.22.5-.5s-.22-.5-.5-.5-.5.22-.5.5.22.5.5.5zM20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" />
-            </svg>
-          </button>
-
-          {/* Reveal Cluster: preserves space for Show/Muck, then Auto-show */}
-          <div className="flex items-center gap-2 px-2 h-8">
-            {/* Left: Show/Muck area with fixed placeholders to preserve layout */}
-            <div className="flex items-center gap-2 min-w-[140px] h-8">
-              {canRevealCards ? (
-                <button
-                  onClick={() => showCards()}
-                  className="min-w-[60px] h-8 px-2 rounded text-xs font-semibold text-[#0a1124] bg-[var(--brand-accent)] hover:bg-[#eec42b] transition-colors"
-                >
-                  Show
-                </button>
-              ) : (
-                <div className="min-w-[60px] h-8 px-2 rounded text-xs opacity-0 pointer-events-none">
-                  Show
-                </div>
-              )}
-              {canMuckCards ? (
-                <button
-                  onClick={() => muckCards()}
-                  className="min-w-[60px] h-8 px-2 rounded text-xs font-semibold text-[#0a1124] bg-[var(--brand-accent)] hover:bg-[#eec42b] transition-colors"
-                >
-                  Muck
-                </button>
-              ) : (
-                <div className="min-w-[60px] h-8 px-2 rounded text-xs opacity-0 pointer-events-none">
-                  Muck
-                </div>
-              )}
-            </div>
-
-            {/* Middle: Auto-show toggle (always present) */}
-            <label className="flex items-center gap-1 h-8 px-2 text-[10px] text-white/80 cursor-pointer select-none bg-transparent border-0">
-              <input
-                type="checkbox"
-                className="accent-[var(--brand-accent)] cursor-pointer"
-                checked={autoRevealAtShowdown}
-                onChange={(e) => setAutoRevealAtShowdown(e.target.checked)}
-              />
-              Auto-show
-            </label>
-          </div>
-        </div>
-
+      {/* Row 2 - Quick Bet Buttons */}
+      <div className="flex items-center justify-end gap-1 mb-2" style={{ minHeight: "32px" }}>
         {/* Quick Bet Buttons - Right Side */}
         {showActions && canRaise && maxRaise > effectiveMinRaise ? (
           <div className="flex items-center gap-1">

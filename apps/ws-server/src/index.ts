@@ -71,6 +71,30 @@ const GOVERNANCE_ROLES_LIST: GovernanceRoleType[] = [
   GovernanceRoleType.ADMIN,
 ];
 
+/**
+ * Custom JSON replacer to handle BigInt values
+ */
+const bigIntReplacer = (_key: string, value: any) => {
+  return typeof value === "bigint" ? value.toString() : value;
+};
+
+/**
+ * Custom JSON reviver to convert numeric strings back to numbers for specific fields
+ */
+const numericReviver = (key: string, value: any) => {
+  // Fields that should always be numbers in the engine/app
+  const numericFields = [
+    "chips", "committed", "streetCommitted", "amount", "pot", 
+    "currentBet", "lastRaiseSize", "smallBlind", "bigBlind", 
+    "ante", "handNumber", "timestamp"
+  ];
+  if (numericFields.includes(key) && typeof value === "string") {
+    const parsed = parseFloat(value);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return value;
+};
+
 let governanceAssignments = new Map<string, GovernanceRoleType[]>();
 
 function normalizeLedgerWallet(wallet?: string): string | null {
@@ -115,7 +139,7 @@ async function readRequestBody(req: IncomingMessage): Promise<any> {
     req.on("end", () => {
       if (!body) return resolve({});
       try {
-        resolve(JSON.parse(body));
+        resolve(JSON.parse(body, numericReviver));
       } catch (err) {
         reject(err);
       }
@@ -279,7 +303,7 @@ const server = createServer(async (req, res) => {
     req.on('data', (chunk) => (body += chunk));
     req.on('end', async () => {
       try {
-        const parsed = JSON.parse(body || '{}');
+        const parsed = JSON.parse(body || '{}', numericReviver);
         const wallet: string | undefined = parsed.wallet?.toLowerCase();
         const signature: string | undefined = parsed.signature;
         if (!wallet || !signature) throw new Error("wallet and signature required");
@@ -816,7 +840,7 @@ const server = createServer(async (req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', async () => {
       try {
-        const parsed = JSON.parse(body || '{}');
+        const parsed = JSON.parse(body || '{}', numericReviver);
         const { direction, tier, amount } = parsed;
         if (!["coinsToTickets", "ticketsToCoins"].includes(direction)) throw new Error("invalid direction");
         if (!["ticket_x", "ticket_y", "ticket_z"].includes(tier)) throw new Error("invalid tier");
@@ -860,7 +884,7 @@ const server = createServer(async (req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', async () => {
       try {
-        const parsed = JSON.parse(body || '{}');
+        const parsed = JSON.parse(body || '{}', numericReviver);
         const email = String(parsed.email || '').trim();
         if (!email) throw new Error("email required");
         const user = await ledger!.updateEmail(wallet, email);
@@ -1018,7 +1042,7 @@ function sendSanitizedSnapshot(ws: WebSocket, session: Session, roomId: string, 
     table: sanitized,
     tableType,
     maxPlayers,
-  }));
+  }, bigIntReplacer));
 }
 
 function broadcast(roomId: string, event: ServerEvent): void {
@@ -1061,7 +1085,7 @@ function broadcast(roomId: string, event: ServerEvent): void {
           }
         }
 
-        const msg = JSON.stringify({ ...payload, tableId: roomId });
+        const msg = JSON.stringify({ ...payload, tableId: roomId }, bigIntReplacer);
         client.send(msg);
         sentCount++;
       } catch (error) {
@@ -1092,7 +1116,7 @@ function broadcastAll(event: any): void {
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       try {
-        client.send(JSON.stringify(event));
+        client.send(JSON.stringify(event, bigIntReplacer));
         sent++;
       } catch (err) {
         logger.error(`❌ BroadcastAll failed:`, err);
@@ -1146,7 +1170,7 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     userId: session.userId,
     isAdmin: isUserAdmin(session.userId),
     roles: session.roles ?? getGovernanceRoles(session.userId),
-  } satisfies ServerEvent));
+  } satisfies ServerEvent, bigIntReplacer));
 
   /**
    * Message Handler - Convert WebSocket commands to FSM events
@@ -1227,7 +1251,7 @@ function validateClientCommand(cmd: any): { ok: true } | { ok: false; code: stri
 
 ws.on("message", async (data) => {
   try {
-    const command: Command = JSON.parse(data.toString());
+    const command: Command = JSON.parse(data.toString(), numericReviver);
     
     logger.debug(`📨 [${clientId}] Command: ${command.type}`);
     // Early validation: reject malformed commands consistently
@@ -1445,7 +1469,14 @@ ws.on("message", async (data) => {
               smallBlind: table.smallBlind,
               bigBlind: table.bigBlind
             } as LobbyTable,
-          } satisfies ServerEvent));
+          } satisfies ServerEvent, bigIntReplacer));
+
+          // Global broadcast of updated table list
+          broadcastAll({
+            tableId: "",
+            type: "TABLE_LIST",
+            tables: bridge.getTables(),
+          });
           break;
 
         case "REATTACH":
@@ -1523,7 +1554,7 @@ ws.on("message", async (data) => {
               userId: attached.userId,
               isAdmin: isUserAdmin(attached.userId),
               roles: session.roles ?? getGovernanceRoles(attached.userId),
-            } satisfies ServerEvent));
+            } satisfies ServerEvent, bigIntReplacer));
             
             if (session.roomId) {
               try {
@@ -1554,7 +1585,7 @@ ws.on("message", async (data) => {
         type: "ERROR",
         code: "BAD_MESSAGE",
         msg: String(error),
-      } satisfies ServerEvent));
+      } satisfies ServerEvent, bigIntReplacer));
     }
   });
 
@@ -1571,7 +1602,7 @@ ws.on("message", async (data) => {
           tableId: s.roomId,
           seat: s.seat,
           playerId: s.userId || s.sessionId,
-        });
+        } as any);
 
         // Start a reconnect grace countdown so clients can reflect the state
         try {

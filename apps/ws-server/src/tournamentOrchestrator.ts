@@ -80,6 +80,7 @@ export class TournamentOrchestrator {
       if (openTable) {
         this.seatAndBroadcast(t, openTable, [Array.from(t.registered).slice(-1)[0]]);
         this.balanceIfNeeded(t);
+        this.broadcastTournamentUpdate(t.id);
       } else {
         // create new table if capacity allows
         const level = getFirstLevel(t.blindScheduleId);
@@ -88,6 +89,7 @@ export class TournamentOrchestrator {
           this.manager.addTable(t.id, tableId);
           this.seatAndBroadcast(t, tableId, [Array.from(t.registered).slice(-1)[0]]);
           this.balanceIfNeeded(t);
+          this.broadcastTournamentUpdate(t.id);
         }
       }
     }
@@ -308,6 +310,10 @@ export class TournamentOrchestrator {
         seatIndex: s.seatIndex,
         playerId: s.playerId,
       } as any);
+
+      // Persist SEATED status in DB
+      void this.manager.markSeated(t.id, s.playerId, s.tableId, s.seatIndex);
+
       // Persist seating state for reconnects
       this.manager.upsertState({
         ...t,
@@ -361,6 +367,9 @@ export class TournamentOrchestrator {
           seatIndex: emptySeat,
           playerId: occupant.pid,
         } as any);
+
+        // Update SEATED status in DB
+        void this.manager.markSeated(t.id, occupant.pid, m.toTable, emptySeat);
       } catch (err) {
         logger.error(`❌ Failed to balance tables for ${t.id}`, err);
       }
@@ -397,9 +406,13 @@ export class TournamentOrchestrator {
                   seatIndex: emptySeat,
                   playerId: lone.pid,
                 } as any);
+
+                // Update SEATED status in DB
+                void this.manager.markSeated(t.id, lone.pid, targetId, emptySeat);
               }
             }
             this.manager.removeTable(t.id, tableId);
+            this.broadcastTournamentUpdate(t.id);
           } catch (err) {
             logger.error(`❌ Failed to break table ${tableId} for ${t.id}`, err);
           }
@@ -465,6 +478,8 @@ export class TournamentOrchestrator {
     const t = this.manager.listStates().find((tt) => tt.tables.includes(tableId));
     if (!t) return;
     t.registered.delete(playerId);
+    if (!t.bustedIds) t.bustedIds = new Set();
+    t.bustedIds.add(playerId);
     const position = t.registered.size + 1;
     const payouts = t.payouts ? [...t.payouts] : [];
     payouts.unshift({
@@ -475,6 +490,7 @@ export class TournamentOrchestrator {
     });
     t.payouts = payouts;
     await this.manager.persistBust(t.id, playerId, position);
+    this.broadcastTournamentUpdate(t.id);
     if (t.registered.size <= 1) {
       await this.finishTournament(t);
       return;

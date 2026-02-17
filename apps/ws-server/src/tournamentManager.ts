@@ -55,6 +55,7 @@ export interface TournamentDefinition {
 export interface TournamentState extends TournamentDefinition {
   status: TournamentStatus;
   registered: Set<string>;
+  bustedIds: Set<string>;
   tables: string[];
   createdAt: string;
   updatedAt: string;
@@ -64,8 +65,10 @@ export interface TournamentState extends TournamentDefinition {
   entrants?: number;
 }
 
-export interface PublicTournamentState extends Omit<TournamentState, "registered" | "tables"> {
+export interface PublicTournamentState extends Omit<TournamentState, "registered" | "bustedIds" | "tables"> {
   registeredCount: number;
+  registeredIds: string[];
+  bustedIds: string[];
   tables: string[];
   lateRegEndAt?: string;
   currentLevel?: number;
@@ -280,6 +283,7 @@ export class TournamentManager {
       ...def,
       status: def.startMode === 'scheduled' ? 'scheduled' : 'registering',
       registered: new Set<string>(),
+      bustedIds: new Set<string>(),
       tables: [],
       createdAt: now,
       updatedAt: now,
@@ -325,7 +329,8 @@ export class TournamentManager {
       },
       tableConfigId: t.tableConfigId || undefined,
       status: statusMap[t.status],
-      registered: new Set(regs.map(r => r.playerId)),
+      registered: new Set(regs.filter(r => r.status !== 'BUSTED').map(r => r.playerId)),
+      bustedIds: new Set(regs.filter(r => r.status === 'BUSTED').map(r => r.playerId)),
       tables: tables.map(tb => tb.engineTableId),
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
@@ -386,6 +391,8 @@ export class TournamentManager {
     return {
       ...t,
       registeredCount: t.registered.size,
+      registeredIds: Array.from(t.registered),
+      bustedIds: Array.from(t.bustedIds || new Set()),
       tables: [...t.tables],
     };
   }
@@ -455,10 +462,31 @@ export class TournamentManager {
     try {
       await this.prisma.tournamentRegistration.updateMany({
         where: { tournamentId, playerId },
-        data: { status: 'BUSTED', position }
+        data: { status: 'BUSTED', position, tableId: null, seatIndex: null }
       });
     } catch (e) {
       logger.error("Persist bust failed", e);
+    }
+  }
+
+  async markSeated(tournamentId: string, playerId: string, tableId: string, seatIndex: number) {
+    try {
+      await this.prisma.tournamentRegistration.updateMany({
+        where: { tournamentId, playerId },
+        data: { status: 'SEATED', tableId, seatIndex }
+      });
+    } catch (e) {
+      logger.error("Mark seated failed", e);
+    }
+  }
+
+  async clearRegistration(tournamentId: string, playerId: string) {
+    try {
+      await this.prisma.tournamentRegistration.deleteMany({
+        where: { tournamentId, playerId }
+      });
+    } catch (e) {
+      logger.error("Clear registration failed", e);
     }
   }
 
@@ -471,6 +499,13 @@ export class TournamentManager {
           amount: p.amount,
           currency: p.currency === 'tickets' ? 'TICKETS' : 'CHIPS',
         }))
+      });
+
+      // Mark all players who finished (non-busted) as CASHED and clear their seats
+      const pids = payouts.map(p => p.playerId);
+      await this.prisma.tournamentRegistration.updateMany({
+        where: { tournamentId, playerId: { in: pids }, status: { not: 'BUSTED' } },
+        data: { status: 'CASHED', tableId: null, seatIndex: null }
       });
     } catch (e) {
       logger.error("Persist payouts failed", e);

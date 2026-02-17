@@ -15,6 +15,8 @@ export type Tournament = {
   lateRegMinutes?: number;
   maxPlayers: number;
   registeredCount: number;
+  registeredIds?: string[];
+  bustedIds?: string[];
   entrants?: number;
   startingStack: number;
   status: TournamentStatus;

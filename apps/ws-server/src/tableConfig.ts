@@ -99,19 +99,27 @@ export function getTablesByStakeLevel(level: TableConfig['stakeLevel']): TableCo
 /**
  * Validate buy-in amount for a table
  */
-export function validateBuyIn(tableId: string, chips: number): { valid: boolean; error?: string; suggested?: number } {
+export function validateBuyIn(tableId: string, chips: number, minOverride?: number): { valid: boolean; error?: string; suggested?: number } {
   const config = getTableConfig(tableId);
   if (!config) {
     return { valid: false, error: 'Table not found' };
   }
-  const minBB = Math.round(config.buyIn.min / config.blinds.big);
+
+  // Use the larger of the config minimum or the override (rejoin protection)
+  const effectiveMin = minOverride !== undefined ? Math.max(config.buyIn.min, minOverride) : config.buyIn.min;
+  
+  const minBB = Math.round(effectiveMin / config.blinds.big);
   const maxBB = Math.round(config.buyIn.max / config.blinds.big);
   
-  if (chips < config.buyIn.min) {
+  if (chips < effectiveMin) {
+    const errorMsg = minOverride !== undefined && minOverride > config.buyIn.min
+      ? `Re-entry minimum required: ${minOverride} chips`
+      : `Buy-in too small (minimum: ${minBB} BB)`;
+
     return { 
       valid: false, 
-      error: `Buy-in too small (minimum: ${minBB} BB)`,
-      suggested: config.buyIn.min
+      error: errorMsg,
+      suggested: effectiveMin
     };
   }
   

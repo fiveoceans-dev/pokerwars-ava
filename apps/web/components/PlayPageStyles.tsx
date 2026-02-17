@@ -31,15 +31,6 @@ export function PlayPageStyles() {
         transform-origin: center center;
         transition: transform 0.3s ease, opacity 0.2s ease;
       }
-
-      .tbtn-mini {
-        height: 16px !important;
-        padding: 0 6px !important;
-        font-size: 6px !important;
-        letter-spacing: 0.05em;
-        border-radius: 4px !important;
-        min-width: 0 !important;
-      }
     `}</style>
   );
 }

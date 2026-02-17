@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { Toaster } from "react-hot-toast";
@@ -130,10 +130,7 @@ function ConsoleErrorForwarder() {
 }
 
 export function AppProviders({ children }: { children: ReactNode }) {
-  const queryClientRef = useRef<QueryClient>();
-  if (!queryClientRef.current) {
-    queryClientRef.current = new QueryClient();
-  }
+  const [queryClient] = useState(() => new QueryClient());
 
   const enableConsoleForwarder =
     process.env.NODE_ENV !== "production" &&
@@ -155,7 +152,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClientRef.current}>
+      <QueryClientProvider client={queryClient}>
         <WalletProvider>
           <ThemeProvider>
             {children}

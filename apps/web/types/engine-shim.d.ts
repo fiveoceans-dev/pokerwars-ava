@@ -22,6 +22,7 @@ declare module "@hyper-poker/engine" {
   export type ServerEvent = any;
   export type ClientCommand = any;
   export type LobbyTable = any;
+  export type GovernanceRole = any;
 
   export const RANKS: any;
   export const SUITS: any;

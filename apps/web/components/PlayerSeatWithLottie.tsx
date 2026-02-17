@@ -7,6 +7,7 @@ import { useGameStore } from "../hooks/useGameStore";
 import type { SeatUIState } from "../game-engine";
 import type { SeatState } from "../stores/seatStore";
 import { shortAddress } from "../utils/address";
+import { formatNumber } from "../utils/format";
 import animationData from "@/public/animations/poker-chip-shuffle.json";
 
 interface PlayerSeatWithLottieProps {
@@ -57,13 +58,6 @@ export default function PlayerSeatWithLottie({
   // Determine Avatar Content based on Action
   const getAvatarContent = () => {
     if (!actionLabel) {
-      if (hasSeat && !dim) {
-        return (
-          <div className="w-8 h-8 opacity-80 group-hover:opacity-100 transition-opacity">
-            <LottiePlayer animationData={animationData} loop={true} />
-          </div>
-        );
-      }
       return (
         <svg className="w-5 h-5 text-white/30" fill="currentColor" viewBox="0 0 24 24">
           <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
@@ -145,7 +139,7 @@ export default function PlayerSeatWithLottie({
               </div>
               {/* Row 2: Stack */}
               <div className="text-[10px] font-mono font-bold text-[#fbbf24] leading-tight truncate">
-                {tableType === "cash" ? "$" : ""}{stack.toLocaleString()}
+                {tableType === "cash" ? "$" : ""}{formatNumber(stack)}
               </div>
             </div>
           </>

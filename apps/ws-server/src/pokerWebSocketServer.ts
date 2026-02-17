@@ -28,6 +28,14 @@ import { BotManager, type BotConfig } from "./botManager";
 import { verifiedWallets } from "./security";
 import { Asset, PrismaClient } from "@prisma/client";
 import { LedgerPort } from "./ledgerPort";
+import { cashRejoinManager } from "./cashRejoinManager";
+
+/**
+ * Custom JSON replacer to handle BigInt values
+ */
+const bigIntReplacer = (_key: string, value: any) => {
+  return typeof value === "bigint" ? value.toString() : value;
+};
 
 /**
  * Professional WebSocket-FSM Bridge
@@ -544,6 +552,7 @@ class WebSocketFSMBridge extends EventEmitter {
           nickname:
             (event as any).nickname || this.shortAddress((event as any).pid),
         } as any);
+        this.broadcastTableList();
         break;
 
       case "PlayerLeave":
@@ -552,6 +561,7 @@ class WebSocketFSMBridge extends EventEmitter {
           seat: (event as any).seat,
           playerId: (event as any).pid,
         } as any);
+        this.broadcastTableList();
         break;
 
       case "PlayerSitOut":
@@ -812,15 +822,20 @@ class WebSocketFSMBridge extends EventEmitter {
 
       const engine = this.getEngine(command.tableId);
 
-      // Calculate buy-in based on table configuration (ignore arbitrary client values)
+      // 1. Fetch required minimum from rejoin protection (5-min window)
+      const rejoinMin = await cashRejoinManager.getRequiredBuyIn(canonicalId, command.tableId);
+
+      // 2. Calculate buy-in based on table configuration and rejoin rules
       const requestedChips = command.chips;
       const recommendedBuyIn = getRecommendedBuyIn(command.tableId);
+      
       const clampToConfig = (val: number) => {
-        const validation = validateBuyIn(command.tableId, val);
+        const validation = validateBuyIn(command.tableId, val, rejoinMin ?? undefined);
         if (validation.valid) return val;
         if (validation.suggested) return validation.suggested;
         throw new Error(validation.error || "Invalid buy-in amount");
       };
+      
       const buyInChips = clampToConfig(
         typeof requestedChips === "number" ? requestedChips : recommendedBuyIn,
       );
@@ -974,13 +989,15 @@ class WebSocketFSMBridge extends EventEmitter {
   private async handleLeaveCommand(session: Session): Promise<void> {
     if (!session.roomId) return;
 
-    const engine = this.getEngine(session.roomId);
+    const tableId = session.roomId;
+    const tableType = this.resolveTableType(tableId);
+    const engine = this.getEngine(tableId);
     const canonicalId = await this.getCanonicalId(session);
-    const seatId = await this.resolveSeatMapping(session, session.roomId);
+    const seatId = await this.resolveSeatMapping(session, tableId);
 
     if (seatId === undefined) return;
 
-    // Professional leave handling: Auto-fold if it's player's turn
+    // 1. Auto-fold if it's player's turn (professional poker rule)
     const tableState = engine.getState();
     if (
       tableState.actor === seatId &&
@@ -989,8 +1006,6 @@ class WebSocketFSMBridge extends EventEmitter {
       logger.info(
         `🚪 [WebSocket] Auto-folding ${canonicalId} before leaving (player's turn)`,
       );
-
-      // Auto-fold first
       await engine.dispatch({
         t: "Action",
         seat: seatId,
@@ -998,43 +1013,71 @@ class WebSocketFSMBridge extends EventEmitter {
       });
     }
 
-    // Then dispatch PlayerLeave event through FSM
-    const tableStateBeforeLeave = engine.getState();
-    const seatBeforeLeave = tableStateBeforeLeave.seats[seatId];
-    const remaining = seatBeforeLeave?.chips ?? 0;
+    // 2. Tournament vs Cash behavior
+    if (tableType === "stt" || tableType === "mtt") {
+      // TOURNAMENT: "Leave" means sit-out and disconnect, but keep registration/seat
+      logger.info(`🚪 [Tournament] Player ${canonicalId} performing temporary leave from ${tableId}`);
+      
+      // Dispatch SIT_OUT to engine so they don't hold up the game (will timeout/auto-fold)
+      await engine.dispatch({
+        t: "PlayerSitOut",
+        seat: seatId,
+        pid: canonicalId,
+        reason: "voluntary",
+      });
 
-    await engine.dispatch({
-      t: "PlayerLeave",
-      seat: seatId,
-      pid: canonicalId,
-    });
+      // Clear session room/seat but DON'T remove from engine
+      session.roomId = undefined;
+      session.seat = undefined;
+      
+      // We don't remove mapping here because they might REATTACH
+      // but we should probably mark it as 'away' if we had that state.
+      // For now, just clearing session is enough to stop broadcasts.
+    } else {
+      // CASH: Hard exit - remove seat and refund
+      logger.info(`🚪 [Cash] Player ${canonicalId} performing hard exit from ${tableId}`);
 
-    // Refund remaining stack from escrow to user
-    // ONLY for CASH tables. Tournament payouts are handled by the orchestrator.
-    const config = getTableConfig(session.roomId);
-    if (this.ledgerService && config) {
-      try {
-        if (remaining > 0) {
-          await this.ledgerService.refund(
-            canonicalId,
-            session.roomId,
-            Asset.COINS,
-            remaining,
-          );
-          // Push real-time balance update after refund
-          void this.pushBalanceUpdate(canonicalId);
-          // Push real-time status update
-          void this.pushUserStatusUpdate(canonicalId);
+      const tableStateBeforeLeave = engine.getState();
+      const seatBeforeLeave = tableStateBeforeLeave.seats[seatId];
+      const remaining = seatBeforeLeave?.chips ?? 0;
+
+      await engine.dispatch({
+        t: "PlayerLeave",
+        seat: seatId,
+        pid: canonicalId,
+      });
+
+      // Refund remaining stack from escrow to user
+      const config = getTableConfig(tableId);
+      if (this.ledgerService && config) {
+        try {
+          if (remaining > 0) {
+            // Record stack for rejoin protection (5-min window)
+            if (canonicalId) {
+              void cashRejoinManager.setLeftStack(canonicalId, tableId, remaining);
+            }
+
+            await this.ledgerService.refund(
+              canonicalId,
+              tableId,
+              Asset.COINS,
+              remaining,
+            );
+            // Push real-time balance update after refund
+            void this.pushBalanceUpdate(canonicalId);
+            // Push real-time status update
+            void this.pushUserStatusUpdate(canonicalId);
+          }
+        } catch (err) {
+          logger.error(`❌ Refund on leave failed for ${canonicalId} on ${tableId}:`, err);
         }
-      } catch (err) {
-        logger.error(`❌ Refund on leave failed for ${canonicalId} on ${session.roomId}:`, err);
       }
-    }
 
-    // Clean up mappings
-    globalSeatMappings.removePlayer(session.roomId, canonicalId);
-    session.roomId = undefined;
-    session.seat = undefined;
+      // Clean up mappings for cash exit
+      globalSeatMappings.removePlayer(tableId, canonicalId);
+      session.roomId = undefined;
+      session.seat = undefined;
+    }
   }
 
   /**
@@ -1302,6 +1345,17 @@ class WebSocketFSMBridge extends EventEmitter {
   }
 
   /**
+   * Broadcast updated table list to all connected clients
+   */
+  private broadcastTableList() {
+    this.emit("broadcastAll", {
+      tableId: "",
+      type: "TABLE_LIST",
+      tables: this.getTables(),
+    });
+  }
+
+  /**
    * Get all tables for lobby with enhanced information
    */
   getTables(): LobbyTable[] {
@@ -1400,7 +1454,7 @@ class WebSocketFSMBridge extends EventEmitter {
           s.userId?.toLowerCase() === playerId.toLowerCase() &&
           s.socket.readyState === WebSocket.OPEN
         ) {
-          s.socket.send(JSON.stringify(event));
+          s.socket.send(JSON.stringify(event, bigIntReplacer));
         }
       });
       logger.debug(`💰 [Balance] Pushed update to ${playerId}`);
@@ -1456,7 +1510,7 @@ class WebSocketFSMBridge extends EventEmitter {
           s.userId?.toLowerCase() === playerId.toLowerCase() &&
           s.socket.readyState === WebSocket.OPEN
         ) {
-          s.socket.send(JSON.stringify(event));
+          s.socket.send(JSON.stringify(event, bigIntReplacer));
         }
       });
       logger.debug(`📡 [Status] Pushed update to ${playerId}`);

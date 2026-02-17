@@ -12,6 +12,14 @@ import { usePlayViewModel } from "../hooks/usePlayViewModel";
 import useIsMobile from "../hooks/useIsMobile";
 import useGameEvents from "../hooks/useGameEvents";
 import { captureAndDownloadScreen } from "../utils/screenCapture";
+import { 
+  Modal, 
+  ModalLabel, 
+  ModalHeader, 
+  ModalRule, 
+  ModalFooter, 
+  ModalContent 
+} from "~~/components/ui/Modal";
 
 interface PlayTableContainerProps {
   tableId: string | null;
@@ -40,13 +48,15 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
     muckCards,
     phase,
     showCardsIntent,
-    setShowCardsIntent
+    setShowCardsIntent,
+    tableType
   } = useGameStore();
   const { baseW, baseH, walletSeatIdx } = useTableViewModel();
   const { timer } = usePlayViewModel();
   const [layoutReady, setLayoutReady] = useState(false);
   const [tableScale, setTableScale] = useState(1);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [showLeaveWarning, setShowLeaveWarning] = useState(false);
 
   useGameEvents();
 
@@ -123,8 +133,7 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
     }
   };
 
-  const handleLeaveTable = async () => {
-    if (walletSeatIdx < 0 || isActionPending) return;
+  const executeLeave = async () => {
     setIsActionPending(true);
     try {
       if (isMyTurn) {
@@ -133,6 +142,18 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
       await leaveSeat();
     } finally {
       setIsActionPending(false);
+      setShowLeaveWarning(false);
+    }
+  };
+
+  const handleLeaveTable = async () => {
+    if (walletSeatIdx < 0 || isActionPending) return;
+    
+    // For tournaments, show warning modal first
+    if (tableType === "stt" || tableType === "mtt") {
+      setShowLeaveWarning(true);
+    } else {
+      await executeLeave();
     }
   };
 
@@ -167,8 +188,7 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
           position: "absolute",
           width: `${baseW}px`,
           height: `${baseH}px`,
-          left: "50%",
-          top: "50%",
+          left: "50%", top: "50%",
           transform: `translate(-50%, -50%) scale(${tableScale})`,
           transformOrigin: "center center",
           opacity: layoutReady ? 1 : 0,
@@ -177,6 +197,48 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
       >
         <Table timer={timer} />
       </div>
+
+      {/* Leave Warning Modal */}
+      {showLeaveWarning && (
+        <Modal 
+          modalId="leave-warning-modal" 
+          open={true} 
+          onClose={() => setShowLeaveWarning(false)}
+        >
+          <ModalContent>
+            <ModalLabel>Warning</ModalLabel>
+            <ModalHeader 
+              title="Leaving Table" 
+              subtitle="Tournament Registration"
+            />
+            <ModalRule />
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-white/80 leading-relaxed">
+                Leaving the table does <span className="text-white font-bold underline">not</span> unregister you from the tournament.
+              </p>
+              <p className="text-xs text-white/60 leading-relaxed">
+                You will continue to post blinds while away. Rejoin may not be guaranteed if the tournament state advances or tables are balanced.
+              </p>
+            </div>
+            <ModalFooter>
+              <button 
+                className="tbtn-secondary" 
+                onClick={() => setShowLeaveWarning(false)}
+                disabled={isActionPending}
+              >
+                Stay
+              </button>
+              <button 
+                className="tbtn" 
+                onClick={executeLeave}
+                disabled={isActionPending}
+              >
+                {isActionPending ? "Leaving..." : "Leave Table"}
+              </button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+      )}
 
       {/* Top Right Navigation & Controls */}
       <div className="absolute top-[60px] left-0 right-0 z-50 pointer-events-none">
@@ -217,70 +279,133 @@ export default function PlayTableContainer({ tableId }: PlayTableContainerProps)
         <DealerWindow isMobile={isMobile} />
       </div>
 
-            {/* Bottom Right Controls (Social & Info) */}
-            <div 
-              className={`absolute bottom-0 right-0 z-50 flex items-end gap-2 ${isMobile ? "m-1.5" : "m-3"}`}
-            >
-              {/* Social/Utility Column - Mini Scale */}
-              <div className="flex flex-col gap-1 items-stretch mb-0.5 min-w-[65px]">
-                {/* SHOW CARDS - Mini */}
-                {hasCards && !safeCardsRevealed[walletSeat] ? (
-                  <button
-                    onClick={handleShowCardsToggle}
-                    className="tbtn tbtn-mini font-black border border-white/5 bg-black/40 text-white/50 transition-colors flex items-center justify-between gap-1.5"
-                  >
-                    <span>SHOW</span>
-                    <div 
-                      className={`w-1 h-1 rounded-[1px] transition-all ${
-                        showCardsIntent 
-                          ? "bg-[var(--brand-accent)] shadow-[0_0_6px_rgba(251,191,36,0.6)]" 
-                          : "bg-white/5 border border-white/10"
-                      }`} 
-                    />
-                  </button>
-                ) : (
-                  <div className="h-4 invisible" />
-                )}
-      
-                {/* MUCK CARDS - Mini */}
-                {canMuckCards && (
-                  <button
-                    onClick={() => muckCards()}
-                    className="tbtn tbtn-mini font-bold bg-white/5 text-white/40 hover:bg-white/10"
-                  >
-                    MUCK
-                  </button>
-                )}
-                
-                {/* AUTO-SHOW - Mini */}
-                <button
-                  onClick={() => setAutoRevealAtShowdown(!autoRevealAtShowdown)}
-                  className="tbtn tbtn-mini font-black border border-white/5 bg-black/40 text-white/50 transition-colors flex items-center justify-between gap-1.5"
-                >
-                  <span>AUTO</span>
+                  {/* Bottom Right Controls (Social & Info) */}
+
                   <div 
-                    className={`w-1 h-1 rounded-[1px] transition-all ${
-                      autoRevealAtShowdown 
-                        ? "bg-[var(--brand-accent)] shadow-[0_0_6px_rgba(251,191,36,0.6)]" 
-                        : "bg-white/5 border border-white/10"
-                    }`} 
-                  />
-                </button>
-      
-                {/* SCREENSHOT - Mini */}
-                <button
-                  onClick={handleScreenCapture}
-                  className="tbtn tbtn-mini font-bold bg-white/5 border border-white/5 text-white/40 hover:bg-white/10 hover:text-white/70"
-                >
-                  PHOTO
-                </button>
-              </div>
-      
-              {/* Chat Component */}
-              <div className={isMobile ? "w-40 h-24" : "w-64 h-32"}>
-                <ChatWindow />
-              </div>
-            </div>
+
+                    className={`absolute bottom-0 right-0 z-50 flex items-end gap-3 ${isMobile ? "m-2" : "m-4"}`}
+
+                  >
+
+                    {/* Social/Utility Column - Standard Scale */}
+
+                    <div className="flex flex-col gap-2 items-stretch mb-1 min-w-[110px]">
+
+                      {/* SHOW CARDS */}
+
+                      {hasCards && !safeCardsRevealed[walletSeat] ? (
+
+                        <button
+
+                          onClick={handleShowCardsToggle}
+
+                          className="tbtn tbtn-tight font-black border border-white/5 bg-black/40 text-white/50 transition-colors flex items-center justify-between gap-3"
+
+                        >
+
+                          <span>SHOW CARDS</span>
+
+                          <div 
+
+                            className={`w-1.5 h-1.5 rounded-sm transition-all flex-shrink-0 ${
+
+                              showCardsIntent 
+
+                                ? "bg-[var(--brand-accent)] shadow-[0_0_8px_rgba(251,191,36,0.6)]" 
+
+                                : "bg-white/5 border border-white/10"
+
+                            }`} 
+
+                          />
+
+                        </button>
+
+                      ) : (
+
+                        <div className="h-6 invisible" />
+
+                      )}
+
+            
+
+                      {/* MUCK CARDS */}
+
+                      {canMuckCards && (
+
+                        <button
+
+                          onClick={() => muckCards()}
+
+                          className="tbtn tbtn-tight font-bold bg-white/5 text-white/40 hover:bg-white/10"
+
+                        >
+
+                          MUCK CARDS
+
+                        </button>
+
+                      )}
+
+                      
+
+                      {/* AUTO-SHOW */}
+
+                      <button
+
+                        onClick={() => setAutoRevealAtShowdown(!autoRevealAtShowdown)}
+
+                        className="tbtn tbtn-tight font-black border border-white/5 bg-black/40 text-white/50 transition-colors flex items-center justify-between gap-3"
+
+                      >
+
+                        <span>AUTO-SHOW</span>
+
+                        <div 
+
+                          className={`w-1.5 h-1.5 rounded-sm transition-all flex-shrink-0 ${
+
+                            autoRevealAtShowdown 
+
+                              ? "bg-[var(--brand-accent)] shadow-[0_0_8px_rgba(251,191,36,0.6)]" 
+
+                              : "bg-white/5 border border-white/10"
+
+                            }`} 
+
+                        />
+
+                      </button>
+
+            
+
+                      {/* SCREENSHOT */}
+
+                      <button
+
+                        onClick={handleScreenCapture}
+
+                        className="tbtn tbtn-tight font-bold bg-white/5 border border-white/5 text-white/40 hover:bg-white/10 hover:text-white/70"
+
+                      >
+
+                        SCREENSHOT
+
+                      </button>
+
+                    </div>
+
+            
+
+                    {/* Chat Component */}
+
+                    <div className={isMobile ? "w-40 h-24" : "w-64 h-32"}>
+
+                      <ChatWindow />
+
+                    </div>
+
+                  </div>
       {/* Player Actions - Bottom Center */}
       {walletSeatIdx >= 0 && (
         <div 

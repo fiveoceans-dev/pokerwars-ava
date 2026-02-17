@@ -5,6 +5,15 @@ import { clearAuthToken, getAuthToken } from "~~/utils/auth";
 import { getLocalIdentity, resolveEffectiveId } from "~~/utils/identity";
 import { useGameStore } from "./useGameStore";
 
+function parseAmount(val: any): number {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const parsed = parseInt(val, 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 type TicketBalances = {
   ticket_x: number;
   ticket_y: number;
@@ -75,22 +84,21 @@ export function useBalances() {
               const retryRes = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
                 headers: retryToken ? { Authorization: `Bearer ${retryToken}` } : undefined,
               });
-              if (retryRes.ok) {
-                const retryData = await retryRes.json();
-                if (!cancelled && retryData?.balance) {
-                  const next = {
-                    coins: retryData.balance.coins ?? 0,
-                    tickets: {
-                      ticket_x: retryData.balance.ticket_x ?? 0,
-                      ticket_y: retryData.balance.ticket_y ?? 0,
-                      ticket_z: retryData.balance.ticket_z ?? 0,
-                    },
-                  };
-                  setBalances(next);
-                  setStoreBalances(next);
-                }
-              }
-            }
+                              if (retryRes.ok) {
+                                const retryData = await retryRes.json();
+                                if (!cancelled && retryData?.balance) {
+                                  const next = {
+                                    coins: parseAmount(retryData.balance.coins),
+                                    tickets: {
+                                      ticket_x: parseAmount(retryData.balance.ticket_x),
+                                      ticket_y: parseAmount(retryData.balance.ticket_y),
+                                      ticket_z: parseAmount(retryData.balance.ticket_z),
+                                    },
+                                  };
+                                  setBalances(next);
+                                  setStoreBalances(next);
+                                }
+                              }            }
           }
           setHydrated(true);
           return;
@@ -98,11 +106,11 @@ export function useBalances() {
         const data = await res.json();
         if (!cancelled && data?.balance) {
           const next = {
-            coins: data.balance.coins ?? 0,
+            coins: parseAmount(data.balance.coins),
             tickets: {
-              ticket_x: data.balance.ticket_x ?? 0,
-              ticket_y: data.balance.ticket_y ?? 0,
-              ticket_z: data.balance.ticket_z ?? 0,
+              ticket_x: parseAmount(data.balance.ticket_x),
+              ticket_y: parseAmount(data.balance.ticket_y),
+              ticket_z: parseAmount(data.balance.ticket_z),
             },
           };
           setBalances(next);
@@ -188,11 +196,11 @@ export function useBalances() {
     const data = await res.json();
     if (data?.balance) {
       const next = {
-        coins: data.balance.coins ?? 0,
+        coins: parseAmount(data.balance.coins),
         tickets: {
-          ticket_x: data.balance.ticket_x ?? 0,
-          ticket_y: data.balance.ticket_y ?? 0,
-          ticket_z: data.balance.ticket_z ?? 0,
+          ticket_x: parseAmount(data.balance.ticket_x),
+          ticket_y: parseAmount(data.balance.ticket_y),
+          ticket_z: parseAmount(data.balance.ticket_z),
         },
       };
       setBalances(next);
@@ -244,11 +252,11 @@ export function useBalances() {
     }
     if (data?.balance) {
       const next = {
-        coins: data.balance.coins ?? 0,
+        coins: parseAmount(data.balance.coins),
         tickets: {
-          ticket_x: data.balance.ticket_x ?? 0,
-          ticket_y: data.balance.ticket_y ?? 0,
-          ticket_z: data.balance.ticket_z ?? 0,
+          ticket_x: parseAmount(data.balance.ticket_x),
+          ticket_y: parseAmount(data.balance.ticket_y),
+          ticket_z: parseAmount(data.balance.ticket_z),
         },
       };
       setBalances(next);
@@ -277,11 +285,11 @@ export function useBalances() {
       if (!res.ok) return { ok: false, error: data?.error };
       if (data?.balance) {
         const next = {
-          coins: data.balance.coins ?? 0,
+          coins: parseAmount(data.balance.coins),
           tickets: {
-            ticket_x: data.balance.ticket_x ?? 0,
-            ticket_y: data.balance.ticket_y ?? 0,
-            ticket_z: data.balance.ticket_z ?? 0,
+            ticket_x: parseAmount(data.balance.ticket_x),
+            ticket_y: parseAmount(data.balance.ticket_y),
+            ticket_z: parseAmount(data.balance.ticket_z),
           },
         };
         setBalances(next);

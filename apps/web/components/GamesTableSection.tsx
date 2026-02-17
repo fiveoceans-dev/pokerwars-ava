@@ -6,12 +6,15 @@ import Link from "next/link";
 import type { LobbyTable } from "~~/game-engine";
 import { resolveWebSocketUrl } from "~~/utils/ws-url";
 import { useActiveStatus } from "~~/hooks/useActiveStatus";
+import { useGameStore } from "~~/hooks/useGameStore";
 
 export default function GamesTableSection() {
   const router = useRouter();
   const [tables, setTables] = useState<LobbyTable[]>([]);
   const [sort, setSort] = useState<{ key: "name" | "players" | "blinds" | "prize"; dir: "asc" | "desc" } | null>(null);
   const activeStatus = useActiveStatus();
+  const socket = useGameStore((s) => s.socket);
+  
   const activeCashTables = useMemo(
     () => new Set(activeStatus.cashTableIds || []),
     [activeStatus.cashTableIds],
@@ -69,16 +72,9 @@ export default function GamesTableSection() {
   }, [tables, activeCashTables, sort]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.WebSocket) return;
-    const wsUrl = resolveWebSocketUrl();
-    if (!wsUrl) return;
-    const ws = new WebSocket(wsUrl);
+    if (!socket) return;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ cmdId: Date.now().toString(), type: "LIST_TABLES" }));
-    };
-
-    ws.onmessage = (e) => {
+    const handler = (e: MessageEvent) => {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "TABLE_LIST") {
@@ -89,8 +85,14 @@ export default function GamesTableSection() {
       }
     };
 
-    return () => ws.close();
-  }, []);
+    // Request initial list
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ cmdId: Date.now().toString(), type: "LIST_TABLES" }));
+    }
+
+    socket.addEventListener("message", handler);
+    return () => socket.removeEventListener("message", handler);
+  }, [socket]);
 
   const headerClass = "px-2 py-2 text-left cursor-pointer select-none hover:text-white transition-colors uppercase text-[11px] tracking-[0.14em]";
 

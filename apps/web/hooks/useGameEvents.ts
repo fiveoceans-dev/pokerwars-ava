@@ -3,6 +3,7 @@ import { seatStore } from "../stores/seatStore";
 import { useGameStore } from "./useGameStore";
 import { shortAddress } from "../utils/address";
 import type { ServerEvent } from "../game-engine";
+import { notifyError } from "../utils/notifications";
 
 export function useGameEvents() {
   const socket = useGameStore((s) => s.socket);
@@ -23,6 +24,21 @@ export function useGameEvents() {
       if (tableId && msg.tableId && msg.tableId !== tableId) return;
 
       switch (msg.type) {
+        case "ERROR":
+          if (msg.msg) {
+            // Check for rejoin protection floor error
+            if (msg.msg.includes("Re-entry minimum required")) {
+              const amountMatch = msg.msg.match(/(\d+)/);
+              if (amountMatch && typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("open-buyin-reentry", { 
+                  detail: { amount: parseInt(amountMatch[1], 10) } 
+                }));
+                return; // Suppress general toast for this specific recovery flow
+              }
+            }
+            notifyError(msg.msg);
+          }
+          break;
         case "PLAYER_JOINED":
         case "PLAYER_REJOINED":
         case "PLAYER_WAITING":

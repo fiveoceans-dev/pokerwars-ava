@@ -129,7 +129,7 @@ export function TournamentTable({
   startColumnTitle = "Start",
 }: Props) {
   const router = useRouter();
-  const { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds } = useTournamentActions();
+  const { register, unregister, startSitAndGoWithBots, loadingId, startLoadingId, registeredIds, effectiveId } = useTournamentActions();
   const { balances, hydrated, refreshBalances } = useBalances();
   const { status, isAuthenticated, ensureAuth } = useWallet();
   const tableSeats = useGameStore(s => s.tableSeats);
@@ -140,6 +140,20 @@ export function TournamentTable({
     key: "start",
     dir: "asc",
   });
+
+  const checkIsRegistered = (t: Tournament) => {
+    if (t.registeredIds && effectiveId) {
+      return t.registeredIds.some(id => id.toLowerCase() === effectiveId.toLowerCase());
+    }
+    return registeredIds.has(t.id);
+  };
+
+  const checkIsBusted = (t: Tournament) => {
+    if (t.bustedIds && effectiveId) {
+      return t.bustedIds.some(id => id.toLowerCase() === effectiveId.toLowerCase());
+    }
+    return false;
+  };
 
   const isLateRegOpen = (t: Tournament) => {
     if (t.status === "registering" || t.status === "scheduled") return true;
@@ -158,7 +172,7 @@ export function TournamentTable({
     const factor = dir === "asc" ? 1 : -1;
 
     const getRank = (t: Tournament) => {
-      const isRegistered = registeredIds.has(t.id);
+      const isRegistered = checkIsRegistered(t);
       if (isRegistered) return 0;
       if (t.status === "running") return 1;
       if (t.status === "scheduled" || t.status === "registering") return 2;
@@ -166,8 +180,8 @@ export function TournamentTable({
     };
 
     items.sort((a, b) => {
-      const aReg = registeredIds.has(a.id);
-      const bReg = registeredIds.has(b.id);
+      const aReg = checkIsRegistered(a);
+      const bReg = checkIsRegistered(b);
 
       // 1. Registered tournaments ALWAYS stay at the top
       if (aReg && !bReg) return -1;
@@ -213,7 +227,7 @@ export function TournamentTable({
       }
     });
     return items;
-  }, [tournaments, sort, registeredIds]);
+  }, [tournaments, sort, registeredIds, effectiveId]);
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) =>
@@ -268,7 +282,7 @@ export function TournamentTable({
   };
 
   const handleCancel = (tournament: Tournament) => {
-    if (!registeredIds.has(tournament.id)) return;
+    if (!checkIsRegistered(tournament)) return;
     const sent = unregister(tournament.id, {
       onSuccess: () => refreshBalances(),
       onError: (message) => setError(message || "Unable to cancel right now. Please check your connection."),
@@ -302,7 +316,7 @@ export function TournamentTable({
   };
 
   const handleRowClick = (t: Tournament) => {
-    const isRegistered = registeredIds.has(t.id);
+    const isRegistered = checkIsRegistered(t);
     const hasStarted = t.status === "running";
     
     if (isRegistered || hasStarted) {
@@ -332,25 +346,29 @@ export function TournamentTable({
           </thead>
           <tbody>
             {sorted.map((t) => {
-              const isRegistered = registeredIds.has(t.id);
-              const isActive = isRegistered || t.status === "running";
+              const isRegistered = checkIsRegistered(t);
+              const isBusted = checkIsBusted(t);
+              const isActive = (isRegistered && !isBusted) || t.status === "running";
               const hasStarted = t.status === "running";
-              const canJoin = !isRegistered && isLateRegOpen(t);
+              const canJoin = !isRegistered && !isBusted && isLateRegOpen(t);
               
               return (
               <tr 
                 key={t.id} 
-                className={`border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${isRegistered ? "bg-white/5" : ""}`}
+                className={`border-b border-white/10 hover:bg-white/5 cursor-pointer transition-colors ${isRegistered && !isBusted ? "bg-white/5" : ""}`}
                 onClick={() => handleRowClick(t)}
               >
                 <td className={cellBase}>
                   <div className="flex items-center gap-2">
                     <span className={isActive ? "font-bold text-white" : ""}>{t.name}</span>
-                    {isRegistered ? (
+                    {isRegistered && !isBusted ? (
                       <span
                         className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_rgba(16,185,129,0.7)]"
                         aria-label="active table"
                       />
+                    ) : null}
+                    {isBusted ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-white/40 font-mono uppercase tracking-tighter">Busted</span>
                     ) : null}
                   </div>
                 </td>
@@ -378,7 +396,9 @@ export function TournamentTable({
                   </td>
                 ) : null}
                 <td className={cellBase} onClick={(e) => e.stopPropagation()}>
-                  {isRegistered ? (
+                  {isBusted ? (
+                    <span className="text-xs text-white/30 italic">Busted</span>
+                  ) : isRegistered ? (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openTable(t)}

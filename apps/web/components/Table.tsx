@@ -58,11 +58,34 @@ export default function Table({ timer }: { timer?: number | null }) {
   const [buyInModal, setBuyInModal] = useState<BuyInConfig | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
 
+  // Handle rejoin protection feedback from useGameEvents
+  useEffect(() => {
+    const handleReentry = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      if (!customEvt.detail?.amount) return;
+      
+      const { amount } = customEvt.detail;
+      const bbMin = 30;
+      const bbMax = 100;
+      setBuyInModal({ 
+        seat: buyInModal?.seat ?? 0, 
+        bbAmount: Math.ceil(amount / bigBlind), 
+        bbMin, 
+        bbMax, 
+        bigBlind,
+        reentryMin: amount
+      });
+    };
+    window.addEventListener("open-buyin-reentry", handleReentry);
+    return () => window.removeEventListener("open-buyin-reentry", handleReentry);
+  }, [bigBlind, buyInModal]);
+
   // Safe Accessors
   const safePlayerHands = Array.isArray(playerHands) ? playerHands : Array(9).fill(null);
   const safePlayerBets = Array.isArray(playerBets) ? playerBets : Array(9).fill(0);
   const safePlayerStates = Array.isArray(playerStates) ? playerStates : Array(9).fill("empty");
   const safePlayerIds = Array.isArray(playerIds) ? playerIds : Array(9).fill(null);
+  const safeChips = Array.isArray(chips) ? chips : Array(9).fill(0);
 
   const isMyTurn = currentTurn !== null && currentTurn === walletSeatIdx;
   const isSittingOut = walletSeatIdx >= 0 && safePlayerStates[walletSeatIdx] === "sittingOut";
@@ -195,6 +218,8 @@ export default function Table({ timer }: { timer?: number | null }) {
           <div className="relative z-10 w-full h-full">
             <PlayerSeat
               seat={seat}
+              chips={safeChips[idx]}
+              playerId={safePlayerIds[idx]}
               status={state}
               isDealer={isDealer}
               isActive={isActive}

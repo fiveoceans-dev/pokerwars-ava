@@ -8,9 +8,33 @@ let client: RedisClientType | null;
 const memorySessions = new Map<string, Omit<Session, "socket" | "timeout">>();
 const memoryRooms = new Map<string, Table>();
 
+/**
+ * Custom JSON replacer to handle BigInt values
+ */
+const bigIntReplacer = (_key: string, value: any) => {
+  return typeof value === "bigint" ? value.toString() : value;
+};
+
+/**
+ * Custom JSON reviver to convert numeric strings back to numbers for specific fields
+ */
+const numericReviver = (key: string, value: any) => {
+  // Fields that should always be numbers in the engine/app
+  const numericFields = [
+    "chips", "committed", "streetCommitted", "amount", "pot", 
+    "currentBet", "lastRaiseSize", "smallBlind", "bigBlind", 
+    "ante", "handNumber", "timestamp"
+  ];
+  if (numericFields.includes(key) && typeof value === "string") {
+    const parsed = parseFloat(value);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return value;
+};
+
 let redisConnectionAttempted = false;
 
-async function getClient(): Promise<RedisClientType | null> {
+export async function getClient(): Promise<RedisClientType | null> {
   if (client !== undefined) return client;
   if (!redisConnectionAttempted) {
     redisConnectionAttempted = true;
@@ -49,17 +73,17 @@ export async function saveSession(session: Session) {
     nickname: session.nickname,
     inActiveHand: session.inActiveHand,
     roles: session.roles,
-  });
+  }, bigIntReplacer);
   const c = await getClient();
   if (c) await c.set(`session:${session.sessionId}`, data);
-  memorySessions.set(session.sessionId, JSON.parse(data));
+  memorySessions.set(session.sessionId, JSON.parse(data, numericReviver));
 }
 
 export async function loadSession(id: string) {
   const c = await getClient();
   if (c) {
     const raw = await c.get(`session:${id}`);
-    if (raw) return JSON.parse(raw) as Omit<Session, "socket" | "timeout">;
+    if (raw) return JSON.parse(raw, numericReviver) as Omit<Session, "socket" | "timeout">;
   }
   return memorySessions.get(id);
 }
@@ -72,7 +96,7 @@ export async function removeSession(id: string) {
 
 export async function saveRoom(room: Table) {
   const c = await getClient();
-  if (c) await c.set(`room:${room.id}`, JSON.stringify(room));
+  if (c) await c.set(`room:${room.id}`, JSON.stringify(room, bigIntReplacer));
   memoryRooms.set(room.id, room);
 }
 
@@ -86,7 +110,7 @@ export async function loadRoom(id: string) {
   const c = await getClient();
   if (c) {
     const raw = await c.get(`room:${id}`);
-    if (raw) return JSON.parse(raw) as Table;
+    if (raw) return JSON.parse(raw, numericReviver) as Table;
   }
   return memoryRooms.get(id);
 }
@@ -98,7 +122,7 @@ export async function loadAllRooms(): Promise<Table[]> {
     const rooms: Table[] = [];
     for (const key of keys) {
       const raw = await c.get(key);
-      if (raw) rooms.push(JSON.parse(raw));
+      if (raw) rooms.push(JSON.parse(raw, numericReviver));
     }
     return rooms;
   }

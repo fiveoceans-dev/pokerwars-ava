@@ -46,6 +46,15 @@ function isCountdownType(value: unknown): value is CountdownType {
   return typeof value === "string" && countdownOrder.includes(value as CountdownType);
 }
 
+function parseAmount(val: any): number {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const parsed = parseInt(val, 10);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
 interface GameStoreState {
   playerHands: ([number, number] | "encrypted" | null)[];
   community: (number | null)[];
@@ -402,8 +411,8 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             }
             labels[seatIdx] = label;
 
-            const amt = typeof (msg as any).amount === 'number' ? (msg as any).amount : undefined;
-            if (amt !== undefined && Number.isFinite(amt)) {
+            const amt = parseAmount((msg as any).amount);
+            if (amt > 0) {
               bets[seatIdx] = (bets[seatIdx] ?? 0) + amt;
               chips[seatIdx] = Math.max(0, (chips[seatIdx] ?? 0) - amt);
               
@@ -527,6 +536,26 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             }
           } catch (e) {}
         }, 2000);
+
+        // IMMEDIATE Chip Update for Winners
+        set((s) => {
+          const chips = [...s.chips];
+          msg.winners.forEach((winner) => {
+            if (winner.seat >= 0) {
+              const current = chips[winner.seat] || 0;
+              const winAmt = parseAmount(winner.amount);
+              chips[winner.seat] = current + winAmt;
+              
+              // Sync to seatStore
+              seatStore.getState().assignSeat(winner.seat, {
+                playerId: s.playerIds[winner.seat]!,
+                name: s.players[winner.seat],
+                chips: chips[winner.seat],
+              });
+            }
+          });
+          return { chips };
+        });
         break;
       case "PLAYER_REVEALED":
         set((s) => {
@@ -604,8 +633,8 @@ export const useGameStore = create<GameStoreState>((set, get) => {
           ids[index] = seat.pid;
           if (seat.holeCards?.length === 2) hands[index] = [seat.holeCards[0], seat.holeCards[1]];
           else if (shouldHaveCards(seat, room.phase)) hands[index] = "encrypted";
-          chips[index] = seat.chips ?? 0;
-          bets[index] = seat.streetCommitted ?? 0;
+          chips[index] = parseAmount(seat.chips);
+          bets[index] = parseAmount(seat.streetCommitted);
           states[index] = seat.action === "SITTING_OUT" ? "sittingOut" : seat.status || "empty";
           
           seatStore.getState().assignSeat(index, { playerId: seat.pid, name: seats[index], chips: chips[index] });
@@ -619,7 +648,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     const newCards = room.communityCards ?? [];
     newCards.forEach((c: any, i: number) => { comm[i] = c; });
 
-    const pot = room.pot ?? room.pots?.reduce((sum: number, pt: any) => sum + pt.amount, 0) ?? 0;
+    const pot = (parseAmount(room.pot) || room.pots?.reduce((sum: number, pt: any) => sum + parseAmount(pt.amount), 0)) ?? 0;
     const revealedSet = new Set((room.revealedPids || []).map((p: string) => p.toLowerCase()));
     const cardsRevealed = ids.map((pid) => pid ? revealedSet.has(pid.toLowerCase()) : false);
 

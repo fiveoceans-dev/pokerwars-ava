@@ -3,9 +3,12 @@ import { useGameStore } from "../hooks/useGameStore";
 import type { SeatUIState } from "../game-engine";
 import type { SeatState } from "../stores/seatStore";
 import { shortAddress } from "../utils/address";
+import { formatNumber } from "../utils/format";
 
 interface PlayerSeatProps {
   seat?: SeatState;
+  chips?: number;
+  playerId?: string | null;
   status?: SeatUIState;
   isDealer?: boolean;
   isActive?: boolean;
@@ -16,6 +19,8 @@ interface PlayerSeatProps {
 
 export default function PlayerSeat({
   seat,
+  chips,
+  playerId,
   status = "active",
   isDealer = false,
   isActive = false,
@@ -27,14 +32,15 @@ export default function PlayerSeat({
   const isPlaceholderAddress = (addr: string) =>
     addr.toLowerCase() === "white" || /^0x0{40}$/.test(addr);
   
+  const finalPlayerId = playerId || seat?.playerId;
   const displayName = seat?.name?.trim()
     ? seat.name
-    : seat?.playerId && !isPlaceholderAddress(seat.playerId)
-      ? shortAddress(seat.playerId)
+    : finalPlayerId && !isPlaceholderAddress(finalPlayerId)
+      ? shortAddress(finalPlayerId)
       : "Empty";
 
-  const stack = seat?.chips !== undefined ? seat.chips : 0;
-  const hasSeat = !!seat;
+  const stack = chips !== undefined ? chips : (seat?.chips !== undefined ? seat.chips : 0);
+  const hasSeat = !!seat || !!finalPlayerId;
 
   const isFolded = status === "folded";
   const isSittingOut = status === "sittingOut";
@@ -53,15 +59,17 @@ export default function PlayerSeat({
   const getAvatarContent = () => {
     if (!actionLabel) {
       return (
-        <svg className="w-5 h-5 text-white/30" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-        </svg>
+        <div className="w-full h-full flex items-center justify-center bg-[#2a2d36] text-white/20">
+          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          </svg>
+        </div>
       );
     }
 
     const label = actionLabel.toUpperCase();
-    let bgClass = "bg-gray-600";
-    let text = label.slice(0, 4); // Default short
+    let bgClass = "bg-slate-700";
+    let text = label;
 
     if (label.includes("FOLD")) {
       bgClass = "bg-rose-600";
@@ -72,19 +80,22 @@ export default function PlayerSeat({
     } else if (label.includes("CALL")) {
       bgClass = "bg-blue-600";
       text = "CALL";
-    } else if (label.includes("BET") || label.includes("RAISE")) {
+    } else if (label.includes("BET")) {
       bgClass = "bg-amber-600";
       text = "BET";
+    } else if (label.includes("RAISE")) {
+      bgClass = "bg-indigo-600";
+      text = "RAISE";
     } else if (label.includes("ALLIN")) {
       bgClass = "bg-orange-600";
       text = "ALL-IN";
     } else if (label.includes("WIN")) {
       bgClass = "bg-yellow-500";
-      text = "WINNER";
+      text = "WIN";
     }
 
     return (
-      <div className={clsx("w-full h-full flex items-center justify-center text-[10px] font-black tracking-tight text-white uppercase", bgClass)}>
+      <div className={clsx("w-full h-full flex items-center justify-center text-[9px] font-black tracking-tighter text-white uppercase shadow-inner", bgClass)}>
         {text}
       </div>
     );
@@ -120,20 +131,20 @@ export default function PlayerSeat({
         {hasSeat ? (
           /* --- OCCUPIED STATE --- */
           <>
-            {/* Profile Pic / Action Indicator - Left (Full Height) */}
-            <div className="w-[48px] h-full bg-[#2a2d36] flex-shrink-0 flex items-center justify-center overflow-hidden">
+            {/* Action/Indicator Area - Left (Full Height) */}
+            <div className="w-[44px] h-full bg-[#2a2d36] flex-shrink-0 overflow-hidden border-r border-white/5">
                {getAvatarContent()}
             </div>
 
             {/* Info Stack - Right (Two Rows) */}
-            <div className="flex flex-col min-w-0 flex-1 px-3">
+            <div className="flex flex-col min-w-0 flex-1 px-2.5 py-1 justify-center">
               {/* Row 1: Nickname */}
-              <div className="text-xs font-semibold truncate leading-tight transition-colors text-white/90">
+              <div className="text-[11px] font-bold truncate tracking-tight text-white/90 mb-0.5">
                 {displayName}
               </div>
               {/* Row 2: Stack */}
-              <div className="text-[10px] font-mono font-bold text-[#fbbf24] leading-tight truncate">
-                {tableType === "cash" ? "$" : ""}{stack.toLocaleString()}
+              <div className="text-[10px] font-mono font-black text-[#fbbf24] tabular-nums">
+                {tableType === "cash" ? "$" : ""}{formatNumber(stack) || "0"}
               </div>
             </div>
           </>

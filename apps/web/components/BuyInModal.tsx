@@ -15,6 +15,7 @@ export interface BuyInConfig {
   bbMin: number;
   bbMax: number;
   bigBlind: number;
+  reentryMin?: number; // Optional floor from server-side memory
 }
 
 interface BuyInModalProps {
@@ -26,13 +27,18 @@ interface BuyInModalProps {
 export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalProps) {
   const [bbAmount, setBbAmount] = useState(config.bbAmount);
 
-  const minCoins = Math.round(config.bbMin * config.bigBlind);
+  const rawMinCoins = Math.round(config.bbMin * config.bigBlind);
+  const minCoins = config.reentryMin !== undefined ? Math.max(rawMinCoins, config.reentryMin) : rawMinCoins;
   const maxCoins = Math.round(config.bbMax * config.bigBlind);
   const coinAmount = Math.round(bbAmount * config.bigBlind);
   const step = Math.max(1, Math.round(config.bigBlind));
 
-  const clampCoinsToBB = (coins: number) =>
-    Math.min(config.bbMax, Math.max(config.bbMin, Math.round(coins / config.bigBlind)));
+  const clampCoinsToBB = (coins: number) => {
+    const bbVal = Math.round(coins / config.bigBlind);
+    // Ensure we don't go below reentryMin if it exists
+    const minBB = config.reentryMin ? Math.ceil(config.reentryMin / config.bigBlind) : config.bbMin;
+    return Math.min(config.bbMax, Math.max(minBB, bbVal));
+  };
 
   return (
     <Modal 
@@ -51,6 +57,12 @@ export default function BuyInModal({ config, onConfirm, onCancel }: BuyInModalPr
         <ModalRule />
 
         <div className="space-y-6">
+          {config.reentryMin && (
+            <div className="bg-amber-500/10 border border-amber-500/20 p-2 rounded text-[10px] text-amber-400 font-mono uppercase tracking-widest leading-relaxed">
+              ⚠️ Re-entry minimum required: {formatNumber(config.reentryMin)} coins (based on previous stack).
+            </div>
+          )}
+
           <div className="flex justify-between text-xs text-white/60 font-mono">
             <span>Min: {formatNumber(minCoins)}</span>
             <span>Max: {formatNumber(maxCoins)}</span>

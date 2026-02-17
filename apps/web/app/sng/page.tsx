@@ -12,15 +12,18 @@ export default function SngPage() {
   const openedTables = useRef<Set<string>>(new Set());
 
   useTournamentStream((evt) => {
-    if (evt.type === "TOURNAMENT_UPDATED") {
+    if (evt.type === "TOURNAMENT_UPDATED" && evt.tournament) {
       setTournaments((prev) => {
+        const status = (evt.tournament.status || "").toLowerCase();
+        const isClosed = status === "finished" || status === "cancelled" || status === "template";
         const existing = prev.filter((t) => t.id !== evt.tournament.id);
+        if (isClosed) return existing;
         return [...existing, evt.tournament];
       });
     }
     if (evt.type === "TOURNAMENT_PAYOUTS") {
       setTournaments((prev) =>
-        prev.map((t) => (t.id === evt.tournamentId ? { ...t, payouts: evt.payouts, status: "finished" } : t)),
+        prev.filter((t) => t.id !== evt.tournamentId)
       );
     }
     if (evt.type === "TOURNAMENT_SEAT") {
@@ -32,7 +35,6 @@ export default function SngPage() {
           return {
             ...t,
             tables: Array.from(tables),
-            registeredCount: Math.max(t.registeredCount + 1, t.registeredCount),
           };
         }),
       );

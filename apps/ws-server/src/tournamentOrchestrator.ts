@@ -59,7 +59,7 @@ export class TournamentOrchestrator {
   /**
    * Call when a registration is added to see if a tournament should start.
    */
-  handleRegistration(tournamentId: string) {
+  async handleRegistration(tournamentId: string) {
     const t = this.manager.getState(tournamentId);
     if (!t) return;
 
@@ -70,7 +70,7 @@ export class TournamentOrchestrator {
     if (t.type === "mtt" && t.startMode === "scheduled" && t.startAt) {
       const startTs = Date.parse(t.startAt);
       if (!Number.isNaN(startTs) && startTs <= Date.now()) {
-        this.startMtt(t);
+        await this.startMtt(t);
       }
     }
 
@@ -79,7 +79,7 @@ export class TournamentOrchestrator {
       const openTable = this.findTableWithSeat(t);
       if (openTable) {
         this.seatAndBroadcast(t, openTable, [Array.from(t.registered).slice(-1)[0]]);
-        this.balanceIfNeeded(t);
+        await this.balanceIfNeeded(t);
         this.broadcastTournamentUpdate(t.id);
       } else {
         // create new table if capacity allows
@@ -88,7 +88,7 @@ export class TournamentOrchestrator {
         if (tableId) {
           this.manager.addTable(t.id, tableId);
           this.seatAndBroadcast(t, tableId, [Array.from(t.registered).slice(-1)[0]]);
-          this.balanceIfNeeded(t);
+          await this.balanceIfNeeded(t);
           this.broadcastTournamentUpdate(t.id);
         }
       }
@@ -99,46 +99,51 @@ export class TournamentOrchestrator {
    * For scheduled MTTs, call periodically to trigger start when time arrives.
    * Also cleans up bot-only SNGs.
    */
-  checkScheduled() {
+  async checkScheduled() {
     const now = Date.now();
-    this.checkBotOnlyTournaments();
+    await this.checkBotOnlyTournaments();
     
-    this.manager.listStates().forEach((t) => {
+    const states = this.manager.listStates();
+    for (const t of states) {
       if (t.type === "mtt" && t.startMode === "scheduled" && t.startAt && t.status !== "running") {
         const startTs = Date.parse(t.startAt);
         if (!Number.isNaN(startTs) && startTs <= now) {
-          this.startMtt(t);
+          await this.startMtt(t);
         }
       }
-    });
+    }
   }
 
-  private checkBotOnlyTournaments() {
-    this.manager.listStates().forEach((t) => {
+  private async checkBotOnlyTournaments() {
+    const states = this.manager.listStates();
+    for (const t of states) {
       // Only clean up running STTs that have started (registered > 0)
       if (t.type === "stt" && t.status === "running" && t.registered.size > 0) {
         const humans = Array.from(t.registered).filter((pid) => !pid.toLowerCase().startsWith("bot_"));
         if (humans.length === 0) {
           logger.info(`🤖 Closing bot-only SNG ${t.id} (no humans remaining)`);
           
-          // 1. Close tables
-          t.tables.forEach((tableId) => {
-            void this.bridge.closeTable(tableId);
-          });
+          // 1. Close tables and update metadata
+          await Promise.all(t.tables.map(async (tableId) => {
+            await this.bridge.closeTable(tableId);
+            await this.manager.removeTable(t.id, tableId);
+          }));
 
-          // 2. Cancel tournament
-          void this.manager.cancelTournament(t.id).then((cancelled) => {
-            if (cancelled) {
-              this.broadcastAll({
-                tableId: "",
-                type: "TOURNAMENT_UPDATED",
-                tournament: this.manager.toPublic(cancelled),
-              });
-            }
-          });
+          // 2. Stop timers
+          this.levels.clear(t.id);
+
+          // 3. Cancel tournament
+          const cancelled = await this.manager.cancelTournament(t.id);
+          if (cancelled) {
+            this.broadcastAll({
+              tableId: "",
+              type: "TOURNAMENT_UPDATED",
+              tournament: this.manager.toPublic(cancelled),
+            });
+          }
         }
       }
-    });
+    }
   }
 
   /**
@@ -158,7 +163,7 @@ export class TournamentOrchestrator {
     });
   }
 
-  startSitAndGoWithBots(tournamentId: string): { ok: boolean; message?: string } {
+  async startSitAndGoWithBots(tournamentId: string): Promise<{ ok: boolean; message?: string }> {
     const t = this.manager.getState(tournamentId);
     if (!t) return { ok: false, message: "Tournament not found" };
     if (t.type !== "stt") return { ok: false, message: "Bots only allowed for SNG" };
@@ -167,12 +172,12 @@ export class TournamentOrchestrator {
 
     const botsNeeded = Math.max(0, t.maxPlayers - t.registered.size);
     const botIds = Array.from({ length: botsNeeded }, () => this.nextBotId());
-    this.startSitAndGo(t, botIds);
+    await this.startSitAndGo(t, botIds);
     this.spawnReplacementSng(t);
     return { ok: true };
   }
 
-  private startSitAndGo(t: TournamentState, extraPlayers: string[] = []) {
+  private async startSitAndGo(t: TournamentState, extraPlayers: string[] = []) {
     logger.info(`🎬 Starting SNG ${t.id}${extraPlayers.length ? ` with ${extraPlayers.length} bot(s)` : ""}`);
     const updated: TournamentState =
       extraPlayers.length > 0
@@ -184,7 +189,7 @@ export class TournamentOrchestrator {
     if (tableId) {
       this.manager.markRunning(updated.id);
       this.manager.addTable(updated.id, tableId);
-      this.seatAndBroadcast(updated, tableId, Array.from(updated.registered));
+      await this.seatAndBroadcast(updated, tableId, Array.from(updated.registered));
       this.configureBotStyle(tableId);
       this.levels.start(updated);
       this.broadcastTournamentUpdate(updated.id);
@@ -195,7 +200,7 @@ export class TournamentOrchestrator {
     }
   }
 
-  private startMtt(t: TournamentState) {
+  private async startMtt(t: TournamentState) {
     const minPlayers = Math.ceil(t.maxPlayers * 0.05);
     if (t.registered.size < minPlayers) {
       logger.info(`🛑 Cancelling MTT ${t.id} (not enough registrations: ${t.registered.size}/${minPlayers})`);
@@ -247,8 +252,8 @@ export class TournamentOrchestrator {
         this.manager.upsertState({ ...t });
       }
     }
-    this.seatAndBroadcast(t, initialTableId, Array.from(t.registered));
-    this.balanceIfNeeded(t);
+    await this.seatAndBroadcast(t, initialTableId!, Array.from(t.registered));
+    await this.balanceIfNeeded(t);
     this.levels.start(t);
     this.broadcastTournamentUpdate(t.id);
   }
@@ -290,9 +295,9 @@ export class TournamentOrchestrator {
     }
   }
 
-  private seatAndBroadcast(t: TournamentState, tableId: string, playerIds: string[]) {
+  private async seatAndBroadcast(t: TournamentState, tableId: string, playerIds: string[]) {
     if (!playerIds.length) return;
-    const seats: TournamentSeat[] = seatPlayersAtTable(
+    const seats: TournamentSeat[] = await seatPlayersAtTable(
       this.bridge,
       t,
       tableId,
@@ -322,7 +327,7 @@ export class TournamentOrchestrator {
     });
   }
 
-  private balanceIfNeeded(t: TournamentState) {
+  private async balanceIfNeeded(t: TournamentState) {
     const tableSeatCounts: Record<string, number> = {};
     t.tables.forEach((tableId) => {
       try {
@@ -333,26 +338,26 @@ export class TournamentOrchestrator {
       }
     });
     const moves = computeBalanceMoves(t, tableSeatCounts);
-    moves.forEach((m) => {
+    for (const m of moves) {
       // Pick a candidate player from the fullest table (last seated for now)
       try {
         const table = this.bridge.getEngine(m.fromTable).getState();
         const occupant = [...table.seats]
           .reverse()
           .find((s) => s?.pid);
-        if (!occupant?.pid) return;
+        if (!occupant?.pid) continue;
         // Sit them at emptiest table
         const target = this.bridge.getEngine(m.toTable).getState();
         const emptySeat = target.seats.findIndex((s) => !s?.pid);
-        if (emptySeat < 0) return;
+        if (emptySeat < 0) continue;
         // Leave origin seat
-        this.bridge.getEngine(m.fromTable).dispatch({
+        await this.bridge.getEngine(m.fromTable).dispatch({
           t: "PlayerLeave",
           seat: occupant.id,
           pid: occupant.pid,
         } as any);
         // Join target seat
-        this.bridge.getEngine(m.toTable).dispatch({
+        await this.bridge.getEngine(m.toTable).dispatch({
           t: "PlayerJoin",
           seat: emptySeat,
           pid: occupant.pid,
@@ -373,14 +378,13 @@ export class TournamentOrchestrator {
       } catch (err) {
         logger.error(`❌ Failed to balance tables for ${t.id}`, err);
       }
-    });
+    }
 
     // Table break: if a table has <=1 player and more than one table exists, move and close it
     const tableEntries = Object.entries(tableSeatCounts);
     if (tableEntries.length > 1) {
-      tableEntries
-        .filter(([, count]) => count <= 1)
-        .forEach(([tableId]) => {
+      const candidates = tableEntries.filter(([, count]) => count <= 1);
+      for (const [tableId] of candidates) {
           try {
             const table = this.bridge.getEngine(tableId).getState();
             const lone = table.seats.find((s) => s?.pid);
@@ -391,8 +395,8 @@ export class TournamentOrchestrator {
               const target = this.bridge.getEngine(targetId).getState();
               const emptySeat = target.seats.findIndex((s) => !s?.pid);
               if (emptySeat >= 0) {
-                this.bridge.getEngine(tableId).dispatch({ t: "PlayerLeave", seat: lone.id, pid: lone.pid } as any);
-                this.bridge.getEngine(targetId).dispatch({
+                await this.bridge.getEngine(tableId).dispatch({ t: "PlayerLeave", seat: lone.id, pid: lone.pid } as any);
+                await this.bridge.getEngine(targetId).dispatch({
                   t: "PlayerJoin",
                   seat: emptySeat,
                   pid: lone.pid,
@@ -411,12 +415,14 @@ export class TournamentOrchestrator {
                 void this.manager.markSeated(t.id, lone.pid, targetId, emptySeat);
               }
             }
-            this.manager.removeTable(t.id, tableId);
+            // Explicitly close engine before removing from tournament
+            await this.bridge.closeTable(tableId);
+            await this.manager.removeTable(t.id, tableId);
             this.broadcastTournamentUpdate(t.id);
           } catch (err) {
             logger.error(`❌ Failed to break table ${tableId} for ${t.id}`, err);
           }
-        });
+      }
     }
   }
 
@@ -495,15 +501,18 @@ export class TournamentOrchestrator {
       await this.finishTournament(t);
       return;
     }
-    this.balanceIfNeeded(t);
+    await this.balanceIfNeeded(t);
   }
 
   private async finishTournament(t: TournamentState) {
+    // Explicitly stop any level timers
+    this.levels.clear(t.id);
+
     // Explicitly close all remaining tables to ensure DB consistency
     await Promise.all(
       t.tables.map(async (tableId) => {
         await this.bridge.closeTable(tableId);
-        this.manager.removeTable(t.id, tableId);
+        await this.manager.removeTable(t.id, tableId);
       })
     );
 

@@ -1299,22 +1299,29 @@ class WebSocketFSMBridge extends EventEmitter {
       const table = engine.getState();
       const config = getTableConfig(tableId);
       
-      if (this.ledgerService && config) {
-        for (const seat of table.seats) {
-          if (seat?.pid && seat.chips > 0) {
-            try {
-              const pid = seat.pid;
-              const amount = seat.chips;
-              await this.ledgerService.refund(pid, tableId, Asset.COINS, amount);
-              logger.info(`💰 [Cleanup] Refunded ${amount} chips to ${pid} from closed table ${tableId}`);
-              void this.pushBalanceUpdate(pid);
-              void this.pushUserStatusUpdate(pid);
-              // Clean up global seat mapping
-              globalSeatMappings.removePlayer(tableId, pid);
-            } catch (err) {
-              logger.error(`❌ [Cleanup] Failed to refund ${seat.pid} on table close:`, err);
-            }
+      for (const seat of table.seats) {
+        if (!seat?.pid) continue;
+        const pid = seat.pid;
+        
+        // 1. Optional Cash Refund
+        if (this.ledgerService && config && seat.chips > 0) {
+          try {
+            const amount = seat.chips;
+            await this.ledgerService.refund(pid, tableId, Asset.COINS, amount);
+            logger.info(`💰 [Cleanup] Refunded ${amount} chips to ${pid} from closed table ${tableId}`);
+            void this.pushBalanceUpdate(pid);
+            void this.pushUserStatusUpdate(pid);
+          } catch (err) {
+            logger.error(`❌ [Cleanup] Failed to refund ${pid} on table close:`, err);
           }
+        }
+
+        // 2. Authoritative Seat Cleanup (Always)
+        try {
+          globalSeatMappings.removePlayer(tableId, pid);
+          logger.debug(`🧹 [Cleanup] Removed seat mapping for ${pid} from ${tableId}`);
+        } catch (err) {
+          logger.error(`❌ [Cleanup] Failed to remove mapping for ${pid}:`, err);
         }
       }
 
@@ -1328,8 +1335,9 @@ class WebSocketFSMBridge extends EventEmitter {
       this.engines.delete(tableId);
       this.tableMaxPlayers.delete(tableId);
       this.botManager?.setTableStyle(tableId, { style: "random" }); // Reset bot style
-      void removeRoom(tableId);
+      await removeRoom(tableId);
       logger.info(`🗑️ Closed table ${tableId}`);
+      this.broadcastTableList();
     }
   }
 

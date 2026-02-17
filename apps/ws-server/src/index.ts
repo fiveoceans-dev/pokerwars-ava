@@ -191,31 +191,7 @@ if (isDevEnvironment && allowedOrigins.length === 0 && devAllowedOrigins.length 
   );
 }
 
-// Load cash table configs from DB if available; fall back to defaults otherwise.
-if (prisma) {
-  prisma.gameTemplate
-    .findMany({ where: { type: "CASH" as any }, orderBy: { bigBlind: "asc" } })
-    .then((templates) => {
-      if (!templates.length) {
-        logger.error("❌ No CASH game templates found in DB; refusing to start without DB data");
-        process.exit(1);
-      }
-      setTableConfigs(
-        templates.map((t) => ({
-          id: t.id,
-          name: t.name,
-          blinds: { small: t.smallBlind, big: t.bigBlind },
-          maxPlayers: t.maxPlayers,
-          buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
-          stakeLevel: "custom",
-        })),
-      );
-      logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
-    })
-    .catch((err) => {
-      logger.error("❌ Failed to load cash table configs; using defaults", err);
-    });
-}
+// Cash table configs are loaded from DB during bootstrap to ensure they are available before table creation.
 
 const rateLimits = new Map<string, { window: number; count: number }>(); // key = `${wallet}:${route}`
 const balanceCache = new Map<string, { ts: number; payload: any }>();
@@ -915,7 +891,28 @@ const wss = new WebSocketServer({
   server,
   maxPayload: env.wsMaxPayload,
 });
-const sessions = new SessionManager();
+const sessions = new SessionManager(RECONNECT_GRACE_MS);
+sessions.onExpire = async (session: Session) => {
+  const playerId = session.userId || session.sessionId;
+  if (session.roomId && session.seat !== undefined) {
+    logger.info(`⏰ [Expiry] Session ${playerId} expired for ${session.roomId}; triggering cleanup`);
+    
+    // Always call LEAVE; handleLeaveCommand differentiates between Cash (refund/remove) 
+    // and Tournament (sit-out/persist) behavior.
+    try {
+      await bridge.handleCommand(null as any, session, {
+        type: "LEAVE",
+        tableId: session.roomId,
+      } as any);
+    } catch (err) {
+      logger.error(`❌ [Expiry] Failed to execute LEAVE for ${playerId}:`, err);
+    }
+
+    // Finally, clear authoritative seat metadata to finalize cleanup
+    globalSeatMappings.removePlayer(session.roomId, playerId);
+    logger.info(`🧹 [Expiry] Removed authoritative seat metadata for ${playerId} on ${session.roomId}`);
+  }
+};
 const bridge = new WebSocketFSMBridge(sessions, ledger, prisma);
 const botManager = new BotManager();
 bridge.setBotManager(botManager);
@@ -1344,7 +1341,7 @@ ws.on("message", async (data) => {
               break;
             }
           }
-          tournamentOrchestrator.handleRegistration(command.tournamentId);
+          await tournamentOrchestrator.handleRegistration(command.tournamentId);
           // Push real-time status update
           void bridge.pushUserStatusUpdate(playerId);
           const payload = {
@@ -1356,7 +1353,7 @@ ws.on("message", async (data) => {
           break;
         }
         case "START_SNG_WITH_BOTS": {
-          const result = tournamentOrchestrator.startSitAndGoWithBots(command.tournamentId);
+          const result = await tournamentOrchestrator.startSitAndGoWithBots(command.tournamentId);
           if (!result.ok) {
             ws.send(JSON.stringify({
               tableId: "",
@@ -1639,17 +1636,46 @@ wss.on('close', () => clearInterval(heartbeatInterval));
 /**
  * Server Startup
  */
-logger.info('🎮 Starting Pure Event-Driven FSM Poker Server...');
-createPersistentTables();
+async function bootstrap() {
+  // 1. Load table templates from DB first
+  if (prisma) {
+    try {
+      const templates = await prisma.gameTemplate.findMany({ 
+        where: { type: "CASH" as any }, 
+        orderBy: { bigBlind: "asc" } 
+      });
+      if (!templates.length) {
+        logger.error("❌ No CASH game templates found in DB; refusing to start without DB data");
+        process.exit(1);
+      }
+      setTableConfigs(
+        templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          blinds: { small: t.smallBlind, big: t.bigBlind },
+          maxPlayers: t.maxPlayers,
+          buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
+          stakeLevel: "custom",
+        })),
+      );
+      logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
+    } catch (err) {
+      logger.error("❌ Failed to load cash table configs; refusing to start", err);
+      process.exit(1);
+    }
+  }
 
-// Load persisted game state (non-blocking)
-(async () => {
+  logger.info('🎮 Starting Pure Event-Driven FSM Poker Server...');
+  
+  // 2. Create persistent tables (now we are sure templates are loaded)
+  createPersistentTables();
+
+  // 3. Rehydrate rooms from persistence
   try {
     logger.info('📂 Loading persisted game state...');
     const rooms = await loadAllRooms();
     logger.info(`📂 Loaded ${rooms.length} persisted rooms`);
     
-    // Rehydrate each room into the bridge
     for (const room of rooms) {
       try {
         bridge.rehydrateEngine(room);
@@ -1657,14 +1683,29 @@ createPersistentTables();
         logger.error(`❌ Failed to rehydrate room ${room.id}:`, err);
       }
     }
-    
-    // Using pure Table format for persistence
     logger.info(`✅ Pure FSM architecture - rehydrated ${rooms.length} tables`);
   } catch (error) {
     logger.error('❌ Room restoration failed:', error);
     logger.info('ℹ️ Continuing with fresh tables');
   }
-})();
+
+  // 4. Start HTTP & WebSocket server
+  server.listen(PORT, () => {
+    logger.info(`🚀 Pure FSM Poker Server running on port ${PORT}`);
+    logger.info(`🌍 Environment: ${env.nodeEnv}`);
+    logger.info(`🏥 Health: http://localhost:${PORT}/health`);
+    logger.info(`📊 Tables API: http://localhost:${PORT}/api/tables`);
+    logger.info(`🎯 WebSocket: ws://localhost:${PORT}`);
+    logger.info(`🎮 Architecture: Direct EventEngine FSM Integration`);
+    logger.info(`✅ Ready for game connections...`);
+  });
+}
+
+// Kick off bootstrap
+bootstrap().catch(err => {
+  logger.error("❌ Bootstrap failed:", err);
+  process.exit(1);
+});
 
 /**
  * Graceful Shutdown Handler
@@ -1704,16 +1745,3 @@ function gracefulShutdown(signal: string): void {
 // Handle shutdown signals
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-/**
- * Start Server
- */
-server.listen(PORT, () => {
-  logger.info(`🚀 Pure FSM Poker Server running on port ${PORT}`);
-  logger.info(`🌍 Environment: ${env.nodeEnv}`);
-  logger.info(`🏥 Health: http://localhost:${PORT}/health`);
-  logger.info(`📊 Tables API: http://localhost:${PORT}/api/tables`);
-  logger.info(`🎯 WebSocket: ws://localhost:${PORT}`);
-  logger.info(`🎮 Architecture: Direct EventEngine FSM Integration`);
-  logger.info(`✅ Ready for game connections...`);
-});

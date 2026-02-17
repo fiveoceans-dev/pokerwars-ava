@@ -31,69 +31,73 @@ export class SessionManager {
   private sessions = new Map<WebSocket, Session>();
   private bySessionId = new Map<string, Session>();
   private byUserId = new Map<string, Session>();
-  constructor(private disconnectGraceMs = 5000) {}
+    public onExpire?: (session: Session) => Promise<void> | void;
   
-  get getDisconnectGraceMs() {
-    return this.disconnectGraceMs;
-  }
-  create(ws: WebSocket): Session {
-    const sessionId = createAddress();
-    const session: Session = { sessionId, socket: ws };
-    this.sessions.set(ws, session);
-    this.bySessionId.set(sessionId, session);
-    return session;
-  }
-
-  get(ws: WebSocket): Session | undefined {
-    return this.sessions.get(ws);
-  }
-
-  getByUserId(id: string): Session | undefined {
-    return this.byUserId.get(id);
-  }
-
-  getBySessionId(id: string): Session | undefined {
-    return this.bySessionId.get(id);
-  }
-
-  /** Prevent multiple logins with the same id */
-  attach(ws: WebSocket, userId: string): Session | undefined {
-    const existing = this.byUserId.get(userId);
-    if (existing && existing.socket !== ws) return undefined;
-    let session = this.sessions.get(ws);
-    if (!session) {
-      session = { sessionId: createAddress(), socket: ws };
+    constructor(private disconnectGraceMs = 5000) {}
+  
+    get getDisconnectGraceMs() {
+      return this.disconnectGraceMs;
+    }
+    create(ws: WebSocket): Session {
+      const sessionId = createAddress();
+      const session: Session = { sessionId, socket: ws };
       this.sessions.set(ws, session);
-      this.bySessionId.set(session.sessionId, session);
+      this.bySessionId.set(sessionId, session);
+      return session;
     }
-    // Preserve existing roomId when attaching userId
-    session.userId = userId;
-    this.byUserId.set(userId, session);
-    return session;
-  }
-
-  handleDisconnect(session: Session, onDisconnect: (session: Session) => void) {
-    this.clearTimer(session);
-    onDisconnect(session);
-    if (!session.timeout) {
-      session.timeout = setTimeout(() => {
-        this.expire(session);
-      }, this.disconnectGraceMs);
+  
+    get(ws: WebSocket): Session | undefined {
+      return this.sessions.get(ws);
     }
-  }
-
-  handleReconnect(session: Session) {
-    this.clearTimer(session);
-  }
-
-  expire(session: Session) {
-    this.sessions.delete(session.socket);
-    this.bySessionId.delete(session.sessionId);
-    if (session.userId) {
-      this.byUserId.delete(session.userId);
+  
+    getByUserId(id: string): Session | undefined {
+      return this.byUserId.get(id);
     }
-  }
-
+  
+    getBySessionId(id: string): Session | undefined {
+      return this.bySessionId.get(id);
+    }
+  
+    /** Prevent multiple logins with the same id */
+    attach(ws: WebSocket, userId: string): Session | undefined {
+      const existing = this.byUserId.get(userId);
+      if (existing && existing.socket !== ws) return undefined;
+      let session = this.sessions.get(ws);
+      if (!session) {
+        session = { sessionId: createAddress(), socket: ws };
+        this.sessions.set(ws, session);
+        this.bySessionId.set(session.sessionId, session);
+      }
+      // Preserve existing roomId when attaching userId
+      session.userId = userId;
+      this.byUserId.set(userId, session);
+      return session;
+    }
+  
+    handleDisconnect(session: Session, onDisconnect: (session: Session) => void) {
+      this.clearTimer(session);
+      onDisconnect(session);
+      if (!session.timeout) {
+        session.timeout = setTimeout(async () => {
+          await this.expire(session);
+        }, this.disconnectGraceMs);
+      }
+    }
+  
+    handleReconnect(session: Session) {
+      this.clearTimer(session);
+    }
+  
+    async expire(session: Session) {
+      if (this.onExpire) {
+        await this.onExpire(session);
+      }
+      this.sessions.delete(session.socket);
+      this.bySessionId.delete(session.sessionId);
+      if (session.userId) {
+        this.byUserId.delete(session.userId);
+      }
+    }
   replaceSocket(session: Session, ws: WebSocket) {
     this.sessions.delete(session.socket);
     session.socket = ws;

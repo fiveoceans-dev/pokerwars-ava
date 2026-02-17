@@ -448,14 +448,18 @@ export class TournamentManager {
     }
   }
 
-  removeTable(tournamentId: string, tableId: string) {
+  async removeTable(tournamentId: string, tableId: string) {
     const t = this.tournaments.get(tournamentId);
     if (!t) return;
     t.tables = t.tables.filter(id => id !== tableId);
-    void this.prisma.tournamentTable.update({
+    try {
+      await this.prisma.tournamentTable.update({
         where: { engineTableId: tableId },
         data: { status: 'CLOSED' }
-    }).catch(e => logger.error("DB table update failed", e));
+      });
+    } catch (e) {
+      logger.error("DB table update failed", e);
+    }
   }
 
   async persistBust(tournamentId: string, playerId: string, position: number) {

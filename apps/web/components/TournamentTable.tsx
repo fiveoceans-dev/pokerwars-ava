@@ -166,7 +166,7 @@ export function TournamentTable({
   };
 
   const sorted = useMemo(() => {
-    const items = tournaments.filter((t) => t.status !== "finished");
+    const items = tournaments.filter((t) => t.status !== "finished" && t.status !== "cancelled");
     
     const { key, dir } = sort;
     const factor = dir === "asc" ? 1 : -1;

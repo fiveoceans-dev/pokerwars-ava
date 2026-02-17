@@ -8,13 +8,13 @@ import { calculateBuyInLimits } from "./tableConfig";
  * Seat players into a table using the engine's seat join flow.
  * Returns the list of seats successfully assigned.
  */
-export function seatPlayersAtTable(
+export async function seatPlayersAtTable(
   bridge: WebSocketFSMBridge,
   tournament: TournamentState,
   tableId: string,
   playerIds: string[],
   startingStack: number,
-): TournamentSeat[] {
+): Promise<TournamentSeat[]> {
   const seats: TournamentSeat[] = [];
   try {
     const engine = bridge.getEngine(tableId);
@@ -36,7 +36,7 @@ export function seatPlayersAtTable(
       if (seatIdx >= table.seats.length) break;
       // Use engine API to sit player
       try {
-        engine.dispatch({
+        await engine.dispatch({
           t: "PlayerJoin",
           pid,
           seat: seatIdx,

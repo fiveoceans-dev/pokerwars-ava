@@ -38,9 +38,15 @@ export async function getClient(): Promise<RedisClientType | null> {
   if (client !== undefined) return client;
   if (!redisConnectionAttempted) {
     redisConnectionAttempted = true;
+    const url = process.env.REDIS_URL;
+    if (!url) {
+      logger.info("📡 No REDIS_URL set; using in-memory storage");
+      client = null;
+      return null;
+    }
     try {
       const mod = await import("redis");
-      const c = mod.createClient({ url: process.env.REDIS_URL });
+      const c = mod.createClient({ url });
       
       // Silence error logging after first attempt
       let errorCount = 0;

@@ -8,7 +8,8 @@
  * - Complete event sourcing and auditability
  */
 
-import 'dotenv/config';
+import { config as dotenvConfig } from 'dotenv';
+dotenvConfig({ override: true });
 import { createServer, type IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "crypto";
@@ -219,8 +220,9 @@ function checkRateLimit(key: string, limitPerMinute = 60): boolean {
  * HTTP Server with Health Endpoints
  */
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url || '/', `http://${req.headers.host}`);
-  const origin = normalizeOrigin(req.headers.origin?.toString());
+  try {
+    const url = new URL(req.url || '/', `http://${req.headers.host}`);
+    const origin = normalizeOrigin(req.headers.origin?.toString());
 
   if (req.method === 'OPTIONS') {
     setCorsHeaders(res, origin);
@@ -874,14 +876,30 @@ const server = createServer(async (req, res) => {
     return;
   }
   
-  // Default response
-  res.writeHead(200, {
-    'Content-Type': 'text/plain',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
-    'Referrer-Policy': 'no-referrer'
-  });
-  res.end('Pure Event-Driven FSM Poker Server - Use WebSocket for game play');
+    // Default response
+    res.writeHead(200, {
+      'Content-Type': 'text/plain',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer'
+    });
+    res.end('Pure Event-Driven FSM Poker Server - Use WebSocket for game play');
+  } catch (err) {
+    logger.error("❌ Unhandled HTTP handler error:", err);
+    if (!res.headersSent) {
+      res.writeHead(503, {
+        'Content-Type': 'application/json',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'no-referrer'
+      });
+      res.end(JSON.stringify({ error: "service unavailable" }));
+    } else {
+      try {
+        res.end();
+      } catch {}
+    }
+  }
 });
 
 /**
@@ -941,12 +959,6 @@ bridge.setBustHandler((tableId, playerId) => {
   logger.info(`💥 Detected bust: ${playerId} on ${tableId}`);
   void tournamentOrchestrator.handleBust(tableId, playerId);
 });
-
-// Kick off scheduled tournament checks every minute
-setInterval(() => tournamentOrchestrator.checkScheduled(), 60_000);
-
-// Ensure initial SNG instances exist
-tournamentOrchestrator.spawnInitialInstances();
 
 // Local helper to avoid leaking frontend utilities into server path
 function shortAddr(id?: string): string | undefined {
@@ -1096,16 +1108,28 @@ function broadcast(roomId: string, event: ServerEvent): void {
 
 function isHttpOriginAllowed(origin: string | undefined): boolean {
   if (!origin) return false;
+  // In development, be more permissive with localhost variants
+  if (!env.isProduction) {
+    const host = origin.split("://")[1] || "";
+    if (host.startsWith("localhost:") || host.startsWith("127.0.0.1:") || host === "localhost" || host === "127.0.0.1") {
+      return true;
+    }
+  }
   return allowedOrigins.includes(origin) || (!env.isProduction && devAllowedOrigins.includes(origin));
 }
 
 function setCorsHeaders(res: any, origin: string | undefined) {
-  if (origin && isHttpOriginAllowed(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With');
+  const allowed = isHttpOriginAllowed(origin);
+  if (allowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin!);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!env.isProduction) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
+  
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With');
 }
 
 function broadcastAll(event: any): void {
@@ -1637,35 +1661,56 @@ wss.on('close', () => clearInterval(heartbeatInterval));
  * Server Startup
  */
 async function bootstrap() {
+  logger.info("🚀 Starting bootstrap sequence...");
+  
   // 1. Load table templates from DB first
   if (prisma) {
     try {
-      const templates = await prisma.gameTemplate.findMany({ 
-        where: { type: "CASH" as any }, 
-        orderBy: { bigBlind: "asc" } 
-      });
+      logger.info("📡 Loading CASH templates from database...");
+      // Add a simple timeout race to avoid hanging indefinitely if DB is unreachable
+      const templates = await Promise.race([
+        prisma.gameTemplate.findMany({ 
+          where: { type: "CASH" as any }, 
+          orderBy: { bigBlind: "asc" } 
+        }),
+        new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("Database timeout after 5s")), 5000))
+      ]);
+
       if (!templates.length) {
-        logger.error("❌ No CASH game templates found in DB; refusing to start without DB data");
-        process.exit(1);
+        if (env.isProduction) {
+          logger.error("❌ No CASH game templates found in DB; refusing to start in production");
+          process.exit(1);
+        } else {
+          logger.warn("⚠️ No CASH game templates found in DB; falling back to hardcoded defaults for development");
+          logger.info("ℹ️ To seed the database, run: npm run seed:all -w apps/ws-server");
+        }
+      } else {
+        setTableConfigs(
+          templates.map((t) => ({
+            id: t.id,
+            name: t.name,
+            blinds: { small: t.smallBlind, big: t.bigBlind },
+            maxPlayers: t.maxPlayers,
+            buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
+            stakeLevel: "custom" as const,
+          })),
+        );
+        logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
       }
-      setTableConfigs(
-        templates.map((t) => ({
-          id: t.id,
-          name: t.name,
-          blinds: { small: t.smallBlind, big: t.bigBlind },
-          maxPlayers: t.maxPlayers,
-          buyIn: { min: t.minBuyIn, max: t.maxBuyIn, default: t.defaultBuyIn },
-          stakeLevel: "custom",
-        })),
-      );
-      logger.info(`🗄️ Loaded ${templates.length} cash tables from database`);
     } catch (err) {
-      logger.error("❌ Failed to load cash table configs; refusing to start", err);
-      process.exit(1);
+      if (env.isProduction) {
+        logger.error("❌ Failed to load cash table configs; refusing to start", err);
+        process.exit(1);
+      } else {
+        logger.warn(`⚠️ Database connection failed or templates missing: ${err instanceof Error ? err.message : String(err)}`);
+        logger.warn("⚠️ Falling back to hardcoded table defaults for development");
+      }
     }
+  } else {
+    logger.warn("⚠️ Prisma not initialized (check DATABASE_URL); using defaults");
   }
 
-  logger.info('🎮 Starting Pure Event-Driven FSM Poker Server...');
+  logger.info('🎮 Initializing Poker Server components...');
   
   // 2. Create persistent tables (now we are sure templates are loaded)
   createPersistentTables();
@@ -1690,6 +1735,7 @@ async function bootstrap() {
   }
 
   // 4. Start HTTP & WebSocket server
+  logger.info(`📡 Activating network layer on port ${PORT}...`);
   server.listen(PORT, () => {
     logger.info(`🚀 Pure FSM Poker Server running on port ${PORT}`);
     logger.info(`🌍 Environment: ${env.nodeEnv}`);
@@ -1699,6 +1745,13 @@ async function bootstrap() {
     logger.info(`🎮 Architecture: Direct EventEngine FSM Integration`);
     logger.info(`✅ Ready for game connections...`);
   });
+
+  // 5. Setup orchestrator (after server is listening)
+  // Kick off scheduled tournament checks every minute
+  setInterval(() => tournamentOrchestrator.checkScheduled(), 60_000);
+  // Ensure initial SNG instances exist
+  tournamentOrchestrator.spawnInitialInstances();
+  logger.info("📅 Tournament scheduler active");
 }
 
 // Kick off bootstrap
@@ -1706,10 +1759,6 @@ bootstrap().catch(err => {
   logger.error("❌ Bootstrap failed:", err);
   process.exit(1);
 });
-
-/**
- * Graceful Shutdown Handler
- */
 function gracefulShutdown(signal: string): void {
   logger.info(`📶 Received ${signal}, starting graceful shutdown...`);
   

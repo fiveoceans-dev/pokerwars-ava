@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useSignMessage } from 'wagmi';
 import { resolveWebSocketUrl } from '~~/utils/ws-url';
 import { clearAuthToken, getAuthToken, getAuthWallet, setAuthToken } from '~~/utils/auth';
+import { readPublicEnv } from '~~/utils/public-env';
 
 export type AuthStatus = 'none' | 'challenging' | 'signing' | 'verifying' | 'verified' | 'failed';
 
@@ -27,9 +28,20 @@ export function useAuth() {
       setAuthStatus('challenging');
 
       // Get WebSocket API base URL
-      const wsUrl = resolveWebSocketUrl() || 'ws://localhost:8099';
-      const ws = new URL(wsUrl);
-      const apiBase = `${ws.protocol === 'wss:' ? 'https:' : 'http:'}//${ws.host}`;
+      let apiBase = '';
+      const envApi = readPublicEnv("NEXT_PUBLIC_API_URL");
+      if (envApi) {
+        try {
+          const origin = envApi.split(',')[0].trim().replace(/\/api\/?$/, "");
+          apiBase = new URL(origin).origin;
+        } catch {}
+      }
+
+      if (!apiBase) {
+        const wsUrl = resolveWebSocketUrl() || 'ws://localhost:8099';
+        const ws = new URL(wsUrl);
+        apiBase = `${ws.protocol === 'wss:' ? 'https:' : 'http:'}//${ws.host}`;
+      }
 
       // 1. Get challenge
       const challengeRes = await fetch(`${apiBase}/api/auth/challenge?wallet=${walletAddress}`);

@@ -5,6 +5,8 @@ import { clearAuthToken, getAuthToken } from "~~/utils/auth";
 import { getLocalIdentity, resolveEffectiveId } from "~~/utils/identity";
 import { useGameStore } from "./useGameStore";
 
+import { readPublicEnv } from "~~/utils/public-env";
+
 function parseAmount(val: any): number {
   if (typeof val === 'number') return val;
   if (typeof val === 'string') {
@@ -33,6 +35,16 @@ const FREE_CLAIM_AMOUNT = 3_000;
 const FREE_CLAIM_COOLDOWN_MS = 5 * 60 * 60 * 1000;
 
 function resolveApiBase(): string | null {
+  const envApi = readPublicEnv("NEXT_PUBLIC_API_URL");
+  if (envApi) {
+    try {
+      // Strip trailing /api or /api/ as hooks append their own paths
+      const origin = envApi.split(',')[0].trim().replace(/\/api\/?$/, "");
+      return new URL(origin).origin;
+    } catch {
+      // Fallback to derivation
+    }
+  }
   try {
     const ws = resolveWebSocketUrl();
     const url = new URL(ws);
@@ -185,27 +197,31 @@ export function useBalances() {
 
   const refreshBalances = useCallback(async (): Promise<Balances | null> => {
     if (!walletForBalance || !apiBase) return null;
-    const token = getAuthToken();
-    const res = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
-    if (res.status === 401) {
-      clearAuthToken();
-      return null;
-    }
-    const data = await res.json();
-    if (data?.balance) {
-      const next = {
-        coins: parseAmount(data.balance.coins),
-        tickets: {
-          ticket_x: parseAmount(data.balance.ticket_x),
-          ticket_y: parseAmount(data.balance.ticket_y),
-          ticket_z: parseAmount(data.balance.ticket_z),
-        },
-      };
-      setBalances(next);
-      setStoreBalances(next);
-      return next;
+    try {
+      const token = getAuthToken();
+      const res = await fetch(`${apiBase}/api/user/balance?wallet=${walletForBalance}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (res.status === 401) {
+        clearAuthToken();
+        return null;
+      }
+      const data = await res.json();
+      if (data?.balance) {
+        const next = {
+          coins: parseAmount(data.balance.coins),
+          tickets: {
+            ticket_x: parseAmount(data.balance.ticket_x),
+            ticket_y: parseAmount(data.balance.ticket_y),
+            ticket_z: parseAmount(data.balance.ticket_z),
+          },
+        };
+        setBalances(next);
+        setStoreBalances(next);
+        return next;
+      }
+    } catch (err) {
+      console.warn("⚠️ Failed to refresh balances:", err);
     }
     return null;
   }, [apiBase, walletForBalance, setStoreBalances]);

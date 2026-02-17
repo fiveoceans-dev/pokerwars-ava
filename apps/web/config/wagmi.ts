@@ -16,7 +16,20 @@ export const isWalletConnectConfigured =
 const metadata = {
   name: "PokerWars",
   description: "PokerWars tournaments on Hyperliquid",
-  url: readPublicEnv("NEXT_PUBLIC_APP_URL") || "http://localhost:8090",
+  url: (() => {
+    const raw = readPublicEnv("NEXT_PUBLIC_APP_URL") || "http://localhost:8090";
+    const candidates = raw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const preferred = candidates[0] || "http://localhost:8090";
+    try {
+      return new URL(preferred).origin;
+    } catch {
+      console.warn(`⚠️ Invalid NEXT_PUBLIC_APP_URL: "${raw}". Falling back to http://localhost:8090`);
+      return "http://localhost:8090";
+    }
+  })(),
   icons: ["https://avatars.githubusercontent.com/u/37784886?s=200&v=4"],
 };
 

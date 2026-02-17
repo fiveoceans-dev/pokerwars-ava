@@ -24,7 +24,7 @@ export function NFTCard({
   chainIcon,
   badge,
   actionLabel = "Buy now",
-}: NFTCardProps): JSX.Element {
+}: NFTCardProps) {
   return (
     <div className="group relative w-48 sm:w-56 flex-shrink-0 min-w-[10rem]">
       <div className="relative w-full aspect-square overflow-hidden rounded-lg bg-base-300">

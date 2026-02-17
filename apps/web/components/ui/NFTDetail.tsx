@@ -5,7 +5,7 @@ import Button from "./Button";
 
 const tabs = ["Overview", "Bids", "History"];
 
-export function NFTDetail(): JSX.Element {
+export function NFTDetail() {
   const [active, setActive] = useState("Overview");
 
   return (

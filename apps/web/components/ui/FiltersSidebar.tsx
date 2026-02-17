@@ -10,7 +10,7 @@ const sorts = [
   { label: "High to Low", value: "desc" },
 ];
 
-export function FiltersSidebar(): JSX.Element {
+export function FiltersSidebar() {
   const [selectedChains, setSelectedChains] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sort, setSort] = useState("recent");

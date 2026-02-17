@@ -1,7 +1,7 @@
 // src/components/Table.tsx
 
 import type { CSSProperties } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTableViewModel } from "../hooks/useTableViewModel";
 import { useGameStore } from "../hooks/useGameStore";
 import Card from "./Card";

@@ -9,7 +9,7 @@ export function Button({
   className = "",
   children,
   ...props
-}: ButtonProps): JSX.Element {
+}: ButtonProps) {
   const base = "tbtn disabled:opacity-50 disabled:cursor-not-allowed";
   const variants: Record<string, string> = {
     primary: "text-[var(--accent)]",

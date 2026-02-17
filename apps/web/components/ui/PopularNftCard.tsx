@@ -27,7 +27,7 @@ export function PopularNftCard({
   registered,
   maxRegistered,
   prize,
-}: PopularNftCardProps): JSX.Element {
+}: PopularNftCardProps) {
   return (
     <div className="w-40 sm:w-48 md:w-64 min-w-[10rem] bg-white rounded-2xl shadow-md overflow-hidden hover:shadow-lg transition-shadow">
       <div className="relative w-full aspect-square overflow-hidden">

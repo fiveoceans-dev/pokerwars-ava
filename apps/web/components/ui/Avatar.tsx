@@ -12,7 +12,7 @@ export function Avatar({
   alt,
   size = 40,
   variant = "circle",
-}: AvatarProps): JSX.Element {
+}: AvatarProps) {
   return (
     <div
       className={`overflow-hidden ${

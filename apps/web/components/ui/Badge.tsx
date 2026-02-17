@@ -9,7 +9,7 @@ const styles: Record<string, string> = {
   sale: "bg-primary text-background",
 };
 
-export function Badge({ label, variant = "verified" }: BadgeProps): JSX.Element {
+export function Badge({ label, variant = "verified" }: BadgeProps) {
   return (
     <span
       className={`px-2 py-1 text-xs font-medium rounded-full ${styles[variant]}`}

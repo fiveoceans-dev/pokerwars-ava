@@ -382,22 +382,19 @@ export class EventEngine extends EventEmitter {
         `⚠️ [EventEngine] Event ${event.t} produced no state change - validation failed`,
       );
 
-      // Allow idempotent managerial events without hard failure
+      // 1. Idempotent managerial events - allow without hard failure
       if (event.t === "PlayerSitOut" || event.t === "PlayerSitIn") {
         logger.info(
           `ℹ️ [EventEngine] ${event.t} had no effect (idempotent or invalid seat) - continuing`,
         );
-        // Still emit current state so clients can reconcile
         this.emit("stateChanged", this.getState());
         this.emit("eventProcessed", event, this.getState());
         return;
       }
 
-      // For PlayerJoin events, determine specific error type
+      // 2. PlayerJoin - Throw specific errors as these are synchronous setup requests
       if (event.t === "PlayerJoin") {
         const seat = this.table.seats[event.seat];
-
-        // Check specific validation failures
         if (event.seat < 0 || event.seat >= this.table.seats.length) {
           throw new Error("Invalid seat index");
         } else if (seat.pid) {
@@ -411,19 +408,17 @@ export class EventEngine extends EventEmitter {
         }
       }
 
-      // Special handling for TimeoutAutoFold - race conditions are expected
+      // 3. TimeoutAutoFold - Race conditions expected, notify and continue
       if (event.t === "TimeoutAutoFold") {
         logger.warn(
           `⏰ [EventEngine] TimeoutAutoFold for seat ${event.seat} had no effect - player likely already acted or not current actor`,
         );
-        // Don't throw error - this is expected behavior when timers race
-        // Just execute any side effects (like notifications) and continue
         await this.executeSideEffects(transition.sideEffects);
         this.emit("eventProcessed", event, this.table);
         return;
       }
 
-      // Comprehensive Action event validation diagnostics
+      // 4. Action (Bet/Fold/etc) - Notify clients to resync instead of crashing the loop
       if (event.t === "Action") {
         const seat = this.table.seats[event.seat];
         const actorSeat =
@@ -431,7 +426,6 @@ export class EventEngine extends EventEmitter {
             ? this.table.seats[this.table.actor]
             : null;
 
-        // Log validation context as warning instead of error to avoid noise
         logger.warn(
           `⚠️ [EventEngine] Action validation failed (No state change) - Phase: ${this.table.phase}, Actor: ${this.table.actor}, Target: ${event.seat}`,
         );
@@ -439,31 +433,12 @@ export class EventEngine extends EventEmitter {
           `   Details: ${seat?.pid || "EMPTY"}(${seat?.status}) tried ${event.action} - Current Actor: ${actorSeat?.pid || "none"}`,
         );
 
-        // Emit current state so clients can reconcile their UI
         this.emit("stateChanged", this.getState());
         this.emit("eventProcessed", event, this.table);
         return;
       }
 
-      // For PlayerJoin events, keep throwing as these are usually synchronous setup requests
-      if (event.t === "PlayerJoin") {
-        const seat = this.table.seats[event.seat];
-
-        // Check specific validation failures
-        if (event.seat < 0 || event.seat >= this.table.seats.length) {
-          throw new Error("Invalid seat index");
-        } else if (seat.pid) {
-          throw new Error("Seat already taken");
-        } else if (this.table.seats.find((s) => s.pid === event.pid)) {
-          throw new Error("Player already seated");
-        } else if (event.chips <= 0) {
-          throw new Error("Invalid chips amount");
-        } else {
-          throw new Error("Failed to add player");
-        }
-      }
-
-      // For other events, throw generic validation error
+      // 5. Default - Generic validation error for unexpected failures
       throw new Error(`Event validation failed: ${event.t}`);
     }
 

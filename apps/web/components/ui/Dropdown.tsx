@@ -6,7 +6,7 @@ type DropdownProps = {
   onChange: (value: string) => void;
 };
 
-export function Dropdown({ options, value, onChange }: DropdownProps): JSX.Element {
+export function Dropdown({ options, value, onChange }: DropdownProps) {
   return (
     <select
       className="w-full bg-transparent border border-border rounded-md px-3 py-2"

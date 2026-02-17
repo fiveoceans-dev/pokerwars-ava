@@ -7,7 +7,7 @@ import {
   ModalFooter
 } from "./Modal";
 
-export function WalletModal(): JSX.Element {
+export function WalletModal() {
   const [open, setOpen] = useState(false);
   const [connected, setConnected] = useState(false);
 

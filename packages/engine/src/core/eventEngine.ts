@@ -64,6 +64,7 @@ export interface GameCommand {
   amount?: number;
   chips?: number;
   nickname?: string;
+  timestamp?: number;
 }
 
 /**
@@ -874,7 +875,7 @@ export class EventEngine extends EventEmitter {
           {
             t: "StartHand",
             handNumber: this.table.handNumber + 1,
-            timestamp: Date.now(),
+            timestamp: command.timestamp !== undefined ? command.timestamp : Date.now(),
           },
         ];
     }

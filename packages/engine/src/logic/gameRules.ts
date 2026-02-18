@@ -40,35 +40,37 @@ export function getBlindPositions(
   seats: Seat[],
   button: number,
 ): BlindPositions | null {
-  // Consider players in hand (occupied), regardless of current "active" vs "allin"
-  const occupied = seats
-    .map((s, i) => (s.pid ? i : -1))
+  // Only consider players who are in the hand (active or all-in) for blind positions.
+  // We explicitly skip sitting-out players who were marked in startHand.
+  const eligible = seats
+    .map((s, i) => (s.pid && s.status !== "empty" && (s.status as any) !== "sittingOut" ? i : -1))
     .filter((i) => i !== -1);
 
-  if (occupied.length < 2) return null;
+  if (eligible.length < 2) return null;
 
-  if (occupied.length === 2) {
+  if (eligible.length === 2) {
     // Heads-up: Button = Small Blind, other = Big Blind
-    // Ensure button points to one of the occupied seats
-    const buttonSeatIndex = seats[button]?.pid ? button : occupied[0];
+    // Ensure button points to one of the eligible seats
+    const buttonSeatIndex = seats[button]?.pid && (seats[button].status as any) !== "sittingOut" ? button : eligible[0];
     const sbIndex = buttonSeatIndex;
-    const bbIndex = occupied.find((i) => i !== sbIndex)!;
+    const bbIndex = eligible.find((i) => i !== sbIndex)!;
     return { sb: sbIndex, bb: bbIndex };
   }
 
-  // Multi-way: Button → next occupied = SB → next occupied = BB
+  // Multi-way: Button → next eligible = SB → next eligible = BB
   const n = seats.length;
-  const nextOccupiedFrom = (start: number): number => {
+  const nextEligibleFrom = (start: number): number => {
     for (let step = 1; step <= n; step++) {
       const idx = (start + step) % n;
-      if (seats[idx]?.pid) return idx;
+      const seat = seats[idx];
+      if (seat?.pid && seat.status !== "empty" && (seat.status as any) !== "sittingOut") return idx;
     }
     return -1;
   };
 
-  const sbIndex = nextOccupiedFrom(button);
+  const sbIndex = nextEligibleFrom(button);
   if (sbIndex === -1) return null;
-  const bbIndex = nextOccupiedFrom(sbIndex);
+  const bbIndex = nextEligibleFrom(sbIndex);
   if (bbIndex === -1) return null;
   return { sb: sbIndex, bb: bbIndex };
 }

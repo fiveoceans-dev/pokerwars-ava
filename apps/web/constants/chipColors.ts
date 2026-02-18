@@ -31,3 +31,22 @@ export function getBetChipColorClass(amount: number, bigBlind?: number) {
   }
   return "bg-gray-600";
 }
+
+/**
+ * Return a more vibrant version of the action color for chips.
+ * Returns null if the action doesn't warrant a special vibrant color.
+ */
+export function getVibrantActionColor(actionLabel?: string | null) {
+  if (!actionLabel) return null;
+
+  const label = actionLabel.toUpperCase();
+  
+  if (label.includes("CALL")) return "bg-blue-400";
+  if (label.includes("BET")) return "bg-amber-400";
+  if (label.includes("RAISE")) return "bg-indigo-400";
+  if (label.includes("ALL IN") || label.includes("ALLIN")) return "bg-orange-400";
+  if (label.includes("WINNER")) return "bg-yellow-400";
+
+  // For CHECK, FOLD or other labels, use default coloring
+  return null;
+}

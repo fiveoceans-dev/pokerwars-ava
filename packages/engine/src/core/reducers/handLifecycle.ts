@@ -328,7 +328,6 @@ export function endHand(table: Table): StateTransition {
     lastAggressor: undefined,
     currentBet: 0,
     lastRaiseSize: table.bigBlind,
-    communityCards: [],
     button: nextButton,
     seats: newSeats,
     bbSeat: undefined, // Reset BB tracking

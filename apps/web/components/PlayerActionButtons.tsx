@@ -153,7 +153,7 @@ export default function PlayerActionButtons({
               onClick={() => handleAction("FOLD")}
               disabled={isActionPending}
               className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
-                isActionPending ? "bg-rose-600/50 cursor-not-allowed" : "bg-rose-600 hover:bg-rose-500"
+                isActionPending ? "bg-rose-500/50 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-400"
               }`}
             >
               Fold
@@ -173,8 +173,8 @@ export default function PlayerActionButtons({
               disabled={isActionPending}
               className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-emerald-600/50 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-500"
+                  ? "bg-emerald-500/50 cursor-not-allowed"
+                  : "bg-emerald-500 hover:bg-emerald-400"
               }`}
             >
               Check
@@ -194,8 +194,8 @@ export default function PlayerActionButtons({
               disabled={isActionPending}
               className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-blue-600/50 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-500"
+                  ? "bg-blue-500/50 cursor-not-allowed"
+                  : "bg-blue-500 hover:bg-blue-400"
               }`}
             >
               Call
@@ -215,8 +215,8 @@ export default function PlayerActionButtons({
               disabled={isActionPending}
               className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-amber-600/50 cursor-not-allowed"
-                  : "bg-amber-600 hover:bg-amber-500"
+                  ? "bg-amber-500/50 cursor-not-allowed"
+                  : "bg-amber-500 hover:bg-amber-400"
               }`}
             >
               Bet
@@ -236,8 +236,8 @@ export default function PlayerActionButtons({
               disabled={isActionPending}
               className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-indigo-600/50 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-500"
+                  ? "bg-indigo-500/50 cursor-not-allowed"
+                  : "bg-indigo-500 hover:bg-indigo-400"
               }`}
             >
               Raise
@@ -257,8 +257,8 @@ export default function PlayerActionButtons({
               disabled={isActionPending}
               className={`h-8 px-2 rounded font-semibold text-xs text-white flex items-center justify-center w-full ${
                 isActionPending
-                  ? "bg-orange-600/50 cursor-not-allowed"
-                  : "bg-orange-600 hover:bg-orange-500"
+                  ? "bg-orange-500/50 cursor-not-allowed"
+                  : "bg-orange-500 hover:bg-orange-400"
               }`}
             >
               All-in

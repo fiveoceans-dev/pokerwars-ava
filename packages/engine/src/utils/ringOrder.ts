@@ -216,12 +216,13 @@ export function areAllPlayersAllIn(seats: Seat[]): boolean {
     seat.status === "active" || seat.status === "allin"
   );
   
-  // Must have at least 2 players still in hand
+  // Must have at least 2 players still in hand to even consider all-in auto-deal
   if (playersInHand.length < 2) return false;
   
-  // Check if ALL players in hand are all-in (no active players)
+  // Check if no more than 1 player is active (the rest are all-in)
+  // If only 1 player is active, they have no one to bet against anymore.
   const activePlayers = playersInHand.filter(seat => seat.status === "active");
-  return activePlayers.length === 0;
+  return activePlayers.length <= 1;
 }
 
 /**

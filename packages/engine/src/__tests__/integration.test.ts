@@ -11,6 +11,7 @@
  * - State transitions
  */
 
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEngine } from "../core/eventEngine";
 import { ActionType, Table, PokerEvent } from "../core/types";
 import { evaluateHand, compareHands } from "../logic/handEvaluationAdapter";
@@ -155,7 +156,7 @@ describe("Event Engine Integration Tests", () => {
       });
 
       // Start hand
-      await engine.processCommand({ type: "start_hand" });
+      await engine.processCommand({ type: "start_hand", timestamp: 0 });
 
       // Player 2 will have reduced chips after posting BB (100)
       const table = engine.getSnapshot().table;
@@ -207,7 +208,7 @@ describe("Event Engine Integration Tests", () => {
       });
 
       // Start hand
-      await engine.processCommand({ type: "start_hand" });
+      await engine.processCommand({ type: "start_hand", timestamp: 0 });
 
       const table = engine.getSnapshot().table;
       
@@ -258,7 +259,7 @@ describe("Event Engine Integration Tests", () => {
       });
 
       // Start hand
-      await engine.processCommand({ type: "start_hand" });
+      await engine.processCommand({ type: "start_hand", timestamp: 0 });
 
       const table = engine.getSnapshot().table;
       const button = table.button;
@@ -322,7 +323,7 @@ describe("Event Engine Integration Tests", () => {
       });
 
       // Start hand
-      await engine.processCommand({ type: "start_hand" });
+      await engine.processCommand({ type: "start_hand", timestamp: 0 });
       
       // Complete preflop
       await engine.processCommand({
@@ -375,7 +376,7 @@ describe("Event Engine Integration Tests", () => {
       });
 
       // Start hand
-      await engine.processCommand({ type: "start_hand" });
+      await engine.processCommand({ type: "start_hand", timestamp: 0 });
 
       // Get initial table state to check hole cards were dealt
       const initialTable = engine.getSnapshot().table;
@@ -401,41 +402,34 @@ describe("Event Engine Integration Tests", () => {
       // Flop
       await engine.processCommand({
         type: "action",
-        playerId: "player1",
-        seatId: 0,
+        playerId: "player2",
+        seatId: 1,
         action: "CHECK"
       });
 
       await engine.processCommand({
         type: "action", 
-        playerId: "player2",
-        seatId: 1,
+        playerId: "player1",
+        seatId: 0,
         action: "CHECK"
       });
 
       // Turn
       await engine.processCommand({
         type: "action",
-        playerId: "player1",
-        seatId: 0,
+        playerId: "player2",
+        seatId: 1,
         action: "CHECK"
       });
 
       await engine.processCommand({
         type: "action",
-        playerId: "player2",
-        seatId: 1, 
+        playerId: "player1",
+        seatId: 0, 
         action: "CHECK"
       });
 
       // River
-      await engine.processCommand({
-        type: "action",
-        playerId: "player1",
-        seatId: 0,
-        action: "CHECK"
-      });
-
       await engine.processCommand({
         type: "action",
         playerId: "player2",
@@ -443,14 +437,21 @@ describe("Event Engine Integration Tests", () => {
         action: "CHECK"
       });
 
-      // Wait for showdown processing
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await engine.processCommand({
+        type: "action",
+        playerId: "player1",
+        seatId: 0,
+        action: "CHECK"
+      });
+
+      // waitIdle ensures all side effects (including delayed HandEnd) are processed
+      await engine.waitIdle();
 
       const finalTable = engine.getSnapshot().table;
 
-      // Should have reached showdown and determined winner
-      expect(finalTable.phase).toBe("handEnd"); // After payout it goes to handEnd
-      expect(finalTable.communityCards.length).toBe(5); // All community cards dealt
+      // Should have reached showdown and determined winner, then progressed to waiting for next hand
+      expect(finalTable.phase).toBe("waiting");
+      expect(finalTable.communityCards.length).toBe(5); // Board should persist during waiting phase
 
       // Check that Payout event was processed
       const payoutEvents = events.filter(e => e.t === "Payout");
@@ -460,9 +461,12 @@ describe("Event Engine Integration Tests", () => {
       const payoutEvent = payoutEvents[0] as any;
       expect(payoutEvent.distributions).toBeDefined();
       expect(payoutEvent.distributions.length).toBeGreaterThan(0);
-    });
+    }, 30000);
 
     it("should handle all-in scenarios correctly", async () => {
+      // Set high timeout for this test as it involves multiple delays for auto-dealing
+      vi.setConfig({ testTimeout: 10000 });
+      
       // Add two players with different chip amounts
       await engine.processCommand({
         type: "join",
@@ -481,7 +485,7 @@ describe("Event Engine Integration Tests", () => {
       });
 
       // Start hand
-      await engine.processCommand({ type: "start_hand" });
+      await engine.processCommand({ type: "start_hand", timestamp: 0 });
 
       // Player 1 calls, Player 2 goes all-in
       await engine.processCommand({
@@ -505,19 +509,22 @@ describe("Event Engine Integration Tests", () => {
         action: "CALL"
       });
 
-      // Wait for auto-progression through remaining streets (both all-in)
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Engine should auto-deal and finish hand. waitIdle waits for all delayed streets.
+      await engine.waitIdle();
 
       const finalTable = engine.getSnapshot().table;
 
-      // Should reach showdown automatically when both players all-in
-      expect(finalTable.phase).toBe("handEnd");
-      expect(finalTable.communityCards.length).toBe(5);
+      // Should reach showdown automatically when both players all-in, then progress to waiting
+      expect(finalTable.phase).toBe("waiting");
+      expect(finalTable.communityCards.length).toBe(5); // Board should persist during waiting phase
+
+      // Verify chips were distributed (total 7000)
+      expect(finalTable.seats[0].chips + finalTable.seats[1].chips).toBe(7000);
 
       // Check payout occurred
       const payoutEvents = events.filter(e => e.t === "Payout");
       expect(payoutEvents.length).toBeGreaterThan(0);
-    });
+    }, 30000);
   });
 
   describe("Hand Evaluation Algorithm", () => {

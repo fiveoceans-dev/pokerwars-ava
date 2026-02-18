@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import { reduce, processShowdown, processPayout } from "../core/reducer";
 import type { Table, PayoutDistribution } from "../core/types";
 

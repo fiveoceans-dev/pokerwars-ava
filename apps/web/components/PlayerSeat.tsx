@@ -72,25 +72,25 @@ export default function PlayerSeat({
     let text = label;
 
     if (label.includes("FOLD")) {
-      bgClass = "bg-rose-600";
+      bgClass = "bg-rose-500";
       text = "FOLD";
     } else if (label.includes("CHECK")) {
-      bgClass = "bg-emerald-600";
+      bgClass = "bg-emerald-500";
       text = "CHECK";
     } else if (label.includes("CALL")) {
-      bgClass = "bg-blue-600";
+      bgClass = "bg-blue-500";
       text = "CALL";
     } else if (label.includes("BET")) {
-      bgClass = "bg-amber-600";
+      bgClass = "bg-amber-500";
       text = "BET";
     } else if (label.includes("RAISE")) {
-      bgClass = "bg-indigo-600";
+      bgClass = "bg-indigo-500";
       text = "RAISE";
     } else if (label.includes("ALLIN")) {
-      bgClass = "bg-orange-600";
+      bgClass = "bg-orange-500";
       text = "ALL-IN";
     } else if (label.includes("WIN")) {
-      bgClass = "bg-yellow-500";
+      bgClass = "bg-yellow-400";
       text = "WIN";
     }
 

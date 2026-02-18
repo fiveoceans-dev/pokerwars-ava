@@ -17,6 +17,13 @@ export default function TableFelt({ className, children }: TableFeltProps) {
           boxShadow: "0 20px 60px rgba(0,0,0,0.5), inset 0 0 80px rgba(0,0,0,0.8)",
         }}
       >
+        {/* Table Watermark */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
+          <span className="text-white/[0.05] text-[120px] font-black tracking-tighter uppercase transform -rotate-12">
+            PokerWars
+          </span>
+        </div>
+
         {/* Content Layer (Community Cards, Pot, etc.) */}
         {children}
       </div>

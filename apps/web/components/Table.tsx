@@ -12,7 +12,7 @@ import { useWalletGameSync } from "../hooks/useWalletGameSync";
 import useIsMobile from "../hooks/useIsMobile";
 import { useCountdownWithPriority } from "../hooks/useCountdown";
 import { seatStore } from "../stores/seatStore";
-import { getBetChipColorClass } from "../constants/chipColors";
+import { getBetChipColorClass, getVibrantActionColor } from "../constants/chipColors";
 import { formatNumber } from "~~/utils/format";
 
 // New modular components
@@ -249,16 +249,20 @@ export default function Table({ timer }: { timer?: number | null }) {
         ? "translate(-50%, -50%) translateY(-50px)" 
         : "translate(-50%, -50%)",
     } as CSSProperties;
-    const betBg = getBetChipColorClass(betAmount, bigBlind);
+    
+    // Use vibrant action colors for the chips if an action label is present and warrants it
+    const actionLabel = lastActionLabels[idx];
+    const vibrantBg = getVibrantActionColor(actionLabel);
+    const betBg = vibrantBg || getBetChipColorClass(betAmount, bigBlind);
 
     return (
       <div
         key={`bet-${idx}`}
         style={style}
-        className={`absolute z-20 flex items-center justify-center shadow-md ${betBg} 
-                    px-2 py-0.5 rounded-full border border-black/20 min-w-[32px]`}
+        className={`absolute z-20 flex items-center justify-center shadow-[0_0_10px_rgba(0,0,0,0.3)] ${betBg} 
+                    px-2 py-0.5 rounded-full border border-white/20 min-w-[32px] transition-colors duration-300`}
       >
-        <span className="text-[10px] font-bold text-white font-mono">
+        <span className={`text-[10px] font-bold ${betBg.includes('text-black') ? 'text-black' : 'text-white'} font-mono shadow-sm`}>
           {tableType === "cash" ? "$" : ""}{formatNumber(betAmount)}
         </span>
       </div>

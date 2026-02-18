@@ -7,6 +7,13 @@ import Lottie from "lottie-react";
 // or import them statically if known.
 // For this internal tool, we'll list the ones we created.
 const animationFiles = [
+  { name: "Yellow Chip", path: "yellow-chip.json" },
+  { name: "Red Chip", path: "red-chip.json" },
+  { name: "Blue Chip", path: "blue-chip.json" },
+  { name: "Orange Chip", path: "orange-chip.json" },
+  { name: "Green Chip", path: "green-chip.json" },
+  { name: "Purple Chip", path: "purple-chip.json" },
+  { name: "Single Poker Chip", path: "single-chip.json" },
   { name: "Poker Chip Shuffle", path: "poker-chip-shuffle.json" },
   { name: "Poker Chip Flip", path: "poker-chip-flip.json" },
   { name: "Winner Celebration", path: "winner-celebration.json" },

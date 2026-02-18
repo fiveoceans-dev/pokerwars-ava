@@ -167,14 +167,14 @@ describe('Action Validation', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('Rejects call when no bet to call', () => {
+    it('Allows call when no bet to call (treated as check)', () => {
       const seats = createSeats([{ id: 0, pid: 'P1', chips: 100 }]);
       const table = createTable(seats, { actor: 0, currentBet: 0 });
       
       const result = validateAction(table, 0, 'CALL');
       
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('use check instead');
+      expect(result.valid).toBe(true);
+      expect(result.normalizedAmount).toBe(0);
     });
 
     it('Allows partial call when insufficient chips (converts to all-in)', () => {

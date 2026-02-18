@@ -26,10 +26,10 @@ export type ActionType = "FOLD" | "CHECK" | "CALL" | "BET" | "RAISE" | "ALLIN";
 // UI-facing action flag that also represents sitting out state
 export type SeatAction = ActionType | "SITTING_OUT";
 
-export type SeatStatus = "active" | "folded" | "allin" | "empty";
+export type SeatStatus = "active" | "folded" | "allin" | "empty" | "sittingOut";
 
 // UI helper state used by client stores/components
-export type SeatUIState = SeatStatus | "sittingOut";
+export type SeatUIState = SeatStatus;
 
 /**
  * Seat represents a single position at the poker table
@@ -123,7 +123,7 @@ export interface Table {
   bbHasActed?: boolean; // track if BB has used option
 
   // Action sequence tracking for proper round completion
-  playersActedThisRound?: Set<number>; // seat IDs that have acted in current round
+  playersActedThisRound?: number[]; // seat IDs that have acted in current round
   roundStartActor?: number; // first actor of the current round
 }
 
@@ -195,6 +195,7 @@ export interface ActionValidation {
   valid: boolean;
   error?: string;
   normalizedAmount?: number; // for bet/raise normalization
+  normalizedAction?: ActionType; // for action type normalization (e.g. CALL 0 -> CHECK)
   isAllIn?: boolean;
 }
 

@@ -23,9 +23,17 @@ export function closeStreet(table: Table): StateTransition {
   // Collect committed chips into pots
   const { pots } = collectIntoPots(table.seats);
 
+  // Reset street contributions and clear action labels after they are moved to the pot
+  const newSeats = table.seats.map(seat => ({
+    ...seat,
+    streetCommitted: 0,
+    action: undefined
+  }));
+
   const nextState = {
     ...table,
     pots,
+    seats: newSeats,
     actor: undefined,
   };
 

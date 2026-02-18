@@ -14,6 +14,7 @@ import {
   getNextActionableIndex,
   countActivePlayers,
   countPlayersInHand,
+  isBettingRoundComplete as ringOrderIsBettingRoundComplete,
 } from "../utils/ringOrder";
 
 export interface BlindPositions {
@@ -210,76 +211,14 @@ export function shouldGiveBBOption(table: Table, nextActor: number): boolean {
 
 /**
  * Check if betting round is complete
- *
- * Rules:
- * - All active players have matched current bet or are all-in
- * - OR only one player remains in hand
- * - OR all remaining players are all-in
- * - Special case: BB gets option in preflop
+ * 
+ * Delegates to canonical ringOrder logic which uses action tracking system.
  */
 export function isBettingRoundComplete(
   table: Table,
   nextActor: number,
 ): boolean {
-  const { seats, currentBet, lastAggressor } = table;
-  const activeCount = countActivePlayers(seats);
-  const inHandCount = countPlayersInHand(seats);
-
-  // Only one player left in hand
-  if (inHandCount <= 1) {
-    return true;
-  }
-
-  // Everyone is all-in
-  if (activeCount === 0) {
-    return true;
-  }
-
-  // BB option check (preflop only)
-  if (shouldGiveBBOption(table, nextActor)) {
-    console.log(`💺 [GameRules] BB gets option to raise`);
-    return false; // Round not complete - BB can act
-  }
-
-  // Check if all active players have matching street commitments
-  const activePlayers = seats.filter(isActionable);
-
-  // If using action sequence tracking (preferred)
-  if (table.playersActedThisRound && table.roundStartActor !== undefined) {
-    const allActiveHaveActed = activePlayers.every((s) =>
-      table.playersActedThisRound!.has(s.id),
-    );
-
-    if (allActiveHaveActed) {
-      const allMatched = activePlayers.every(
-        (seat) => seat.streetCommitted === currentBet,
-      );
-      if (allMatched) {
-        return true;
-      }
-    }
-  }
-
-  const allMatched = activePlayers.every(
-    (seat) => seat.streetCommitted === currentBet,
-  );
-
-  if (allMatched) {
-    return true;
-  }
-
-  // Action returns to last aggressor and others have called
-  if (lastAggressor !== undefined && nextActor === lastAggressor) {
-    const otherPlayers = activePlayers.filter(
-      (seat) => seat.id !== lastAggressor,
-    );
-    const othersMatched = otherPlayers.every(
-      (seat) => seat.streetCommitted === currentBet || seat.status === "allin",
-    );
-    return othersMatched;
-  }
-
-  return false;
+  return ringOrderIsBettingRoundComplete(table, nextActor);
 }
 
 /**

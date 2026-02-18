@@ -74,22 +74,18 @@ export function applyAction(
     return { nextState: table, sideEffects: [] };
   }
 
+  // Use normalized action and amount if provided by validator
+  const finalAction = validation.normalizedAction ?? action;
+  const finalAmount = validation.normalizedAmount ?? amount;
+
   const newSeats = [...table.seats];
   let newCurrentBet = table.currentBet;
   let newLastAggressor = table.lastAggressor;
   let newLastRaiseSize = table.lastRaiseSize;
-  const finalAmount = validation.normalizedAmount ?? amount;
 
-  switch (action) {
+  switch (finalAction) {
     case "FOLD":
-      newSeats[seatId] = { ...seat, status: "folded" };
-      break;
-
-    case "CHECK":
-      // Check only valid if no bet to call
-      if (table.currentBet > seat.streetCommitted) {
-        return { nextState: table, sideEffects: [] }; // Invalid check
-      }
+      newSeats[seatId] = { ...seat, status: "folded", streetCommitted: 0 };
       break;
 
     case "CALL":
@@ -104,6 +100,14 @@ export function applyAction(
           status: seat.chips === callAmount ? "allin" : "active",
         };
       }
+      break;
+
+    case "CHECK":
+      // Check only valid if no bet to call
+      if (table.currentBet > seat.streetCommitted) {
+        return { nextState: table, sideEffects: [] }; // Invalid check
+      }
+      newSeats[seatId] = { ...seat };
       break;
 
     case "BET": {
@@ -176,8 +180,8 @@ export function applyAction(
       break;
   }
 
-  // Record action for UI display
-  newSeats[seatId] = { ...newSeats[seatId], action };
+  // Record action for UI display (use normalized action)
+  newSeats[seatId] = { ...newSeats[seatId], action: finalAction as any };
 
   // Track BB action in preflop using game rules
   let bbHasActed = table.bbHasActed;
@@ -187,14 +191,19 @@ export function applyAction(
   }
 
   // Track action sequence for proper round completion logic
-  const playersActedThisRound = new Set(table.playersActedThisRound || []);
-  playersActedThisRound.add(seatId);
+  const playersActedThisRound = Array.isArray(table.playersActedThisRound) 
+    ? [...table.playersActedThisRound] 
+    : [];
+  
+  if (!playersActedThisRound.includes(seatId)) {
+    playersActedThisRound.push(seatId);
+  }
 
   // Set round start actor if not already set (first action of the round)
   const roundStartActor = table.roundStartActor ?? seatId;
 
   console.log(
-    `🎯 [Reducer] Player ${seatId} acted (${playersActedThisRound.size} players acted this round)`,
+    `🎯 [Reducer] Player ${seatId} acted (${playersActedThisRound.length} players acted this round)`,
   );
 
   // Create intermediate table state to check betting round completion

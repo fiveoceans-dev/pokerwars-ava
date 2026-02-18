@@ -35,7 +35,7 @@ function makeTable(): Table {
     timestamp: Date.now(),
     bbSeat: 2,
     bbHasActed: false,
-    playersActedThisRound: new Set<number>([3]), // UTG (seat 3) has acted (called 10)
+    playersActedThisRound: [3], // UTG (seat 3) has acted (called 10)
     roundStartActor: 3, // UTG (seat 3) was the first actor of the round
   };
 }
@@ -44,7 +44,7 @@ describe('BB option preflop', () => {
   it('does not complete round when action returns to BB with option available', () => {
     const table = makeTable();
     // Simulate SB acting (calling)
-    table.playersActedThisRound.add(table.actor!); // Add SB to players acted
+    table.playersActedThisRound!.push(table.actor!); // Add SB to players acted
     const res = getNextActor(table);
     expect(res.isComplete).toBe(false);
     expect(res.actor).toBe(2); // BB should be next to act
@@ -58,9 +58,7 @@ describe('BB option preflop', () => {
     table.bbHasActed = true;
     table.actor = 2; // BB turn
     // Simulate all players having acted (UTG + SB + BB)
-    table.playersActedThisRound.add(3); // UTG
-    table.playersActedThisRound.add(1); // SB
-    table.playersActedThisRound.add(2); // BB
+    table.playersActedThisRound = [3, 1, 2]; // UTG, SB, BB
     const res = getNextActor(table);
     expect(res.isComplete).toBe(true);
     expect(res.actor).toBeUndefined();

@@ -41,6 +41,7 @@ export function getVibrantActionColor(actionLabel?: string | null) {
 
   const label = actionLabel.toUpperCase();
   
+  if (label.includes("CHECK")) return "bg-emerald-400";
   if (label.includes("CALL")) return "bg-blue-400";
   if (label.includes("BET")) return "bg-amber-400";
   if (label.includes("RAISE")) return "bg-indigo-400";

@@ -29,7 +29,7 @@ describe('Round completion', () => {
     const seats = makeSeats([0,1,2]);
     const t = {
       ...tableBase(seats, 'preflop'),
-      playersActedThisRound: new Set<number>(),
+      playersActedThisRound: [],
       roundStartActor: 0, // UTG is first to act
     } as Table;
 
@@ -41,7 +41,7 @@ describe('Round completion', () => {
 
     // UTG folds
     t.seats[0].status = 'folded' as any;
-    t.playersActedThisRound.add(0); // UTG acted
+    t.playersActedThisRound!.push(0); // UTG acted
     let state = getBettingRoundState(t);
     expect(state.isComplete).toBe(false);
 
@@ -50,7 +50,7 @@ describe('Round completion', () => {
     t.seats[1].chips -= 5;
     t.seats[1].committed = 10;
     t.seats[1].streetCommitted = 10;
-    t.playersActedThisRound.add(1); // SB acted
+    t.playersActedThisRound!.push(1); // SB acted
     state = getBettingRoundState(t);
     // Action should return to BB option; not complete yet
     expect(state.isComplete).toBe(false);
@@ -58,7 +58,7 @@ describe('Round completion', () => {
     // BB checks (bbHasActed true elsewhere in engine after action); emulate completion
     t.actor = 2; // BB turn
     t.bbHasActed = true;
-    t.playersActedThisRound.add(2); // BB acted
+    t.playersActedThisRound!.push(2); // BB acted
     state = getBettingRoundState(t);
     expect(state.isComplete).toBe(true);
   });
@@ -68,7 +68,7 @@ describe('Round completion', () => {
     const t = {
       ...tableBase(seats, 'flop'),
       currentBet: 0,
-      playersActedThisRound: new Set([0,1,2]), // simulate that all active have acted
+      playersActedThisRound: [0,1,2], // simulate that all active have acted
       roundStartActor: 0, // Assume 0 started the round
     } as Table;
 

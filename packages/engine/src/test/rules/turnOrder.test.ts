@@ -50,7 +50,7 @@ function createTable(seats: Seat[], button: number, options: Partial<Table> = {}
     blinds: { sb: 5, bb: 10 },
     handNumber: 1,
     timestamp: Date.now(),
-    playersActedThisRound: new Set<number>(), // Default initialization
+    playersActedThisRound: [], // Default initialization
     roundStartActor: actor !== undefined ? actor : undefined, // Set roundStartActor based on actor option
     ...options,
   } as Table;
@@ -204,7 +204,7 @@ describe('Next Actor and Round Completion', () => {
       const seats = createSeats({ 0: 'P1', 1: 'P2', 2: 'P3' });
       const table = createTable(seats, 0, {
         actor: 1,
-        playersActedThisRound: new Set([0]), // Only P1 has acted
+        playersActedThisRound: [0], // Only P1 has acted
         roundStartActor: 0
       });
       
@@ -220,7 +220,7 @@ describe('Next Actor and Round Completion', () => {
         actor: 1,
         lastAggressor: 2, // P3 raised
         currentBet: 20,
-        playersActedThisRound: new Set([0, 2]), // P1 called, P3 raised
+        playersActedThisRound: [0, 2], // P1 called, P3 raised
         roundStartActor: 0
       });
       
@@ -241,7 +241,7 @@ describe('Next Actor and Round Completion', () => {
         actor: 1, // P2 just acted
         lastAggressor: 2, // P3 raised
         currentBet: 20,
-        playersActedThisRound: new Set([0, 1, 2]), // All have acted
+        playersActedThisRound: [0, 1, 2], // All have acted
         roundStartActor: 0
       });
       
@@ -267,7 +267,7 @@ describe('Next Actor and Round Completion', () => {
         currentBet: 10, // Still at BB level
         bbSeat: 2,
         bbHasActed: false,
-        playersActedThisRound: new Set([0, 1]) // UTG and SB acted
+        playersActedThisRound: [0, 1] // UTG and SB acted
       });
       
       const result = getNextActor(table);
@@ -289,7 +289,7 @@ describe('Next Actor and Round Completion', () => {
         currentBet: 10,
         bbSeat: 2,
         bbHasActed: true, // BB has now acted
-        playersActedThisRound: new Set([0, 1, 2])
+        playersActedThisRound: [0, 1, 2]
       });
       
       const result = getNextActor(table);
@@ -311,7 +311,7 @@ describe('Next Actor and Round Completion', () => {
         lastAggressor: 0, // UTG raised
         bbSeat: 2,
         bbHasActed: false,
-        playersActedThisRound: new Set([0, 1]) // UTG acted, SB called
+        playersActedThisRound: [0, 1] // UTG acted, SB called
       });
       
       const result = getNextActor(table);

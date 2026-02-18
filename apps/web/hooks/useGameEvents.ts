@@ -31,7 +31,7 @@ export function useGameEvents() {
         case "DEAL_FLOP":
         case "DEAL_TURN":
         case "DEAL_RIVER":
-          playSound("CARD_DEAL");
+          // playSound("CARD_DEAL");
           break;
 
         case "PLAYER_ACTION_APPLIED":

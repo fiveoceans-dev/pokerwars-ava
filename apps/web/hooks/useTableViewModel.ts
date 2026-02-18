@@ -150,6 +150,8 @@ export function useTableViewModel(_timer?: number | null) {
         playerAction({ type: "CALL" });
         break;
       case "Bet":
+        playerAction({ type: "BET", amount: bet });
+        break;
       case "Raise":
         playerAction({ type: "RAISE", amount: bet });
         break;

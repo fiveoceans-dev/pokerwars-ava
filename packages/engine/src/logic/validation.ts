@@ -160,7 +160,7 @@ function validateCall(table: Table, seat: Seat): ActionValidation {
 
   if (toCall === 0) {
     // If nothing to call, treating CALL as CHECK is a professional robustness pattern
-    return { valid: true, normalizedAmount: 0 };
+    return { valid: true, normalizedAmount: 0, normalizedAction: "CHECK" };
   }
 
   const callAmount = Math.min(toCall, seat.chips);

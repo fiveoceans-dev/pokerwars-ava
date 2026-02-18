@@ -13,7 +13,7 @@ export type SoundEffect =
   | "POT_WIN";
 
 const SOUND_MAP: Record<SoundEffect, string> = {
-  CARD_DEAL: "/sounds/shuffling-cards.mp3",
+  // CARD_DEAL: "/sounds/shuffling-cards.mp3",
   CHIP_BET: "/sounds/poker-chip-drop.mp3",
   CHIP_ALLIN: "/sounds/allin-push-poker-chips.mp3",
   POT_WIN: "/sounds/handfull-of-poker-chips-drop.mp3",

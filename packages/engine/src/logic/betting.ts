@@ -15,6 +15,7 @@ import {
   getBettingRoundState,
   getToCallAmount,
   canCheck,
+  isBettingRoundComplete,
 } from "../utils/ringOrder";
 
 import { validateAction } from "./validation";
@@ -159,14 +160,6 @@ export function applyAction(
   };
 }
 
-
-/**
- * Check if betting round is complete
- */
-export function isBettingRoundComplete(table: Table): boolean {
-  const state = getBettingRoundState(table);
-  return state.isComplete;
-}
 
 /**
  * Get next street after current betting round completes

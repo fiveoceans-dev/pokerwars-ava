@@ -83,7 +83,7 @@ export function startHand(
     winnersPids: [],
     autoRevealAll: false,
     // Reset action tracking for new hand
-    playersActedThisRound: new Set<number>(),
+    playersActedThisRound: [],
     roundStartActor: undefined,
     // Reset all seats for new hand - only active players participate
     seats: table.seats.map((seat) => {
@@ -287,23 +287,28 @@ export function endHand(table: Table): StateTransition {
     .filter((seat) => seat.pid && seat.chips === 0)
     .map((seat) => ({ id: seat.id, pid: seat.pid! }));
 
-  // Keep seats intact to preserve identity; do not auto-remove broke players
+  // Keep seats intact to preserve identity; clear per-hand transient state
   const newSeats = table.seats.map((seat) => {
+    // Shared reset for all players at hand end
+    const baseReset = {
+      ...seat,
+      committed: 0,
+      streetCommitted: 0,
+      holeCards: undefined as [number, number] | undefined,
+      action: undefined as any
+    };
+
     if (seat.pid && seat.chips === 0) {
       console.log(
         `💸 [Reducer] Player ${seat.pid} busted at seat ${seat.id} — marking sit out (preserving seat)`,
       );
-      // Preserve identity; clear transient per-hand fields and update status
       return {
-        ...seat,
-        committed: 0,
-        streetCommitted: 0,
-        status: "sittingOut" as any, // Mark as sitting out due to no chips
-        holeCards: undefined,
-        action: undefined,
+        ...baseReset,
+        status: "sittingOut" as any,
       };
     }
-    return seat;
+    
+    return baseReset;
   });
 
   // Calculate next button using game rules

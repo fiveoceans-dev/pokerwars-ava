@@ -173,7 +173,7 @@ export function enterStreet(
     burns,
     deckIndex: nextDeckIndex, // Update deck position after dealing cards
     // Reset action tracking for new street
-    playersActedThisRound: new Set<number>(),
+    playersActedThisRound: [],
     roundStartActor: actor, // First actor of this new street
     // Preserve BB option state for preflop
     ...(street === "preflop" && {

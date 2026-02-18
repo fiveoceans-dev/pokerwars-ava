@@ -199,7 +199,7 @@ describe('All-In Processing', () => {
         currentBet: 55,
         lastRaiseSize: 40, // Original raise was 40
         lastAggressor: 0, // P1 was original aggressor, not short stack
-        playersActedThisRound: new Set([0, 1]) // P1 and short stack acted
+        playersActedThisRound: [0, 1] // P1 and short stack acted
       });
       
       // P3 should only be able to call or fold, not re-raise (since short all-in doesn't reopen)
@@ -209,7 +209,7 @@ describe('All-In Processing', () => {
       
       // Let's adjust the test to a player who ALREADY acted.
       table.seats[2].streetCommitted = 50;
-      table.playersActedThisRound.add(2);
+      table.playersActedThisRound!.push(2);
       table.actor = 0; // Back to P1
       
       const p1Actions = validateAction(table, 0, 'RAISE', 40);
@@ -407,7 +407,7 @@ describe('Betting Round Completion with All-Ins', () => {
     ]);
     const table = createTable(seats, { 
       actor: 1,
-      playersActedThisRound: new Set([0]), // Only P1 acted
+      playersActedThisRound: [0], // Only P1 acted
       roundStartActor: 0
     });
     

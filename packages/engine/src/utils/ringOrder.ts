@@ -125,7 +125,7 @@ export function getNextActor(table: Table): NextActorResult {
  * Check if betting round is complete based on action sequence tracking
  * This is the improved version that tracks who has acted vs amount-based logic
  */
-function isBettingRoundComplete(table: Table, nextActorIndex: number): boolean {
+export function isBettingRoundComplete(table: Table, nextActorIndex: number): boolean {
   const { seats, lastAggressor, currentBet, playersActedThisRound, roundStartActor } = table;
   
   // BB OPTION: Special preflop logic via canonical rules
@@ -145,7 +145,7 @@ function isBettingRoundComplete(table: Table, nextActorIndex: number): boolean {
   if (playersActedThisRound && roundStartActor !== undefined) {
     // All active players must have acted at least once
     const allActiveHaveActed = activePlayers.every(seatId => 
-      playersActedThisRound.has(seatId)
+      playersActedThisRound.includes(seatId)
     );
     
     if (!allActiveHaveActed) {

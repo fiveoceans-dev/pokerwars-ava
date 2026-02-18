@@ -208,7 +208,15 @@ export class EventEngine extends EventEmitter {
    * Rehydrate table state from persistence
    */
   rehydrate(table: Table): void {
-    this.table = { ...table };
+    // Normalization guard: ensure action sequence tracking is valid array (not {} from Set serialization)
+    const normalizedTable = { ...table };
+    
+    if (normalizedTable.playersActedThisRound && !Array.isArray(normalizedTable.playersActedThisRound)) {
+      logger.warn(`♻️ [EventEngine] Coercing playersActedThisRound from ${typeof normalizedTable.playersActedThisRound} to []`);
+      normalizedTable.playersActedThisRound = [];
+    }
+    
+    this.table = normalizedTable;
     logger.info(`♻️ [EventEngine] Rehydrated table ${this.table.id} state (hand ${this.table.handNumber})`);
     this.emit("stateChanged", this.getState());
   }

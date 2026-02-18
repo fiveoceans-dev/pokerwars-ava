@@ -50,6 +50,7 @@ describe('Available actions', () => {
     t.seats[2].committed = t.seats[2].streetCommitted = 10; // BB
     t.currentBet = 10;
     t.bbSeat = 2; t.bbHasActed = false;
+    t.actor = 0; // UTG acts first
     // UTG (seat 0) acts first; toCall=10
     const utgActions = getAvailableActions(t, 0);
     expect(utgActions).toContain('FOLD');

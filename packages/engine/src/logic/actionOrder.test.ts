@@ -73,7 +73,12 @@ describe("preflop BB option flow", () => {
     const table0 = baseTable(seats, 0, 5, 10);
 
     // Post blinds
-    const afterBlinds = { ...table0, phase: "preflop" as const } as Table;
+    const afterBlinds = {
+      ...table0,
+      phase: "preflop" as const,
+      playersActedThisRound: new Set<number>(), // Initialize here
+      roundStartActor: undefined, // Initialize here
+    } as Table;
     afterBlinds.seats = afterBlinds.seats.map((s) => ({ ...s }));
     // SB posts 5
     afterBlinds.seats[1].chips -= 5;
@@ -89,20 +94,31 @@ describe("preflop BB option flow", () => {
     afterBlinds.bbHasActed = false;
 
     // UTG (seat 0) acts first and folds
-    const t1 = { ...afterBlinds, actor: 0 } as Table;
+    const t1 = {
+      ...afterBlinds,
+      actor: 0,
+      playersActedThisRound: new Set(afterBlinds.playersActedThisRound), // Ensure new Set
+      roundStartActor: 0, // UTG is the first actor of the round
+    } as Table;
     t1.seats = t1.seats.map((s) => ({ ...s }));
     t1.seats[0].status = "folded";
+    t1.playersActedThisRound.add(0); // UTG acted
     const n1 = getNextActor(t1);
     expect(n1.isComplete).toBe(false);
     expect(n1.actor).toBe(1); // SB next
 
     // SB (seat 1) acts and calls to 10
-    const t2 = { ...t1, actor: 1 } as Table;
+    const t2 = {
+      ...t1,
+      actor: 1,
+      playersActedThisRound: new Set(t1.playersActedThisRound), // Ensure new Set
+    } as Table;
     t2.seats = t2.seats.map((s) => ({ ...s }));
     const toCall = 10 - t2.seats[1].streetCommitted; // 5
     t2.seats[1].chips -= toCall;
     t2.seats[1].committed += toCall;
     t2.seats[1].streetCommitted += toCall;
+    t2.playersActedThisRound.add(1); // SB acted
     const n2 = getNextActor(t2);
     // Action should return to BB with option
     expect(n2.isComplete).toBe(false);
@@ -115,7 +131,12 @@ describe("bet/raise ordering and completion", () => {
     // 3-handed, button=0 → SB=1, BB=2, UTG=0 acts first
     const seats = makeSeats(["A", "B", "C"], 100);
     const table0 = baseTable(seats, 0, 5, 10);
-    const t = { ...table0, phase: "preflop" as const } as Table;
+    const t = {
+      ...table0,
+      phase: "preflop" as const,
+      playersActedThisRound: new Set<number>(), // Initialize here
+      roundStartActor: undefined, // Will be set by first action
+    } as Table;
     t.seats = t.seats.map((s) => ({ ...s }));
     // Post blinds
     t.seats[1].chips -= 5; t.seats[1].committed = 5; t.seats[1].streetCommitted = 5;
@@ -127,22 +148,35 @@ describe("bet/raise ordering and completion", () => {
     const raiseTo = 30;
     t.seats[0].chips -= raiseTo; t.seats[0].committed = raiseTo; t.seats[0].streetCommitted = raiseTo;
     t.currentBet = 30; t.lastAggressor = 0; t.lastRaiseSize = 20;
+    t.playersActedThisRound.add(0); // UTG acted
+    t.roundStartActor = t.actor; // UTG is first actor of the round
     const n1 = getNextActor(t);
     expect(n1.isComplete).toBe(false);
     expect(n1.actor).toBe(1); // SB next
 
     // SB folds
-    const t2 = { ...t, seats: t.seats.map((s) => ({ ...s })) } as Table;
-    t2.actor = 1; t2.seats[1].status = "folded";
+    const t2 = {
+      ...t,
+      seats: t.seats.map((s) => ({ ...s })),
+      actor: 1,
+      playersActedThisRound: new Set(t.playersActedThisRound), // Ensure new Set
+    } as Table;
+    t2.seats[1].status = "folded";
+    t2.playersActedThisRound.add(1); // SB acted
     const n2 = getNextActor(t2);
     expect(n2.isComplete).toBe(false);
     expect(n2.actor).toBe(2); // BB next
 
     // BB calls to 30
-    const t3 = { ...t2, seats: t2.seats.map((s) => ({ ...s })) } as Table;
-    t3.actor = 2;
+    const t3 = {
+      ...t2,
+      seats: t2.seats.map((s) => ({ ...s })),
+      actor: 2,
+      playersActedThisRound: new Set(t2.playersActedThisRound), // Ensure new Set
+    } as Table;
     const toCall = 30 - t3.seats[2].streetCommitted; // 20
     t3.seats[2].chips -= toCall; t3.seats[2].committed += toCall; t3.seats[2].streetCommitted += toCall;
+    t3.playersActedThisRound.add(2); // BB acted
     const n3 = getNextActor(t3);
     // Action should be complete (would return to aggressor and others matched)
     expect(n3.isComplete).toBe(true);
@@ -157,13 +191,21 @@ describe("edge cases with all-in blinds", () => {
     const table = baseTable(seats, 0, 5, 10);
 
     // Post blinds: SB posts 5 and is all-in, BB posts 10
-    const after = { ...table, phase: "preflop" as const } as Table;
+    const after = {
+      ...table,
+      phase: "preflop" as const,
+      playersActedThisRound: new Set<number>(), // Initialize here
+      roundStartActor: undefined,
+    } as Table;
     after.seats = after.seats.map((s) => ({ ...s }));
     // SB
     after.seats[0].chips = 0;
     after.seats[0].committed = 5;
     after.seats[0].streetCommitted = 5;
     after.seats[0].status = "allin";
+    after.playersActedThisRound.add(0); // SB acted
+    after.roundStartActor = 0; // SB is the first actor of the round
+
     // BB
     after.seats[1].chips -= 10;
     after.seats[1].committed = 10;
@@ -172,6 +214,7 @@ describe("edge cases with all-in blinds", () => {
     after.lastRaiseSize = 10;
     after.bbSeat = 1;
     after.bbHasActed = false;
+    after.playersActedThisRound.add(1); // BB acted
 
     // First actor should be BB (only actionable player)
     const first = getFirstActor(after as any, true);

@@ -74,21 +74,20 @@ export function processShowdown(table: Table, results: any[]): StateTransition {
     }
   }
 
-  // Add the mandatory shower to the revealed set
+  // Add all players still in hand to the revealed set
   const revealedSet = new Set((table.revealedPids || []).map((p) => p.toLowerCase()));
-  if (firstShowerPid) {
-    console.log(`🃏 [Reducer] ${firstShowerPid} must show first (Last Aggressor/Position)`);
-    revealedSet.add(firstShowerPid.toLowerCase());
-  }
+  playersInHand.forEach(seat => {
+    if (seat.pid) revealedSet.add(seat.pid.toLowerCase());
+  });
 
   const nextState = {
     ...table,
     phase: "showdown" as Phase,
     // Clear the actor since no more betting
     actor: undefined,
-    // Keep existing revealedPids (explicit reveals) + mandatory first shower
+    // Reveal all remaining hands for the showdown
     revealedPids: Array.from(revealedSet),
-    autoRevealAll: false, // Don't force face-up for everyone
+    autoRevealAll: true, // Force face-up for everyone in hand
   };
 
   const sideEffects: SideEffect[] = [

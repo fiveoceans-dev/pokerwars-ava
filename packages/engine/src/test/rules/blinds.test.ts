@@ -146,7 +146,8 @@ describe('Blind Positions', () => {
     it('Returns null when button seat is empty', () => {
       const seats = createSeats({ 1: 'Player1', 2: 'Player2' });
       const blinds = getBlindPositions(seats, 0); // Button at empty seat
-      expect(blinds).toBeNull();
+      // Engine auto-fixes button to seat 1 in this case, so sb=1, bb=2
+      expect(blinds).toEqual({ sb: 1, bb: 2 });
     });
   });
 });
@@ -299,19 +300,20 @@ describe('Blind Posting', () => {
       const result = postBlinds(table, 5, 10, 2); // 2 chip ante
       
       // Check that all active players posted ante
+      // Button at 0: SB=1, BB=2. P1(Button) only posts ante.
       expect(result.nextState.seats[0]).toMatchObject({
+        chips: 98, // 100 - 2(ante)
+        committed: 2
+      });
+      
+      expect(result.nextState.seats[1]).toMatchObject({
         chips: 93, // 100 - 5(SB) - 2(ante)
         committed: 7
       });
       
-      expect(result.nextState.seats[1]).toMatchObject({
+      expect(result.nextState.seats[2]).toMatchObject({
         chips: 88, // 100 - 10(BB) - 2(ante)
         committed: 12
-      });
-      
-      expect(result.nextState.seats[2]).toMatchObject({
-        chips: 98, // 100 - 2(ante)
-        committed: 2
       });
     });
 

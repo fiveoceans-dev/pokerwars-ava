@@ -642,6 +642,21 @@ class WebSocketFSMBridge extends EventEmitter {
         this.emit("broadcast", tableId, { type: "HAND_END" });
         break;
 
+      case "Action": {
+        const seat = table.seats[(event as any).seat];
+        if (seat?.pid) {
+          this.emit("broadcast", tableId, {
+            type: "PLAYER_ACTION_APPLIED",
+            tableId,
+            playerId: seat.pid,
+            action: (event as any).action,
+            amount: (event as any).amount,
+            seat: (event as any).seat,
+          } as any);
+        }
+        break;
+      }
+
       case "Payout": {
         try {
           const distributions = (event as any).distributions || [];

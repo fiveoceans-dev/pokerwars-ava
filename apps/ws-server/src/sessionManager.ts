@@ -60,17 +60,30 @@ export class SessionManager {
   
     /** Prevent multiple logins with the same id */
     attach(ws: WebSocket, userId: string): Session | undefined {
-      const existing = this.byUserId.get(userId);
-      if (existing && existing.socket !== ws) return undefined;
+      const normalizedUserId = userId.toLowerCase().trim();
+      const existing = this.byUserId.get(normalizedUserId);
+      
+      // If session exists for this user, check if it's the same socket or needs reattachment
+      if (existing) {
+        if (existing.socket === ws) return existing;
+        
+        // Re-bind user to this new socket (similar to replaceSocket)
+        console.log(`🔄 [SessionManager] Reattaching user ${normalizedUserId} to new socket`);
+        this.sessions.delete(existing.socket);
+        existing.socket = ws;
+        this.sessions.set(ws, existing);
+        return existing;
+      }
+
       let session = this.sessions.get(ws);
       if (!session) {
         session = { sessionId: createAddress(), socket: ws };
         this.sessions.set(ws, session);
         this.bySessionId.set(session.sessionId, session);
       }
-      // Preserve existing roomId when attaching userId
-      session.userId = userId;
-      this.byUserId.set(userId, session);
+      // Bind wallet identity to session
+      session.userId = normalizedUserId;
+      this.byUserId.set(normalizedUserId, session);
       return session;
     }
   

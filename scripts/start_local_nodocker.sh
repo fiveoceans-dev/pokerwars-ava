@@ -59,6 +59,13 @@ POSTGRES_USER="${POSTGRES_USER:-$(get_env_var POSTGRES_USER)}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(get_env_var POSTGRES_PASSWORD)}"
 POSTGRES_DB="${POSTGRES_DB:-$(get_env_var POSTGRES_DB)}"
 POSTGRES_PORT_ENV="${POSTGRES_PORT:-$(get_env_var POSTGRES_PORT)}"
+DATABASE_URL_ENV="${DATABASE_URL:-$(get_env_var DATABASE_URL)}"
+
+if [[ -z "${POSTGRES_PORT_ENV}" && -n "${DATABASE_URL_ENV}" ]]; then
+  if [[ "${DATABASE_URL_ENV}" =~ @[^:/?#]+:([0-9]+) ]]; then
+    POSTGRES_PORT_ENV="${BASH_REMATCH[1]}"
+  fi
+fi
 
 # Defaults if missing
 POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -145,6 +152,18 @@ maybe_start_db
 
 # Construct DATABASE_URL using the discovered port
 export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${DB_PORT}/${POSTGRES_DB}?schema=public"
+
+# Keep workspace ws-server env in sync with the runtime URL so local scripts and
+# direct app runs resolve the same database endpoint.
+WS_ENV_FILE="$ROOT_DIR/apps/ws-server/.env"
+if [[ -f "$WS_ENV_FILE" ]]; then
+  WS_ENV_TMP="${WS_ENV_FILE}.tmp"
+  grep -v '^DATABASE_URL=' "$WS_ENV_FILE" > "$WS_ENV_TMP" || true
+  echo "DATABASE_URL=$DATABASE_URL" >> "$WS_ENV_TMP"
+  mv "$WS_ENV_TMP" "$WS_ENV_FILE"
+else
+  echo "DATABASE_URL=$DATABASE_URL" > "$WS_ENV_FILE"
+fi
 
 # Run migrations/seed on host DB
 if [[ "${AUTO_MIGRATE}" == "true" ]]; then

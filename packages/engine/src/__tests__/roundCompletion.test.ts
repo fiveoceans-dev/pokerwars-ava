@@ -27,37 +27,51 @@ function tableBase(seats: Seat[], phase: any = 'preflop'): Table {
 describe('Round completion', () => {
   it('preflop: BB option delays completion until BB acts', () => {
     const seats = makeSeats([0,1,2]);
-    const t = tableBase(seats, 'preflop');
+    const t = {
+      ...tableBase(seats, 'preflop'),
+      playersActedThisRound: new Set<number>(),
+      roundStartActor: 0, // UTG is first to act
+    } as Table;
+
     // blinds posted: SB seat1=5, BB seat2=10
     t.seats[1].streetCommitted = 5; t.seats[1].committed = 5;
     t.seats[2].streetCommitted = 10; t.seats[2].committed = 10;
     t.currentBet = 10; t.bbSeat = 2; t.bbHasActed = false;
+    t.actor = 0; // UTG acts first
 
     // UTG folds
     t.seats[0].status = 'folded' as any;
+    t.playersActedThisRound.add(0); // UTG acted
     let state = getBettingRoundState(t);
     expect(state.isComplete).toBe(false);
 
     // SB calls to 10
+    t.actor = 1; // SB turn
     t.seats[1].chips -= 5;
     t.seats[1].committed = 10;
     t.seats[1].streetCommitted = 10;
+    t.playersActedThisRound.add(1); // SB acted
     state = getBettingRoundState(t);
     // Action should return to BB option; not complete yet
     expect(state.isComplete).toBe(false);
 
     // BB checks (bbHasActed true elsewhere in engine after action); emulate completion
+    t.actor = 2; // BB turn
     t.bbHasActed = true;
+    t.playersActedThisRound.add(2); // BB acted
     state = getBettingRoundState(t);
     expect(state.isComplete).toBe(true);
   });
 
   it('postflop: no bet -> completes when all active have acted', () => {
     const seats = makeSeats([0,1,2]);
-    const t = tableBase(seats, 'flop');
-    t.currentBet = 0;
-    // simulate that all active have acted (playersActedThisRound Set)
-    (t as any).playersActedThisRound = new Set([0,1,2]);
+    const t = {
+      ...tableBase(seats, 'flop'),
+      currentBet: 0,
+      playersActedThisRound: new Set([0,1,2]), // simulate that all active have acted
+      roundStartActor: 0, // Assume 0 started the round
+    } as Table;
+
     const state = getBettingRoundState(t);
     expect(state.isComplete).toBe(true);
   });

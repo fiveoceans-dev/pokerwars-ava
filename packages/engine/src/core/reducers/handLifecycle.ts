@@ -82,6 +82,9 @@ export function startHand(
     revealedPids: [],
     winnersPids: [],
     autoRevealAll: false,
+    // Reset action tracking for new hand
+    playersActedThisRound: new Set<number>(),
+    roundStartActor: undefined,
     // Reset all seats for new hand - only active players participate
     seats: table.seats.map((seat) => {
       if (!seat.pid) {
@@ -182,49 +185,50 @@ export function postBlinds(
   console.log(
     `🃏 [Reducer] Posting blinds - ${isHeadsUp ? "Heads-up" : "Multi-way"} (${activeCount} players)`,
   );
-  console.log(`   SB: seat ${sbIndex} (${newSeats[sbIndex]?.pid})`);
-  console.log(`   BB: seat ${bbIndex} (${newSeats[bbIndex]?.pid})`);
 
-  // Post small blind
-  if (sbIndex !== -1) {
-    const sbSeat = newSeats[sbIndex];
-    const sbAmount = Math.min(sb, sbSeat.chips);
-    newSeats[sbIndex] = {
-      ...sbSeat,
-      chips: sbSeat.chips - sbAmount,
-      committed: sbAmount,
-      streetCommitted: sbAmount,
-      status: sbSeat.chips === sbAmount ? "allin" : "active",
-    };
-  }
-
-  // Post big blind
-  if (bbIndex !== -1) {
-    const bbSeat = newSeats[bbIndex];
-    const bbAmount = Math.min(bb, bbSeat.chips);
-    newSeats[bbIndex] = {
-      ...bbSeat,
-      chips: bbSeat.chips - bbAmount,
-      committed: bbAmount,
-      streetCommitted: bbAmount,
-      status: bbSeat.chips === bbAmount ? "allin" : "active",
-    };
-  }
-
-  // Post antes if specified
+  // 1. Post antes first from ALL active players
   if (ante && ante > 0) {
     for (let i = 0; i < newSeats.length; i++) {
       const seat = newSeats[i];
-      if (seat.status === "active") {
+      if (seat.status === "active" && seat.pid) {
         const anteAmount = Math.min(ante, seat.chips);
         newSeats[i] = {
           ...seat,
           chips: seat.chips - anteAmount,
-          committed: seat.committed + anteAmount,
-          streetCommitted: seat.streetCommitted + anteAmount,
+          committed: anteAmount,
+          streetCommitted: anteAmount,
+          status: seat.chips === anteAmount ? "allin" : "active",
         };
       }
     }
+  }
+
+  // 2. Post small blind
+  if (sbIndex !== -1) {
+    const sbSeat = newSeats[sbIndex];
+    // Player might already be all-in from ante
+    const sbAmount = Math.min(sb, sbSeat.chips);
+    newSeats[sbIndex] = {
+      ...sbSeat,
+      chips: sbSeat.chips - sbAmount,
+      committed: sbSeat.committed + sbAmount,
+      streetCommitted: sbSeat.streetCommitted + sbAmount,
+      status: (sbSeat.chips === sbAmount || sbSeat.status === "allin") ? "allin" : "active",
+    };
+  }
+
+  // 3. Post big blind
+  if (bbIndex !== -1) {
+    const bbSeat = newSeats[bbIndex];
+    // Player might already be all-in from ante/SB
+    const bbAmount = Math.min(bb, bbSeat.chips);
+    newSeats[bbIndex] = {
+      ...bbSeat,
+      chips: bbSeat.chips - bbAmount,
+      committed: bbSeat.committed + bbAmount,
+      streetCommitted: bbSeat.streetCommitted + bbAmount,
+      status: (bbSeat.chips === bbAmount || bbSeat.status === "allin") ? "allin" : "active",
+    };
   }
 
   // Calculate first actor using game rules
@@ -237,6 +241,7 @@ export function postBlinds(
     phase: "deal" as Phase, // Stay in deal phase - preflop will be set by EnterStreet
     seats: newSeats,
     blinds: { sb, bb, ante },
+    currentBet: bb, // CRITICAL: Set initial currentBet to BB
     bbSeat: bbIndex, // Track BB position for option logic
     bbHasActed: false, // BB hasn't acted yet
   };

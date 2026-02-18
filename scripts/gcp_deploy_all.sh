@@ -39,11 +39,15 @@ SUBS=(
   "_WEB_IMAGE_URI=$WEB_IMAGE_URI"
   "_WS_IMAGE_URI=$WS_IMAGE_URI"
 )
-sanitize() { echo "$1" | tr -d ""'
-"; }
+sanitize() {
+  echo "$1" | tr -d "\"'\r\n"
+}
 escape_subs() {
-  local v; v="$(sanitize "$1")"
-  v="${v//\/\}"; v="${v//,/\,}"; v="${v//=/\=}"
+  local v
+  v="$(sanitize "$1")"
+  v="${v//\\/\\\\}"
+  v="${v//,/\\,}"
+  v="${v//=/\\=}"
   echo "$v"
 }
 for var in "${NEXT_PUBLIC_VARS[@]}"; do
@@ -55,8 +59,8 @@ unset IFS
 
 # 3. Parallel Build
 echo "🚀 Building Web and WS images in parallel..."
-gcloud builds submit "$ROOT_DIR" 
-  --config "$ROOT_DIR/cloudbuild.all.yaml" 
+gcloud builds submit "$ROOT_DIR" \
+  --config "$ROOT_DIR/cloudbuild.all.yaml" \
   --substitutions="$SUBS_STR"
 
 # 4. Generate Env Files

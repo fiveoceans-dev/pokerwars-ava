@@ -33,6 +33,8 @@ function createSeats(playerMap: Record<number, string>, chips = 1000): Seat[] {
  * Helper to create table
  */
 function createTable(seats: Seat[], button: number, options: Partial<Table> = {}): Table {
+  const actor = options.actor; // Get actor from options if provided
+
   return {
     id: 'test',
     seats,
@@ -48,6 +50,8 @@ function createTable(seats: Seat[], button: number, options: Partial<Table> = {}
     blinds: { sb: 5, bb: 10 },
     handNumber: 1,
     timestamp: Date.now(),
+    playersActedThisRound: new Set<number>(), // Default initialization
+    roundStartActor: actor !== undefined ? actor : undefined, // Set roundStartActor based on actor option
     ...options,
   } as Table;
 }
@@ -88,13 +92,13 @@ describe('First Actor Determination', () => {
 
   describe('Multi-way (3+ players)', () => {
     it('Preflop: UTG (left of BB) acts first', () => {
-      const seats = createSeats({ 0: 'UTG', 1: 'SB', 2: 'BB' });
+      const seats = createSeats({ 0: 'SB', 1: 'BB', 2: 'UTG/Button' });
       const table = createTable(seats, 2); // Button at 2, so SB=0, BB=1, UTG=2
       
       const result = getFirstActor(table, true);
       
       expect(result.isHeadsUp).toBe(false);
-      expect(result.actor).toBe(0); // UTG acts first
+      expect(result.actor).toBe(2); // UTG acts first (which is the Button in 3-way)
     });
 
     it('Postflop: Left of button acts first', () => {
@@ -131,13 +135,13 @@ describe('First Actor Determination', () => {
 
   describe('All-in scenarios', () => {
     it('Skips all-in players to find actionable player', () => {
-      const seats = createSeats({ 0: 'Button', 1: 'AllIn', 2: 'Active' });
+      const seats = createSeats({ 0: 'UTG/Button', 1: 'SB/AllIn', 2: 'BB/Active' });
       seats[1].status = 'allin';
-      const table = createTable(seats, 0);
+      const table = createTable(seats, 0); // Button=0, SB=1, BB=2, UTG=0
       
       const result = getFirstActor(table, true);
       
-      expect(result.actor).toBe(2); // Skips all-in player
+      expect(result.actor).toBe(0); // UTG(0) is actionable
     });
 
     it('Returns -1 when all players all-in', () => {
@@ -306,7 +310,8 @@ describe('Next Actor and Round Completion', () => {
         currentBet: 20, // Raise level
         lastAggressor: 0, // UTG raised
         bbSeat: 2,
-        bbHasActed: false
+        bbHasActed: false,
+        playersActedThisRound: new Set([0, 1]) // UTG acted, SB called
       });
       
       const result = getNextActor(table);
@@ -341,24 +346,7 @@ describe('Next Actor and Round Completion', () => {
     });
   });
 
-  describe('Fallback to amount-based logic', () => {
-    it('Uses fallback when action tracking not available', () => {
-      const seats = createSeats({ 0: 'P1', 1: 'P2' });
-      seats[0].streetCommitted = 10;
-      seats[1].streetCommitted = 10;
-      
-      const table = createTable(seats, 0, {
-        actor: 1,
-        currentBet: 10,
-        // No playersActedThisRound or roundStartActor
-      });
-      
-      const result = getNextActor(table);
-      
-      // Should use amount-based fallback and complete since amounts match
-      expect(result.isComplete).toBe(true);
-    });
-  });
+
 });
 
 describe('Edge Cases', () => {

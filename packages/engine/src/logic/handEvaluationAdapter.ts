@@ -23,6 +23,7 @@ const HAND_DESCRIPTIONS = [
 
 export interface HandRank {
   score: number;      // Evaluator score (lower is better)
+  rank: number;       // Hand category (1-9, lower is better)
   cards: number[];    // Card indices used
   description: string; // Human-readable description (best-effort)
 }
@@ -43,6 +44,7 @@ export function evaluateHand(holeCards: [number, number], board: number[]): Hand
   const description = HAND_DESCRIPTIONS[rankCategory] || "Unknown Hand";
   return {
     score,
+    rank: rankCategory,
     cards: allCardIndices,
     description,
   };

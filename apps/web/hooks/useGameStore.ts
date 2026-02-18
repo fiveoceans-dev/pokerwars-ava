@@ -46,6 +46,23 @@ function isCountdownType(value: unknown): value is CountdownType {
   return typeof value === "string" && countdownOrder.includes(value as CountdownType);
 }
 
+/**
+ * Custom JSON reviver to convert numeric strings back to numbers for specific fields
+ */
+const numericReviver = (key: string, value: any) => {
+  // Fields that should always be numbers in the engine/app
+  const numericFields = [
+    "chips", "committed", "streetCommitted", "amount", "pot", 
+    "currentBet", "lastRaiseSize", "smallBlind", "bigBlind", 
+    "ante", "handNumber", "timestamp"
+  ];
+  if (numericFields.includes(key) && typeof value === "string") {
+    const parsed = parseFloat(value);
+    if (!isNaN(parsed)) return parsed;
+  }
+  return value;
+};
+
 function parseAmount(val: any): number {
   if (typeof val === 'number') return val;
   if (typeof val === 'string') {
@@ -379,6 +396,7 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         break;
       case "PLAYER_ACTION_APPLIED": {
         const name = shortAddress(msg.playerId);
+        console.log(`🎮 Action Applied: ${name} ${msg.action} ${msg.amount || ""}`);
         let text = ``;
         switch (msg.action) {
           case "FOLD": text = `${name} folds`; break;
@@ -398,7 +416,8 @@ export const useGameStore = create<GameStoreState>((set, get) => {
           const bets = [...s.playerBets];
           const chips = [...s.chips];
           const seatIdx = seatStore.getState().findSeatId(msg.playerId);
-          if (seatIdx >= 0) {
+          if (seatIdx !== undefined && seatIdx >= 0) {
+            console.log(`🏷️ Setting label "${msg.action}" for seat ${seatIdx}`);
             let label = "";
             switch (msg.action) {
               case "FOLD": label = "Fold"; states[seatIdx] = "folded"; break;
@@ -422,6 +441,8 @@ export const useGameStore = create<GameStoreState>((set, get) => {
                 chips: chips[seatIdx],
               });
             }
+          } else {
+            console.warn(`⚠️ Could not find seat for player ${msg.playerId} in seatStore`);
           }
           return { actionHistory, lastActionLabels: labels, playerStates: states, playerBets: bets, chips };
         });
@@ -614,56 +635,75 @@ export const useGameStore = create<GameStoreState>((set, get) => {
       console.warn("⚠️ applySnapshot called with empty room data");
       return;
     }
-    const seats = Array(9).fill(null);
-    const ids = Array(9).fill(null);
-    const hands = Array(9).fill(null);
-    const chips = Array(9).fill(0);
-    const bets = Array(9).fill(0);
-    const states = Array(9).fill("empty");
-    const labels = Array(9).fill(null);
+    console.log(`📸 Applying snapshot for table ${room.id || "unknown"} (Phase: ${room.phase})`);
+    
+    try {
+      const seats = Array(9).fill(null);
+      const ids = Array(9).fill(null);
+      const hands = Array(9).fill(null);
+      const chips = Array(9).fill(0);
+      const bets = Array(9).fill(0);
+      const states = Array(9).fill("empty");
+      const labels = Array(9).fill(null);
 
-    const currentWalletId = get().currentWalletId;
-    let mySeatIndex: number | undefined = undefined;
+      const currentWalletId = get().currentWalletId;
+      let mySeatIndex: number | undefined = undefined;
 
-    if (room.seats && Array.isArray(room.seats)) {
-      room.seats.forEach((seat: any, index: number) => {
-        if (seat.pid) {
-          if (currentWalletId && seat.pid.toLowerCase() === currentWalletId.toLowerCase()) mySeatIndex = index;
-          seats[index] = seat.nickname || shortAddress(seat.pid);
-          ids[index] = seat.pid;
-          if (seat.holeCards?.length === 2) hands[index] = [seat.holeCards[0], seat.holeCards[1]];
-          else if (shouldHaveCards(seat, room.phase)) hands[index] = "encrypted";
-          chips[index] = parseAmount(seat.chips);
-          bets[index] = parseAmount(seat.streetCommitted);
-          states[index] = seat.action === "SITTING_OUT" ? "sittingOut" : seat.status || "empty";
-          
-          seatStore.getState().assignSeat(index, { playerId: seat.pid, name: seats[index], chips: chips[index] });
-        } else {
-          seatStore.getState().clearSeat(index);
-        }
+      if (room.seats && Array.isArray(room.seats)) {
+        room.seats.forEach((seat: any, index: number) => {
+          if (seat.pid) {
+            if (currentWalletId && seat.pid.toLowerCase() === currentWalletId.toLowerCase()) mySeatIndex = index;
+            seats[index] = seat.nickname || shortAddress(seat.pid);
+            ids[index] = seat.pid;
+            if (seat.holeCards?.length === 2) hands[index] = [seat.holeCards[0], seat.holeCards[1]];
+            else if (shouldHaveCards(seat, room.phase)) hands[index] = "encrypted";
+                      chips[index] = parseAmount(seat.chips);
+                      bets[index] = parseAmount(seat.streetCommitted);
+                      states[index] = seat.action === "SITTING_OUT" ? "sittingOut" : seat.status || "empty";
+                      
+                      // Populate action labels from snapshot
+                      if (seat.action && seat.action !== "SITTING_OUT") {
+                        const actionMap: Record<string, string> = {
+                          "FOLD": "Fold",
+                          "CHECK": "Check",
+                          "CALL": "Call",
+                          "BET": "Bet",
+                          "RAISE": "Raise",
+                          "ALLIN": "All In"
+                        };
+                        labels[index] = actionMap[seat.action] || seat.action;
+                      }
+                      
+                      seatStore.getState().assignSeat(index, { playerId: seat.pid, name: seats[index], chips: chips[index] });          } else {
+            seatStore.getState().clearSeat(index);
+          }
+        });
+      }
+
+      const comm = Array(5).fill(null);
+      const newCards = room.communityCards ?? [];
+      newCards.forEach((c: any, i: number) => { comm[i] = c; });
+
+      const pot = (parseAmount(room.pot) || room.pots?.reduce((sum: number, pt: any) => sum + parseAmount(pt.amount), 0)) ?? 0;
+      const revealedSet = new Set((room.revealedPids || []).map((p: string) => p.toLowerCase()));
+      const cardsRevealed = ids.map((pid) => pid ? revealedSet.has(pid.toLowerCase()) : false);
+
+      const tableId = room.id || get().tableId;
+      const newTableSeats = new Map(get().tableSeats);
+      if (tableId && mySeatIndex !== undefined) newTableSeats.set(tableId, mySeatIndex);
+
+      set({
+        playerHands: hands, community: comm, chips, playerBets: bets, playerStates: states, players: seats, playerIds: ids,
+        tableMaxPlayers: maxPlayers ?? get().tableMaxPlayers, tableType: room.tableType ?? room.type ?? get().tableType,
+        cardsRevealed, lastActionLabels: labels, dealerIndex: room.dealerIndex ?? null, pot, tableSeats: newTableSeats, tableId,
+        currentTurn: room.actor !== undefined ? room.actor : null,
+        street: phaseToStreet[room.phase] ?? 0, phase: room.phase ?? null,
+        smallBlind: room.smallBlind ?? get().smallBlind, bigBlind: room.bigBlind ?? get().bigBlind, minRaise: room.minRaise ?? room.bigBlind ?? get().minRaise,
       });
+      console.log(`✅ Snapshot applied successfully for ${tableId}`);
+    } catch (err) {
+      console.error("❌ Failed to apply table snapshot:", err, room);
     }
-
-    const comm = Array(5).fill(null);
-    const newCards = room.communityCards ?? [];
-    newCards.forEach((c: any, i: number) => { comm[i] = c; });
-
-    const pot = (parseAmount(room.pot) || room.pots?.reduce((sum: number, pt: any) => sum + parseAmount(pt.amount), 0)) ?? 0;
-    const revealedSet = new Set((room.revealedPids || []).map((p: string) => p.toLowerCase()));
-    const cardsRevealed = ids.map((pid) => pid ? revealedSet.has(pid.toLowerCase()) : false);
-
-    const tableId = room.id || get().tableId;
-    const newTableSeats = new Map(get().tableSeats);
-    if (tableId && mySeatIndex !== undefined) newTableSeats.set(tableId, mySeatIndex);
-
-    set({
-      playerHands: hands, community: comm, chips, playerBets: bets, playerStates: states, players: seats, playerIds: ids,
-      tableMaxPlayers: maxPlayers ?? get().tableMaxPlayers, tableType: room.tableType ?? room.type ?? get().tableType,
-      cardsRevealed, lastActionLabels: labels, dealerIndex: room.dealerIndex ?? null, pot, tableSeats: newTableSeats, tableId,
-      currentTurn: room.actor !== undefined ? room.actor : null,
-      street: phaseToStreet[room.phase] ?? 0, phase: room.phase ?? null,
-      smallBlind: room.smallBlind ?? get().smallBlind, bigBlind: room.bigBlind ?? get().bigBlind, minRaise: room.minRaise ?? room.bigBlind ?? get().minRaise,
-    });
   }
 
   const connectWebSocket = () => {
@@ -671,9 +711,19 @@ export const useGameStore = create<GameStoreState>((set, get) => {
     const wsUrl = resolveWebSocketUrl();
     if (!wsUrl) return;
     socket = new WebSocket(wsUrl);
-    socket.onmessage = (ev) => {
-      try { processServerEvent(JSON.parse(ev.data as string)); } catch {}
-    };
+    
+    socket.addEventListener("message", (ev) => {
+      try {
+        const msg = JSON.parse(ev.data as string, numericReviver);
+        if (msg.type !== "TABLE_SNAPSHOT") {
+          console.log(`📨 WebSocket Event: ${msg.type}`, msg);
+        }
+        processServerEvent(msg);
+      } catch (err) {
+        console.error("❌ Failed to parse or process WebSocket message:", err, ev.data);
+      }
+    });
+
     socket.onopen = () => {
       reconnectAttempts = 0;
       set({ connectionState: "connected", connectionError: null });

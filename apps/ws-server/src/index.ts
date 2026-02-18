@@ -9,6 +9,7 @@
  */
 
 import { config as dotenvConfig } from 'dotenv';
+// Keep shell-provided env vars (from local/GCP scripts) as highest priority.
 dotenvConfig({ override: true });
 import { createServer, type IncomingMessage } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -1056,9 +1057,12 @@ function sendSanitizedSnapshot(ws: WebSocket, session: Session, roomId: string, 
 
 function broadcast(roomId: string, event: ServerEvent): void {
   let sentCount = 0;
+  const clientStates: string[] = [];
 
   wss.clients.forEach((client) => {
     const session = sessions.get(client);
+    const readyState = client.readyState === WebSocket.OPEN ? "OPEN" : "CLOSED/CONNECTING";
+    
     if (session?.roomId === roomId && client.readyState === WebSocket.OPEN) {
       try {
         let payload: any = event;
@@ -1068,9 +1072,6 @@ function broadcast(roomId: string, event: ServerEvent): void {
           const sanitized = sanitizeTableForSession((event as any).table, session, roomId);
           payload = { ...event, table: sanitized };
         } else if (event.type === "DEAL_HOLE") {
-          // DEAL_HOLE arrives from bridge with all cards in a map: { pid: [c1, c2] }
-          // We must transform it into the client-expected format: { seat, cards }
-          // BUT only if this session is the owner of those cards.
           const allCards = (event as any).cards || {};
           const myPid = session.userId || session.sessionId;
           const myCards = allCards[myPid.toLowerCase()];
@@ -1083,12 +1084,10 @@ function broadcast(roomId: string, event: ServerEvent): void {
               cards: myCards,
             };
           } else {
-            // Other players just see that cards were dealt (optional, but good for UI sync)
-            // They don't get the 'cards' field, or get it as 'encrypted'
             payload = {
               type: "DEAL_HOLE",
               tableId: roomId,
-              seat: -1, // Ignore for others
+              seat: -1,
               cards: "encrypted",
             };
           }
@@ -1097,13 +1096,18 @@ function broadcast(roomId: string, event: ServerEvent): void {
         const msg = JSON.stringify({ ...payload, tableId: roomId }, bigIntReplacer);
         client.send(msg);
         sentCount++;
+        clientStates.push(`[${session?.userId || session?.sessionId} OK]`);
       } catch (error) {
-        logger.error(`❌ Broadcast failed:`, error);
+        logger.error(`❌ Broadcast failed for client:`, error);
       }
+    } else if (session?.roomId === roomId) {
+      clientStates.push(`[${session?.userId || session?.sessionId} SKIP: ${readyState}]`);
     }
   });
 
-  logger.debug(`📡 Event: ${event.type}, Room: ${roomId}, Clients: ${sentCount}`);
+  if (sentCount > 0 || event.type !== "TABLE_SNAPSHOT") {
+    logger.info(`📡 Broadcast: ${event.type} to room ${roomId} (${sentCount} clients). States: ${clientStates.join(", ")}`);
+  }
 }
 
 function isHttpOriginAllowed(origin: string | undefined): boolean {
@@ -1511,10 +1515,18 @@ ws.on("message", async (data) => {
           }
           
           if (existing) {
+            logger.info(`🔄 [REATTACH] Reconnecting session ${existing.sessionId} for user ${existing.userId || "guest"}`);
             sessions.handleReconnect(existing);
-            sessions.expire(session);
+            
+            // Critical: Replace the temporary session with the reattached one
+            // Don't fully 'expire' the new session yet as it shares the same socket
+            const tempSession = session;
             sessions.replaceSocket(existing, ws);
-            session = existing;
+            session = existing; 
+            
+            // Now we can safely discard the temp session metadata (it was never bound to byUserId)
+            // But don't call full sessions.expire() as it might trigger LEAVE logic we don't want
+            
             applyGovernanceRoles(existing);
             void saveSession(existing);
             
@@ -1547,9 +1559,14 @@ ws.on("message", async (data) => {
           const normalizedUserId = command.userId.toLowerCase().trim();
           const attached = sessions.attach(ws, normalizedUserId);
           if (attached) {
-            session.userId = attached.userId;
+            // Switch current connection context to the attached session if it changed
+            if (attached !== session) {
+              logger.info(`🔄 [ATTACH] Switching context to existing session for user ${normalizedUserId}`);
+              session = attached;
+            }
+            
             applyGovernanceRoles(session);
-            session.roomId = session.roomId || attached.roomId;
+            session.roomId = session.roomId || (attached as any).roomId;
 
             // Proactively recover seat for immediate snapshot correctly
             if (session.roomId) {

@@ -203,12 +203,18 @@ describe('All-In Processing', () => {
       });
       
       // P3 should only be able to call or fold, not re-raise (since short all-in doesn't reopen)
-      const actions = ['FOLD', 'CALL', 'ALLIN']; // Should NOT include 'RAISE'
+      // Wait, standard poker rules: if a player hasn't acted yet, they can ALWAYS raise.
+      // Re-opening only applies to players who already acted.
+      // P3 has NOT acted yet (streetCommitted: 0). So P3 CAN raise.
       
-      const availableActions = result.nextState.seats[2].status === 'active' ? 
-        (table.currentBet > table.seats[2].streetCommitted ? ['FOLD', 'CALL', 'ALLIN'] : ['FOLD', 'CHECK', 'ALLIN']) : [];
+      // Let's adjust the test to a player who ALREADY acted.
+      table.seats[2].streetCommitted = 50;
+      table.playersActedThisRound.add(2);
+      table.actor = 0; // Back to P1
       
-      expect(availableActions).not.toContain('RAISE');
+      const p1Actions = validateAction(table, 0, 'RAISE', 40);
+      expect(p1Actions.valid).toBe(false);
+      expect(p1Actions.error).toContain('capped');
     });
   });
 
@@ -273,6 +279,7 @@ describe('Side Pot Creation', () => {
       // Main pot: both players eligible, amount = 2 * 40 = 80
       expect(potResult.pots[0]).toEqual({
         amount: 80,
+        cap: 40,
         eligiblePids: ['P1', 'P2']
       });
       
@@ -295,6 +302,7 @@ describe('Side Pot Creation', () => {
       expect(potResult.pots).toHaveLength(1);
       expect(potResult.pots[0]).toEqual({
         amount: 100,
+        cap: 50,
         eligiblePids: ['P1', 'P2']
       });
     });
@@ -316,6 +324,7 @@ describe('Side Pot Creation', () => {
       // Main pot: all three eligible, amount = 3 * 20 = 60
       expect(potResult.pots[0]).toEqual({
         amount: 60,
+        cap: 20,
         eligiblePids: ['P1', 'P2', 'P3']
       });
       
@@ -346,18 +355,29 @@ describe('Side Pot Creation', () => {
       
       const potResult = collectIntoPots(seats);
       
-      expect(potResult.pots).toHaveLength(2);
+      // P1: 30, P2: 50, P3: 5
+      // Sorted unique caps: 5, 30, 50
+      // Pot 1: cap 5, amount 3 * 5 = 15, eligible P1, P2, P3
+      // Pot 2: cap 30, amount 2 * (30-5) = 50, eligible P1, P2
+      // Pot 3: cap 50, amount 1 * (50-30) = 20, eligible P2
       
-      // Main pot: P1 and P2 eligible, amount = 30 + 30 = 60 (P1's max * eligible players)
+      expect(potResult.pots).toHaveLength(3);
+      
       expect(potResult.pots[0]).toEqual({
-        amount: 60,
+        amount: 15,
+        cap: 5,
+        eligiblePids: ['P1', 'P2'] // P3 folded
+      });
+      
+      expect(potResult.pots[1]).toEqual({
+        amount: 50,
+        cap: 30,
         eligiblePids: ['P1', 'P2']
       });
       
-      // Side pot: only P2 eligible, amount = 50 - 30 = 20
-      expect(potResult.pots[1]).toEqual({
-        cap: 50,
+      expect(potResult.pots[2]).toEqual({
         amount: 20,
+        cap: 50,
         eligiblePids: ['P2']
       });
     });
@@ -371,7 +391,7 @@ describe('Betting Round Completion with All-Ins', () => {
       { id: 1, pid: 'P2', chips: 0, status: 'allin' },
       { id: 2, pid: 'P3', chips: 200, status: 'folded' }
     ]);
-    const table = createTable(seats);
+    const table = createTable(seats, { actor: 0 });
     
     const roundState = getBettingRoundState(table);
     
@@ -385,7 +405,11 @@ describe('Betting Round Completion with All-Ins', () => {
       { id: 1, pid: 'P2', chips: 100, status: 'active' },
       { id: 2, pid: 'P3', chips: 150, status: 'active' }
     ]);
-    const table = createTable(seats);
+    const table = createTable(seats, { 
+      actor: 1,
+      playersActedThisRound: new Set([0]), // Only P1 acted
+      roundStartActor: 0
+    });
     
     const roundState = getBettingRoundState(table);
     
@@ -399,7 +423,7 @@ describe('Betting Round Completion with All-Ins', () => {
       { id: 1, pid: 'Folded1', chips: 0, status: 'folded' },
       { id: 2, pid: 'Folded2', chips: 0, status: 'folded' }
     ]);
-    const table = createTable(seats);
+    const table = createTable(seats, { actor: 0 });
     
     const roundState = getBettingRoundState(table);
     
@@ -429,6 +453,7 @@ describe('Edge Cases', () => {
       id: 0, 
       pid: 'P1', 
       chips: 40, 
+      committed: 10,
       streetCommitted: 10 // Already committed 10 this street
     }]);
     const table = createTable(seats, { actor: 0, currentBet: 30 });
@@ -438,7 +463,7 @@ describe('Edge Cases', () => {
     expect(result.nextState.seats[0]).toMatchObject({
       chips: 0,
       streetCommitted: 50, // 10 + 40 = 50 total this street
-      committed: 50, // Assuming no previous streets
+      committed: 50,
       status: 'allin'
     });
     

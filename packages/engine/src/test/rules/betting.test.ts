@@ -174,7 +174,7 @@ describe('Action Validation', () => {
       const result = validateAction(table, 0, 'CALL');
       
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('Nothing to call');
+      expect(result.error).toContain('use check instead');
     });
 
     it('Allows partial call when insufficient chips (converts to all-in)', () => {
@@ -307,10 +307,12 @@ describe('Minimum Raise Calculations', () => {
   it('Min raise = BB on first bet of street', () => {
     const seats = createSeats([{ id: 0, pid: 'P1', chips: 100 }]);
     const table = createTable(seats, {
+      actor: 0,
       phase: 'flop',
       street: 'flop',
       currentBet: 15, // First bet of 15
-      lastRaiseSize: 10 // Still BB
+      lastRaiseSize: 10, // Still BB
+      lastAggressor: 1
     });
     
     const actions = getAvailableActions(table, 0);
@@ -422,7 +424,7 @@ describe('Action Processing', () => {
         chips: 0,
         committed: 15, // All chips
         streetCommitted: 15,
-        status: 'ALLIN'
+        status: 'allin'
       });
     });
   });

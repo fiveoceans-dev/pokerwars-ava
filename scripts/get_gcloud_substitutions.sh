@@ -11,16 +11,15 @@ IMAGE_URI="$1"
 BUILD_TARGET="$2"
 
 sanitize() {
-  echo "$1" | tr -d ""'
-"
+  echo "$1" | tr -d "\"'\r\n"
 }
 
 escape_subs() {
   local value
   value="$(sanitize "$1")"
-  value="${value//\/\}"
-  value="${value//,/\,}"
-  value="${value//=/\=}"
+  value="${value//\\/\\\\}"
+  value="${value//,/\\,}"
+  value="${value//=/\\=}"
   echo "$value"
 }
 

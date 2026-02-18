@@ -48,7 +48,7 @@ export function addPlayer(
   }
 
   // Validate chips amount with buy-in limits
-  const minBuyIn = table.bigBlind * 1;   // 1 big blind minimum (for testing)
+  const minBuyIn = table.bigBlind * 20;   // 20 big blind minimum
   const maxBuyIn = table.bigBlind * 200; // 200 big blinds maximum
   
   if (chips <= 0) {
@@ -157,14 +157,16 @@ export function sitOutPlayer(
     return { nextState: table, sideEffects: [] };
   }
 
-  // Use PlayerStateManager as single source of truth - don't modify seat.status
+  // Use PlayerStateManager as single source of truth - also modify seat.status in table
   const sitOutManager = getSitOutManager(table.id);
   const sitOutSideEffects = sitOutManager.markSitOut(pid, reason, table.id);
 
+  const newSeats = [...table.seats];
+  newSeats[seatId] = { ...seat, status: "sittingOut" }; // Set seat status to sittingOut
+
   console.log(`😴 [Reducer] Player ${pid} sitting out (${reason}) - PlayerStateManager updated`);
 
-  // No seat status changes - PlayerStateManager handles the state
-  return { nextState: table, sideEffects: sitOutSideEffects };
+  return { nextState: { ...table, seats: newSeats }, sideEffects: sitOutSideEffects };
 }
 
 /**
@@ -195,13 +197,15 @@ export function sitInPlayer(
     return { nextState: table, sideEffects: [] };
   }
 
-  // Use SitOutManager as single source of truth - don't modify seat.status
+  // Use SitOutManager as single source of truth - also modify seat.status in table
   const sitInSideEffects = sitOutManager.markSitIn(pid);
+
+  const newSeats = [...table.seats];
+  newSeats[seatId] = { ...seat, status: "active" }; // Set seat status to active
 
   console.log(`🪑 [Reducer] Player ${pid} sitting in - PlayerStateManager updated`);
 
-  // No seat status changes - SitOutManager handles the state
-  return { nextState: table, sideEffects: sitInSideEffects };
+  return { nextState: { ...table, seats: newSeats }, sideEffects: sitInSideEffects };
 }
 /**
  * Pause table progression due to invariant failure or admin action

@@ -17,6 +17,7 @@ import { getNextActor, getBettingRoundState } from "../../utils/ringOrder";
 import { validateAction as validatePokerAction } from "../../logic/validation";
 import { getNextStreet } from "../../logic/betting";
 import { ACTION_TIMEOUT_MS } from "../constants";
+import { getPlayerStateManager } from "../../managers/sitOutManager";
 
 /**
  * Apply player action with immutable updates
@@ -342,7 +343,6 @@ export function handleTimeoutAutoFold(
   const foldResult = applyAction(table, seatId, "FOLD");
 
   // Handle timeout through PlayerStateManager for unified state management
-  const { getPlayerStateManager } = require("../../managers/sitOutManager");
   const playerStateManager = getPlayerStateManager(table.id);
   const stateManagerEffects = playerStateManager.handleTimeout(
     seat.pid,

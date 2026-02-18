@@ -163,7 +163,7 @@ export const HeaderMenuLinks = () => {
   );
 };
 
-const LanguageSwitcher = () => {
+const LanguageSwitcher = ({ className }: { className?: string }) => {
   const { language, setLanguage } = useLanguageStore();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -179,7 +179,7 @@ const LanguageSwitcher = () => {
   }, []);
 
   return (
-    <div className="dropdown relative" ref={containerRef}>
+    <div className={`dropdown relative ${className ?? ""}`} ref={containerRef}>
       <button
         type="button"
         className="tbtn tbtn-tight nav-btn w-[60px]"
@@ -319,7 +319,7 @@ export const Header = () => {
 
         {/* Right cluster: balances + wallet (Desktop) */} 
         <div
-          className="hidden sm:flex items-center justify-end text-white/70 ml-auto"
+          className="hidden sm:flex items-center justify-end text-white/70 ml-auto gap-1"
         >
           <div className="flex items-center gap-1">
             <LinkComponent href="/account" className="tbtn tbtn-tight nav-btn">
@@ -378,10 +378,12 @@ export const Header = () => {
               </ul>
             )}
           </div>
+
+          <LanguageSwitcher className="xl:hidden" />
         </div>
 
         {/* Mobile right cluster (Balances only, wallet inside Menu) */} 
-        <div className="flex sm:hidden items-center gap-1 text-white/70 ml-auto mr-2">
+        <div className="flex sm:hidden items-center gap-1 text-white/70 ml-auto">
           <div className="dropdown relative" ref={accountMenuRef}>
             <button
               type="button"
@@ -442,11 +444,12 @@ export const Header = () => {
               </ul>
             )}
           </div>
+          <LanguageSwitcher className="xl:hidden" />
         </div>
       </div>
 
-      {/* Far right: language switcher positioned way outside main column */}
-      <div className="absolute right-4 lg:right-10 top-1/2 -translate-y-1/2 flex items-center z-[60]">
+      {/* Far right: language switcher positioned outside main column on large screens only */}
+      <div className="hidden xl:flex absolute right-4 lg:right-10 top-1/2 -translate-y-1/2 items-center z-[60]">
         <LanguageSwitcher />
       </div>
     </header>

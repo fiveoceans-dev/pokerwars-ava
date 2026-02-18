@@ -94,14 +94,16 @@ export function applyAction(
 
     case "CALL":
       const toCall = table.currentBet - seat.streetCommitted;
-      const callAmount = Math.min(toCall, seat.chips);
-      newSeats[seatId] = {
-        ...seat,
-        chips: seat.chips - callAmount,
-        committed: seat.committed + callAmount,
-        streetCommitted: seat.streetCommitted + callAmount,
-        status: seat.chips === callAmount ? "allin" : "active",
-      };
+      if (toCall > 0) {
+        const callAmount = Math.min(toCall, seat.chips);
+        newSeats[seatId] = {
+          ...seat,
+          chips: seat.chips - callAmount,
+          committed: seat.committed + callAmount,
+          streetCommitted: seat.streetCommitted + callAmount,
+          status: seat.chips === callAmount ? "allin" : "active",
+        };
+      }
       break;
 
     case "BET": {

@@ -19,7 +19,7 @@ export default function TableFelt({ className, children }: TableFeltProps) {
       >
         {/* Table Watermark */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-          <span className="text-white/[0.05] text-[120px] font-black tracking-tighter uppercase transform -rotate-12">
+          <span className="text-white/[0.05] text-[120px] font-black tracking-tighter uppercase">
             PokerWars
           </span>
         </div>

@@ -159,10 +159,8 @@ function validateCall(table: Table, seat: Seat): ActionValidation {
   const toCall = getToCallAmount(seat, table.currentBet);
 
   if (toCall === 0) {
-    return {
-      valid: false,
-      error: "No bet to call (use check instead)",
-    };
+    // If nothing to call, treating CALL as CHECK is a professional robustness pattern
+    return { valid: true, normalizedAmount: 0 };
   }
 
   const callAmount = Math.min(toCall, seat.chips);

@@ -34,8 +34,11 @@ export default function PlayerActionButtons({
   // Always render container to preserve space - content visibility controlled below
   const toCall = Math.max(0, currentBet - playerCommitted);
   const canCheck = toCall === 0;
-  const canCall = toCall > 0 && playerChips > 0;
-  const canRaise = playerChips > toCall + effectiveMinRaise;
+  // A player can CALL if there is a bet AND they have enough chips to cover the full call.
+  // If they have chips but less than toCall, they must use ALL-IN.
+  const canCall = toCall > 0 && playerChips >= toCall;
+  // A player can RAISE if they have more chips than required just to CALL.
+  const canRaise = playerChips > toCall && playerChips > toCall + effectiveMinRaise;
   const maxRaise = Math.max(0, playerChips - toCall);
 
   const handleAction = async (action: string, amount?: number) => {

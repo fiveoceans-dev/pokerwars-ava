@@ -4,11 +4,13 @@ import { useGameStore } from "./useGameStore";
 import { shortAddress } from "../utils/address";
 import type { ServerEvent } from "../game-engine";
 import { notifyError } from "../utils/notifications";
+import { useGameSounds } from "./useGameSounds";
 
 export function useGameEvents() {
   const socket = useGameStore((s) => s.socket);
   const tableId = useGameStore((s) => s.tableId);
   const connectionState = useGameStore((s) => s.connectionState);
+  const { playSound } = useGameSounds();
 
   useEffect(() => {
     if (!socket) return;
@@ -24,6 +26,26 @@ export function useGameEvents() {
       if (tableId && msg.tableId && msg.tableId !== tableId) return;
 
       switch (msg.type) {
+        case "HAND_START":
+        case "DEAL_HOLE":
+        case "DEAL_FLOP":
+        case "DEAL_TURN":
+        case "DEAL_RIVER":
+          playSound("CARD_DEAL");
+          break;
+
+        case "PLAYER_ACTION_APPLIED":
+          if (msg.action === "ALLIN") {
+            playSound("CHIP_ALLIN");
+          } else if (["BET", "RAISE", "CALL"].includes(msg.action)) {
+            playSound("CHIP_BET");
+          }
+          break;
+
+        case "WINNER_ANNOUNCEMENT":
+          playSound("POT_WIN");
+          break;
+
         case "ERROR":
           if (msg.msg) {
             // Check for rejoin protection floor error

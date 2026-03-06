@@ -185,6 +185,7 @@ echo "Restarting web and ws-server containers..."
 docker compose -f docker-compose.prod.yml --env-file "${ENV_FILE}" down --remove-orphans
 
 COMPOSE_ENV_FILE="${ENV_FILE}"
+TEMP_ENV_FILE=""
 export ENV_FILE="${ENV_FILE}"
 if grep -q "^DATABASE_URL=" "${ENV_FILE}"; then
     raw_db_url=$(get_env_var DATABASE_URL)
@@ -192,9 +193,15 @@ if grep -q "^DATABASE_URL=" "${ENV_FILE}"; then
     case "${raw_db_url}" in
         postgresql://*|postgres://*)
             if echo "${raw_db_url}" | grep -qE 'localhost|127\.0\.0\.1'; then
-                echo "ERROR: DATABASE_URL points to localhost. For Docker, use host.docker.internal." >&2
-                echo "Example: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public" >&2
-                exit 1
+                echo "Detected ${ENV_FILE} DATABASE_URL using localhost; creating a docker env file that replaces it with host.docker.internal for container runtime."
+                docker_db_url="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}?schema=public"
+                TEMP_ENV_FILE=$(mktemp /tmp/pokerwars-compose-env.XXXXXX)
+                {
+                    grep -v '^DATABASE_URL=' "${ENV_FILE}"
+                    echo "DATABASE_URL=${docker_db_url}"
+                } > "${TEMP_ENV_FILE}"
+                COMPOSE_ENV_FILE="${TEMP_ENV_FILE}"
+                echo "Docker compose will read ${COMPOSE_ENV_FILE} with ${docker_db_url}."
             fi
             ;;
         *)
@@ -236,6 +243,9 @@ cleanup() {
         echo "Stopping Postgres container..."
         docker stop "${CONTAINER_NAME}" >/dev/null 2>&1 || true
         docker rm "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+    fi
+    if [ -n "${TEMP_ENV_FILE}" ] && [ "${TEMP_ENV_FILE}" != "${ENV_FILE}" ]; then
+        rm -f "${TEMP_ENV_FILE}"
     fi
 }
 trap cleanup EXIT INT TERM

@@ -90,16 +90,14 @@ export function applyAction(
 
     case "CALL":
       const toCall = table.currentBet - seat.streetCommitted;
-      if (toCall > 0) {
-        const callAmount = Math.min(toCall, seat.chips);
-        newSeats[seatId] = {
-          ...seat,
-          chips: seat.chips - callAmount,
-          committed: seat.committed + callAmount,
-          streetCommitted: seat.streetCommitted + callAmount,
-          status: seat.chips === callAmount ? "allin" : "active",
-        };
-      }
+      const callAmount = Math.min(Math.max(0, toCall), seat.chips);
+      newSeats[seatId] = {
+        ...seat,
+        chips: seat.chips - callAmount,
+        committed: seat.committed + callAmount,
+        streetCommitted: seat.streetCommitted + callAmount,
+        status: (seat.chips > 0 && seat.chips === callAmount) ? "allin" : seat.status,
+      };
       break;
 
     case "CHECK":
@@ -348,10 +346,13 @@ export function handleTimeoutAutoFold(
     };
   }
 
-  console.log(`⏰ [Reducer] Auto-folding ${seat.pid} at seat ${seatId}`);
+  // Determine if player should fold or check based on toCall
+  const toCall = table.currentBet - seat.streetCommitted;
+  const timeoutAction = toCall > 0 ? "FOLD" : "CHECK";
+  console.log(`⏰ [Reducer] Auto-${timeoutAction.toLowerCase()}ing ${seat.pid} at seat ${seatId} (toCall: ${toCall})`);
 
-  // Apply fold for current actor - this will handle timer cleanup
-  const foldResult = applyAction(table, seatId, "FOLD");
+  // Apply action for current actor - this will handle timer cleanup
+  const actionResult = applyAction(table, seatId, timeoutAction);
 
   // Handle timeout through PlayerStateManager for unified state management
   const playerStateManager = getPlayerStateManager(table.id);
@@ -362,9 +363,9 @@ export function handleTimeoutAutoFold(
 
   // Add timeout-specific side effects
   const timeoutSideEffects: SideEffect[] = [
-    ...foldResult.sideEffects,
+    ...actionResult.sideEffects,
     ...stateManagerEffects,
-    { type: "EMIT_STATE_CHANGE", payload: { reason: "player_timeout_folded" } },
+    { type: "EMIT_STATE_CHANGE", payload: { reason: `player_timeout_${timeoutAction.toLowerCase()}ed` } },
   ];
 
   // If player was auto-sat out, dispatch PlayerSitOut event
@@ -391,7 +392,7 @@ export function handleTimeoutAutoFold(
   }
 
   return {
-    nextState: foldResult.nextState,
+    nextState: actionResult.nextState,
     sideEffects: timeoutSideEffects,
   };
 }

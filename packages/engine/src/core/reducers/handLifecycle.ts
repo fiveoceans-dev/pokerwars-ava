@@ -289,13 +289,13 @@ export function endHand(table: Table): StateTransition {
 
   // Keep seats intact to preserve identity; clear per-hand transient state
   const newSeats = table.seats.map((seat) => {
-    // Shared reset for all players at hand end
+    // Shared reset for all players at hand end (preserve holeCards/action until next hand starts)
     const baseReset = {
       ...seat,
       committed: 0,
       streetCommitted: 0,
-      holeCards: undefined as [number, number] | undefined,
-      action: undefined as any
+      holeCards: seat.holeCards as [number, number] | undefined,
+      action: seat.action as any
     };
 
     if (seat.pid && seat.chips === 0) {

@@ -196,6 +196,15 @@ export function getCountdownManager(tableId: string): CountdownManager {
 }
 
 /**
+ * Get active countdowns for table without creating a manager
+ */
+export function getActiveCountdownsForTable(tableId: string): CountdownData[] {
+  const manager = countdownManagers.get(tableId);
+  if (!manager) return [];
+  return Array.from(manager.getActiveCountdowns().values());
+}
+
+/**
  * Remove countdown manager for table cleanup
  */
 export function removeCountdownManager(tableId: string): void {

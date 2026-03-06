@@ -171,7 +171,7 @@ export function usePokerActions() {
       {
         type: "bet",
         label: "Bet",
-        enabled: isMyTurn && canTakeActions && canBet && myChips >= 50,
+        enabled: isMyTurn && canTakeActions && canBet && myChips >= bigBlind,
       },
       {
         type: "raise",

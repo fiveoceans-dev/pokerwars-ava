@@ -17,7 +17,7 @@ import { randomUUID } from "crypto";
 import { healthCheck } from './health';
 
 // Import pure FSM components (no legacy types)
-import { createEventEngine, EventEngine } from "@hyper-poker/engine";
+import { createEventEngine, EventEngine, getActiveCountdownsForTable } from "@hyper-poker/engine";
 import type {
   Table,
   ServerEvent,
@@ -1046,12 +1046,18 @@ function sanitizeTableForSession(table: Table, session: Session, roomId: string)
  */
 function sendSanitizedSnapshot(ws: WebSocket, session: Session, roomId: string, table: Table, tableType: "cash" | "stt" | "mtt", maxPlayers?: number) {
   const sanitized = sanitizeTableForSession(table, session, roomId);
+  const now = Date.now();
+  const countdowns = getActiveCountdownsForTable(roomId).filter((c) => {
+    const elapsed = now - c.startTime;
+    return elapsed < c.duration;
+  });
   ws.send(JSON.stringify({
     tableId: roomId,
     type: "TABLE_SNAPSHOT",
     table: sanitized,
     tableType,
     maxPlayers,
+    countdowns,
   }, bigIntReplacer));
 }
 

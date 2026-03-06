@@ -35,6 +35,11 @@ export function closeStreet(table: Table): StateTransition {
     pots,
     seats: newSeats,
     actor: undefined,
+    currentBet: 0,
+    lastAggressor: undefined,
+    lastRaiseSize: table.bigBlind,
+    playersActedThisRound: [],
+    roundStartActor: undefined,
   };
 
   const sideEffects: SideEffect[] = [

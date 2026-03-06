@@ -10,7 +10,7 @@
 
 import { EventEmitter } from "events";
 import { WebSocket } from "ws";
-import { EventEngine, Table, PokerEvent, TimerEvent } from "@hyper-poker/engine";
+import { EventEngine, Table, PokerEvent, TimerEvent, getActiveCountdownsForTable } from "@hyper-poker/engine";
 import type { ServerEvent, ClientCommand, LobbyTable } from "@hyper-poker/engine";
 import { SessionManager, Session } from "./sessionManager";
 import { getSitOutManager } from "@hyper-poker/engine/managers/sitOutManager";
@@ -404,11 +404,17 @@ class WebSocketFSMBridge extends EventEmitter {
     engine.on("stateChanged", (table: Table) => {
       const maxPlayers = this.resolveMaxPlayers(tableId, table);
       const tableType = this.resolveTableType(tableId);
+      const now = Date.now();
+      const countdowns = getActiveCountdownsForTable(tableId).filter((c) => {
+        const elapsed = now - c.startTime;
+        return elapsed < c.duration;
+      });
       this.emit("broadcast", tableId, {
         type: "TABLE_SNAPSHOT",
         table, // Send Table directly - clients adapt
         tableType,
         maxPlayers,
+        countdowns,
       });
       // Persist table state for crash recovery
       void saveRoom(table);
@@ -649,7 +655,8 @@ class WebSocketFSMBridge extends EventEmitter {
             type: "PLAYER_ACTION_APPLIED",
             tableId,
             playerId: seat.pid,
-            action: (event as any).action,
+            // Use authoritative seat action from state when available (handles CALL->CHECK normalization)
+            action: (seat as any).action ?? (event as any).action,
             amount: (event as any).amount,
             seat: (event as any).seat,
           } as any);

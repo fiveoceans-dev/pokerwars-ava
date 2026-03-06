@@ -224,6 +224,13 @@ export const useGameStore = create<GameStoreState>((set, get) => {
         break;
       case "TABLE_SNAPSHOT":
         console.log("📨 Received TABLE_SNAPSHOT message");
+        if (Array.isArray((msg as any).countdowns)) {
+          const nextCountdowns = new Map<CountdownType, CountdownData>();
+          (msg as any).countdowns.forEach((c: CountdownData) => {
+            if (c && isCountdownType(c.type)) nextCountdowns.set(c.type, c);
+          });
+          set({ countdowns: nextCountdowns });
+        }
         applySnapshot(msg.table as any, msg.maxPlayers);
         break;
       case "PLAYER_JOINED":
@@ -409,43 +416,13 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             break;
         }
         if (text) get().addLog(text);
-        set((s) => {
-          const actionHistory = [...s.actionHistory, { playerId: msg.playerId, action: msg.action, amount: (msg as any).amount }];
-          const labels = [...s.lastActionLabels];
-          const states = [...s.playerStates];
-          const bets = [...s.playerBets];
-          const chips = [...s.chips];
-          const seatIdx = seatStore.getState().findSeatId(msg.playerId);
-          if (seatIdx !== undefined && seatIdx >= 0) {
-            console.log(`🏷️ Setting label "${msg.action}" for seat ${seatIdx}`);
-            let label = "";
-            switch (msg.action) {
-              case "FOLD": label = "Fold"; states[seatIdx] = "folded"; break;
-              case "CHECK": label = "Check"; states[seatIdx] = "active"; break;
-              case "CALL": label = "Call"; states[seatIdx] = "active"; break;
-              case "BET": label = "Bet"; states[seatIdx] = "active"; break;
-              case "RAISE": label = "Raise"; states[seatIdx] = "active"; break;
-              case "ALLIN": label = "All In"; states[seatIdx] = "allin"; break;
-              default: label = msg.action;
-            }
-            labels[seatIdx] = label;
-
-            const amt = parseAmount((msg as any).amount);
-            if (amt > 0) {
-              bets[seatIdx] = (bets[seatIdx] ?? 0) + amt;
-              chips[seatIdx] = Math.max(0, (chips[seatIdx] ?? 0) - amt);
-              
-              seatStore.getState().assignSeat(seatIdx, {
-                playerId: msg.playerId,
-                name: s.players[seatIdx],
-                chips: chips[seatIdx],
-              });
-            }
-          } else {
-            console.warn(`⚠️ Could not find seat for player ${msg.playerId} in seatStore`);
-          }
-          return { actionHistory, lastActionLabels: labels, playerStates: states, playerBets: bets, chips };
-        });
+        // Do not optimistically mutate chips/bets here; TABLE_SNAPSHOT is authoritative.
+        set((s) => ({
+          actionHistory: [
+            ...s.actionHistory,
+            { playerId: msg.playerId, action: msg.action, amount: (msg as any).amount },
+          ],
+        }));
         break;
       }
       case "DEAL_HOLE":
@@ -535,18 +512,11 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             if (winner.seat >= 0) {
               winnersSet.add(winner.seat);
               revealed[winner.seat] = true;
-              labels[winner.seat] = "Winner";
+              labels[winner.seat] = "Win";
             }
           });
           return { cardsRevealed: revealed, lastActionLabels: labels, recentWinners: winnersSet };
         });
-        setTimeout(() => {
-          set((s) => {
-            const newWinners = new Set(s.recentWinners);
-            msg.winners.forEach((w) => newWinners.delete(w.seat));
-            return { recentWinners: newWinners };
-          });
-        }, 5000);
         setTimeout(() => {
           try {
             const tableId = get().tableId;
@@ -557,26 +527,6 @@ export const useGameStore = create<GameStoreState>((set, get) => {
             }
           } catch (e) {}
         }, 2000);
-
-        // IMMEDIATE Chip Update for Winners
-        set((s) => {
-          const chips = [...s.chips];
-          msg.winners.forEach((winner) => {
-            if (winner.seat >= 0) {
-              const current = chips[winner.seat] || 0;
-              const winAmt = parseAmount(winner.amount);
-              chips[winner.seat] = current + winAmt;
-              
-              // Sync to seatStore
-              seatStore.getState().assignSeat(winner.seat, {
-                playerId: s.playerIds[winner.seat]!,
-                name: s.players[winner.seat],
-                chips: chips[winner.seat],
-              });
-            }
-          });
-          return { chips };
-        });
         break;
       case "PLAYER_REVEALED":
         set((s) => {
@@ -686,7 +636,15 @@ export const useGameStore = create<GameStoreState>((set, get) => {
 
       const pot = (parseAmount(room.pot) || room.pots?.reduce((sum: number, pt: any) => sum + parseAmount(pt.amount), 0)) ?? 0;
       const revealedSet = new Set((room.revealedPids || []).map((p: string) => p.toLowerCase()));
-      const cardsRevealed = ids.map((pid) => pid ? revealedSet.has(pid.toLowerCase()) : false);
+      const winnersSet = new Set(get().recentWinners);
+      const cardsRevealed = ids.map((pid, idx) =>
+        pid ? (revealedSet.has(pid.toLowerCase()) || winnersSet.has(idx)) : false
+      );
+
+      // Preserve winner label even if snapshot action is missing/cleared
+      winnersSet.forEach((idx) => {
+        if (idx >= 0 && idx < labels.length) labels[idx] = "Win";
+      });
 
       const tableId = room.id || get().tableId;
       const newTableSeats = new Map(get().tableSeats);

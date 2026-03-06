@@ -1,4 +1,5 @@
 import type { Card, Table, ActionType, Phase } from "../core/types";
+import type { CountdownData } from "../managers/countdownManager";
 
 export type GovernanceRole = "director" | "manager" | "admin" | "promoter";
 
@@ -36,6 +37,7 @@ export type ServerEvent =
       table: Table;
       tableType: "cash" | "stt" | "mtt";
       maxPlayers?: number;
+      countdowns?: CountdownData[];
     }
   | { tableId: ""; type: "TABLE_LIST"; tables: LobbyTable[] }
   | {

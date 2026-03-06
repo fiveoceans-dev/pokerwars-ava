@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useGameStore } from "../hooks/useGameStore";
 import useIsMobile from "../hooks/useIsMobile";
 import { captureAndDownloadScreen } from "../utils/screenCapture";
+import { formatNumber } from "~~/utils/format";
 
 interface Props {
   isPlayerTurn: boolean;
@@ -34,11 +35,10 @@ export default function PlayerActionButtons({
   // Always render container to preserve space - content visibility controlled below
   const toCall = Math.max(0, currentBet - playerCommitted);
   const canCheck = toCall === 0;
-  // A player can CALL if there is a bet AND they have enough chips to cover the full call.
-  // If they have chips but less than toCall, they must use ALL-IN.
-  const canCall = toCall > 0 && playerChips >= toCall;
+  // A player can CALL if there is a bet AND they have chips (short call becomes all-in).
+  const canCall = toCall > 0 && playerChips > 0;
   // A player can RAISE if they have more chips than required just to CALL.
-  const canRaise = playerChips > toCall && playerChips > toCall + effectiveMinRaise;
+  const canRaise = playerChips > toCall && playerChips >= toCall + effectiveMinRaise;
   const maxRaise = Math.max(0, playerChips - toCall);
 
   const handleAction = async (action: string, amount?: number) => {
@@ -201,7 +201,7 @@ export default function PlayerActionButtons({
                   : "bg-blue-500 hover:bg-blue-400"
               }`}
             >
-              Call
+              Call {toCall > 0 ? formatNumber(toCall) : ""}
             </button>
           ) : (
             <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
@@ -222,7 +222,7 @@ export default function PlayerActionButtons({
                   : "bg-amber-500 hover:bg-amber-400"
               }`}
             >
-              Bet
+              Bet {formatNumber(raiseAmount)}
             </button>
           ) : (
             <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
@@ -243,7 +243,7 @@ export default function PlayerActionButtons({
                   : "bg-indigo-500 hover:bg-indigo-400"
               }`}
             >
-              Raise
+              Raise {formatNumber(toCall + raiseAmount)}
             </button>
           ) : (
             <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">
@@ -264,7 +264,7 @@ export default function PlayerActionButtons({
                   : "bg-orange-500 hover:bg-orange-400"
               }`}
             >
-              All-in
+              All-in {formatNumber(playerChips + playerCommitted)}
             </button>
           ) : (
             <div className="h-8 px-2 opacity-0 pointer-events-none w-full flex items-center justify-center">

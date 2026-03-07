@@ -71,11 +71,9 @@ ENV_OUT_DIR="${ENV_OUT_DIR:-$ROOT_DIR/.env.generated}"
 AUTO_MIGRATE="${AUTO_MIGRATE:-true}"
 if [[ "${SKIP_MIGRATE:-}" != "true" && "${AUTO_MIGRATE}" == "true" ]]; then
   echo "🏃 Running Prisma migrations..."
-  IMAGE_FOR_JOB="$WS_IMAGE_URI" 
-  ENV_FILE_FOR_JOB="$ENV_OUT_DIR/env.ws.yaml" 
-  DB_INSTANCE="${DB_INSTANCE:-}" 
-  AUTO_SEED="${AUTO_SEED:-true}" 
-  AUTO_GRANT_DB="${AUTO_GRANT_DB:-}" 
+  PRISMA_IMAGE_URI="$WS_IMAGE_URI" \
+  AUTO_SEED="${AUTO_SEED:-true}" \
+  AUTO_GRANT_DB="${AUTO_GRANT_DB:-}" \
   "$ROOT_DIR/scripts/run_prisma_job.sh"
 fi
 

@@ -18,6 +18,7 @@ COPY package*.json ./
 # Copy workspace package files (to optimize layer caching)
 COPY apps/web/package*.json ./apps/web/
 COPY apps/ws-server/package*.json ./apps/ws-server/
+COPY apps/ws-server/prisma ./apps/ws-server/prisma
 COPY packages/engine/package*.json ./packages/engine/
 
 # Install ALL dependencies (monorepo usually needs all for workspace links)

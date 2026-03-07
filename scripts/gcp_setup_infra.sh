@@ -21,13 +21,13 @@ fi
 
 echo "⚙️  Configuring GCP project and enabling services..."
 gcloud config set project "$PROJECT_ID" >/dev/null
-gcloud services enable 
-  run.googleapis.com 
-  artifactregistry.googleapis.com 
-  cloudbuild.googleapis.com 
-  sqladmin.googleapis.com 
-  compute.googleapis.com 
-  vpcaccess.googleapis.com 
+gcloud services enable \
+  run.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudbuild.googleapis.com \
+  sqladmin.googleapis.com \
+  compute.googleapis.com \
+  vpcaccess.googleapis.com \
   >/dev/null
 
 echo "📦 Ensuring Artifact Registry exists..."
@@ -40,9 +40,9 @@ if [[ "${CREATE_CLOUDSQL:-}" == "true" && -n "${DB_INSTANCE:-}" ]]; then
   echo "🗄️ Checking Cloud SQL instance: $DB_INSTANCE"
   if ! gcloud sql instances describe "$DB_INSTANCE" >/dev/null 2>&1; then
     echo "Creating Cloud SQL instance (this may take several minutes)..."
-    gcloud sql instances create "$DB_INSTANCE" 
-      --region "$REGION" 
-      --database-version=POSTGRES_15 
+    gcloud sql instances create "$DB_INSTANCE" \
+      --region "$REGION" \
+      --database-version=POSTGRES_15 \
       --tier "${DB_TIER:-db-f1-micro}"
   fi
   if [[ -n "${DB_NAME:-}" ]]; then
@@ -56,9 +56,9 @@ if [[ "${CREATE_VPC_CONNECTOR:-}" == "true" && -n "${VPC_CONNECTOR:-}" ]]; then
   echo "🌐 Checking VPC Connector: $VPC_CONNECTOR"
   if ! gcloud compute networks vpc-access connectors describe "$VPC_CONNECTOR" --region "$REGION" >/dev/null 2>&1; then
     echo "Creating VPC Connector..."
-    gcloud compute networks vpc-access connectors create "$VPC_CONNECTOR" 
-      --region "$REGION" 
-      --network "${VPC_NETWORK:-default}" 
+    gcloud compute networks vpc-access connectors create "$VPC_CONNECTOR" \
+      --region "$REGION" \
+      --network "${VPC_NETWORK:-default}" \
       --range "${VPC_RANGE:-10.8.0.0/28}"
   fi
 fi

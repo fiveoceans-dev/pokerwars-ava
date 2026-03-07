@@ -206,6 +206,7 @@ if grep -q "^DATABASE_URL=" "${ENV_FILE}"; then
                     echo "DATABASE_URL=${docker_db_url}"
                 } > "${TEMP_ENV_FILE}"
                 COMPOSE_ENV_FILE="${TEMP_ENV_FILE}"
+                ENV_FILE="${COMPOSE_ENV_FILE}"
                 echo "Docker compose will read ${COMPOSE_ENV_FILE} with ${docker_db_url}."
             fi
             ;;

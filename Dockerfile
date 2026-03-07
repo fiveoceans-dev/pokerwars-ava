@@ -82,7 +82,6 @@ ENV NEXT_PUBLIC_HYPERLIQUID_TESTNET_FAUCET_URL=$NEXT_PUBLIC_HYPERLIQUID_TESTNET_
 # Copy deps and source code
 COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
-COPY --from=deps /repo/apps/ws-server/node_modules ./apps/ws-server/node_modules
 COPY . .
 
 # Run build based on target

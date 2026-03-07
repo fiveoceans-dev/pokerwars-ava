@@ -186,6 +186,11 @@ docker compose -f docker-compose.prod.yml --env-file "${ENV_FILE}" down --remove
 
 COMPOSE_ENV_FILE="${ENV_FILE}"
 TEMP_ENV_FILE=""
+COMPOSE_BUILD_OPTS=()
+if [ "${NO_CACHE:-}" = "true" ] || [ "${COMPOSE_NO_CACHE:-}" = "true" ]; then
+    COMPOSE_BUILD_OPTS+=(--no-cache)
+fi
+COMPOSE_BUILD_RUN=0
 export ENV_FILE="${ENV_FILE}"
 if grep -q "^DATABASE_URL=" "${ENV_FILE}"; then
     raw_db_url=$(get_env_var DATABASE_URL)
@@ -249,4 +254,14 @@ cleanup() {
     fi
 }
 trap cleanup EXIT INT TERM
-docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" up --build
+if [ "${#COMPOSE_BUILD_OPTS[@]}" -gt 0 ]; then
+    echo "Building images with compose (options: ${COMPOSE_BUILD_OPTS[*]})..."
+    COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 \
+      docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" build "${COMPOSE_BUILD_OPTS[@]}"
+    COMPOSE_BUILD_RUN=1
+fi
+if [ "$COMPOSE_BUILD_RUN" -eq 1 ]; then
+    docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" up
+else
+    docker compose -f docker-compose.prod.yml --env-file "${COMPOSE_ENV_FILE}" up --build
+fi

@@ -11,11 +11,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@hyper-poker/engine": ["../../packages/engine/src/index.ts"],
-      "@hyper-poker/engine/*": ["../../packages/engine/src/*"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*.ts"],
   "exclude": [

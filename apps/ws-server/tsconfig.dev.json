@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@hyper-poker/engine": ["../../packages/engine/src/index.ts"],
+      "@hyper-poker/engine/*": ["../../packages/engine/src/*"]
+    }
+  }
+}

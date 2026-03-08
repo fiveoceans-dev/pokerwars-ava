@@ -1,7 +1,6 @@
 import { createAppKit, type AppKit } from "@reown/appkit";
 import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
 import { defineChain, http, type Chain } from "viem";
-import { mainnet } from "viem/chains";
 import { createConfig, cookieStorage, createStorage } from "wagmi";
 import { readPublicEnv } from "~~/utils/public-env";
 
@@ -15,7 +14,7 @@ export const isWalletConnectConfigured =
 
 const metadata = {
   name: "PokerWars",
-  description: "PokerWars tournaments on Hyperliquid",
+  description: "PokerWars tournaments on Avalanche & Hyperliquid",
   url: (() => {
     const raw = readPublicEnv("NEXT_PUBLIC_APP_URL") || "http://localhost:8090";
     const candidates = raw
@@ -33,36 +32,76 @@ const metadata = {
   icons: ["https://avatars.githubusercontent.com/u/37784886?s=200&v=4"],
 };
 
-function buildHyperliquidChain(
-  envPrefix: "HYPERLIQUID" | "HYPERLIQUID_TESTNET",
+const readChainEnv = (primary: string, fallback?: string | string[]): string => {
+  const fallbackList = Array.isArray(fallback) ? fallback : fallback ? [fallback] : [];
+  const keys = [primary, ...fallbackList];
+  for (const key of keys) {
+    const value = readPublicEnv(key);
+    if (value) return value;
+  }
+  return "";
+};
+
+function buildChain(options: {
+  envPrefix: string;
+  fallbackEnvPrefixes?: string[];
   defaults: {
-    name: string;
-    symbol: string;
-  },
-): Chain | null {
-  const chainIdRaw = readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CHAIN_ID`);
-  const rpcUrl = readPublicEnv(`NEXT_PUBLIC_${envPrefix}_RPC_URL`);
-  if (!chainIdRaw || !rpcUrl) return null;
+    chainId: number;
+    chainName: string;
+    currencyName: string;
+    currencySymbol: string;
+    rpcUrl: string;
+    explorerUrl?: string;
+  };
+}): Chain | null {
+  const chainIdRaw =
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_CHAIN_ID`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_CHAIN_ID`),
+    ) || `${options.defaults.chainId}`;
+
+  const rpcUrl =
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_RPC_URL`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_RPC_URL`),
+    ) || options.defaults.rpcUrl;
+
+  if (!rpcUrl) return null;
 
   const chainId = Number.parseInt(chainIdRaw, 10);
-  if (Number.isNaN(chainId)) return null;
-
+  if (Number.isNaN(chainId) || chainId <= 0) return null;
   const chainName =
-    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CHAIN_NAME`) || defaults.name;
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_CHAIN_NAME`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_CHAIN_NAME`),
+    ) || options.defaults.chainName;
   const currencyName =
-    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CURRENCY_NAME`) || defaults.name;
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_CURRENCY_NAME`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_CURRENCY_NAME`),
+    ) || options.defaults.currencyName;
   const currencySymbol =
-    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CURRENCY_SYMBOL`) || defaults.symbol;
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_CURRENCY_SYMBOL`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_CURRENCY_SYMBOL`),
+    ) || options.defaults.currencySymbol;
   const currencyDecimals = Number.parseInt(
-    readPublicEnv(`NEXT_PUBLIC_${envPrefix}_CURRENCY_DECIMALS`) || "18",
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_CURRENCY_DECIMALS`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_CURRENCY_DECIMALS`),
+    ) || "18",
     10,
   );
-  const explorer = readPublicEnv(`NEXT_PUBLIC_${envPrefix}_EXPLORER_URL`);
+  const explorer =
+    readChainEnv(
+      `NEXT_PUBLIC_${options.envPrefix}_EXPLORER_URL`,
+      options.fallbackEnvPrefixes?.map((prefix) => `NEXT_PUBLIC_${prefix}_EXPLORER_URL`),
+    ) || options.defaults.explorerUrl;
 
   return defineChain({
-    id: chainId,
+    id: Number.isNaN(chainId) ? options.defaults.chainId : chainId,
     name: chainName,
-    network: envPrefix.toLowerCase().replace(/_/g, "-"),
+    network: options.envPrefix.toLowerCase().replace(/_/g, "-"),
     nativeCurrency: {
       name: currencyName,
       symbol: currencySymbol,
@@ -83,27 +122,78 @@ function buildHyperliquidChain(
   });
 }
 
-const hyperliquidMainnet = buildHyperliquidChain("HYPERLIQUID", {
-  name: "Hyperliquid",
-  symbol: "HYPE",
-});
-const hyperliquidTestnet = buildHyperliquidChain("HYPERLIQUID_TESTNET", {
-  name: "Hyperliquid Testnet",
-  symbol: "tHYPE",
+const avalancheMainnet = buildChain({
+  envPrefix: "AVALANCHE",
+  defaults: {
+    chainId: 43114,
+    chainName: "Avalanche C-Chain",
+    currencyName: "Avalanche",
+    currencySymbol: "AVAX",
+    rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+    explorerUrl: "https://snowtrace.io",
+  },
 });
 
-const configuredChains = [hyperliquidMainnet, hyperliquidTestnet].filter(
-  (chain): chain is Chain => Boolean(chain),
-);
+const avalancheTestnet = buildChain({
+  envPrefix: "AVALANCHE_TESTNET",
+  defaults: {
+    chainId: 43113,
+    chainName: "Avalanche Fuji",
+    currencyName: "Avalanche Fuji",
+    currencySymbol: "AVAX",
+    rpcUrl: "https://api.avax-test.network/ext/bc/C/rpc",
+    explorerUrl: "https://testnet.snowtrace.io",
+  },
+});
+
+const hyperliquidMainnet = buildChain({
+  envPrefix: "HYPERLIQUID",
+  defaults: {
+    chainId: Number.parseInt(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID") || "0", 10),
+    chainName: "Hyperliquid",
+    currencyName: "HYPE",
+    currencySymbol: "HYPE",
+    rpcUrl: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_RPC_URL"),
+    explorerUrl: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_EXPLORER_URL") || undefined,
+  },
+});
+
+const hyperliquidTestnet = buildChain({
+  envPrefix: "HYPERLIQUID_TESTNET",
+  defaults: {
+    chainId: Number.parseInt(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_ID") || "0", 10),
+    chainName: "Hyperliquid Testnet",
+    currencyName: "HYPE",
+    currencySymbol: "tHYPE",
+    rpcUrl: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_RPC_URL"),
+    explorerUrl: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_EXPLORER_URL") || undefined,
+  },
+});
+
+const configuredChains = [
+  avalancheMainnet,
+  avalancheTestnet,
+  hyperliquidMainnet,
+  hyperliquidTestnet,
+].filter((chain): chain is Chain => Boolean(chain));
+
+const uniqueById = <T extends Chain>(chains: T[]): T[] => {
+  const seen = new Set<number>();
+  return chains.filter((chain) => {
+    if (seen.has(chain.id)) return false;
+    seen.add(chain.id);
+    return true;
+  });
+};
 
 // Provide a safe fallback for local dev to avoid crashing when envs are missing
 const fallbackChain: Chain = defineChain({
   id: 1337,
-  name: "Hyperliquid Local (stub)",
-  network: "hyperliquid-local",
+  name: "Avalanche Local (stub)",
+  network: "avalanche-local",
   nativeCurrency: {
-    name: "HYPE",
-    symbol: "HYPE",
+    name: "AVAX",
+    symbol: "AVAX",
     decimals: 18,
   },
   rpcUrls: {
@@ -114,14 +204,14 @@ const fallbackChain: Chain = defineChain({
 
 if (configuredChains.length === 0) {
   console.warn(
-    "Hyperliquid chains are missing. Set NEXT_PUBLIC_HYPERLIQUID_* and NEXT_PUBLIC_HYPERLIQUID_TESTNET_* env vars.",
+    "No wallet chains configured. Set NEXT_PUBLIC_AVALANCHE_* / NEXT_PUBLIC_AVALANCHE_TESTNET_* or NEXT_PUBLIC_HYPERLIQUID_* / NEXT_PUBLIC_HYPERLIQUID_TESTNET_* env vars (Avalanche defaults are prefilled).",
   );
 }
 
 const baseChains = configuredChains.length > 0 ? configuredChains : [fallbackChain];
-const uniqueBase = baseChains.filter((chain) => chain.id !== mainnet.id);
-export const wagmiChains = [mainnet, ...uniqueBase] as [Chain, ...Chain[]];
-export const wagmiDefaultChain = mainnet;
+const dedupedChains = uniqueById(baseChains);
+export const wagmiChains = dedupedChains as [Chain, ...Chain[]];
+export const wagmiDefaultChain = dedupedChains[0];
 
 const transports = Object.fromEntries(
   wagmiChains.map((chain) => [chain.id, http()]),

@@ -2,7 +2,7 @@ import { useState } from "react";
 import Dropdown from "./Dropdown";
 import Button from "./Button";
 
-const chains = ["Hyperliquid Mainnet", "Hyperliquid Testnet"];
+const chains = ["Avalanche C-Chain", "Avalanche Fuji", "Hyperliquid Mainnet", "Hyperliquid Testnet"];
 const categories = ["Art", "Music", "Games", "Other"];
 const sorts = [
   { label: "Recently Listed", value: "recent" },

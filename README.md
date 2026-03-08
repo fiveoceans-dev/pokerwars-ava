@@ -76,7 +76,7 @@ Web app (`apps/web/.env.local`):
 - Set `NEXT_PUBLIC_API_URL` to the HTTP API on the WebSocket server (e.g. `http://localhost:8099/api`).
 - Set `NEXT_PUBLIC_APP_URL` in production to ensure correct Open Graph/Twitter metadata.
 - Web3Modal uses `WALLETCONNECT_PROJECT_ID` or `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (required for QR connect).
-- Hyperliquid mainnet/testnet require their `NEXT_PUBLIC_HYPERLIQUID_*` / `NEXT_PUBLIC_HYPERLIQUID_TESTNET_*` env vars.
+- Avalanche mainnet/testnet require their `NEXT_PUBLIC_AVALANCHE_*` / `NEXT_PUBLIC_AVALANCHE_TESTNET_*` env vars. Hyperliquid remains supported via `NEXT_PUBLIC_HYPERLIQUID_*` / `NEXT_PUBLIC_HYPERLIQUID_TESTNET_*` if you need legacy tables.
 
 WebSocket server (`apps/ws-server/.env`):
 - Copy `apps/ws-server/.env.example` to `.env`.
@@ -155,9 +155,9 @@ Complete deployment guide for PokerWars full-stack application with automated da
    WALLETCONNECT_PROJECT_ID=your-walletconnect-project-id
    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-walletconnect-project-id
 
-   # Optional: Hyperliquid Configuration
-   NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID=998
-   NEXT_PUBLIC_HYPERLIQUID_RPC_URL=https://rpc.hyperliquid.xyz/evm
+   # Optional: Avalanche Configuration
+   NEXT_PUBLIC_AVALANCHE_CHAIN_ID=43114
+   NEXT_PUBLIC_AVALANCHE_RPC_URL=https://api.avax.network/ext/bc/C/rpc
 
    # Development: Allow unverified wallets (bypasses authentication)
    # Set to 1 for testing without wallet verification

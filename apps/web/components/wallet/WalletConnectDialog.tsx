@@ -34,6 +34,8 @@ function clearWalletStorage(): void {
 }
 
 const NETWORK_ORDER: SupportedNetworkId[] = [
+  "avalanche-mainnet",
+  "avalanche-testnet",
   "hyperliquid-mainnet",
   "hyperliquid-testnet",
 ];

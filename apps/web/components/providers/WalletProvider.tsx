@@ -6,6 +6,7 @@ import {
   AVAILABLE_NETWORKS,
   DEFAULT_NETWORK_ID,
   getNetworkConfig,
+  isSupportedNetworkId,
   type NetworkConfig,
   type SupportedNetworkId,
 } from "~~/config/networks";
@@ -91,8 +92,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [networkId, setNetworkId] = useState<SupportedNetworkId>(() => {
     if (typeof window === "undefined") return DEFAULT_NETWORK_ID;
-    const stored = window.localStorage.getItem(STORAGE_KEYS.network) as SupportedNetworkId | null;
-    return stored ?? DEFAULT_NETWORK_ID;
+    const stored = window.localStorage.getItem(STORAGE_KEYS.network);
+    return isSupportedNetworkId(stored) ? stored : DEFAULT_NETWORK_ID;
   });
 
   const availableNetworks = useMemo(() => AVAILABLE_NETWORKS, []);

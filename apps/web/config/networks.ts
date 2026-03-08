@@ -1,6 +1,17 @@
 import { readPublicEnv, readPublicEnvOptional } from "~~/utils/public-env";
 
-export type SupportedNetworkId = "hyperliquid-mainnet" | "hyperliquid-testnet";
+export type SupportedNetworkId =
+  | "avalanche-mainnet"
+  | "avalanche-testnet"
+  | "hyperliquid-mainnet"
+  | "hyperliquid-testnet";
+
+const SUPPORTED_NETWORK_IDS: SupportedNetworkId[] = [
+  "avalanche-mainnet",
+  "avalanche-testnet",
+  "hyperliquid-mainnet",
+  "hyperliquid-testnet",
+];
 
 export type NetworkKind = "evm";
 
@@ -39,40 +50,153 @@ const cleanUrls = (values: (string | undefined)[]): string[] =>
     .map((value) => value?.trim())
     .filter((value): value is string => Boolean(value));
 
+type ChainEnvPrefixes = {
+  primary: string;
+  alternates?: string[];
+};
+
+const readChainEnv = (
+  prefixes: ChainEnvPrefixes,
+  suffix: string,
+): string | undefined => {
+  const candidates = [prefixes.primary, ...(prefixes.alternates ?? [])];
+  for (const prefix of candidates) {
+    const value = readPublicEnv(`NEXT_PUBLIC_${prefix}_${suffix}`);
+    if (value) return value;
+  }
+  return undefined;
+};
+
+const buildNetworkConfig = (options: {
+  id: SupportedNetworkId;
+  label: string;
+  shortLabel: string;
+  description: string;
+  kind: NetworkKind;
+  isTestnet?: boolean;
+  envPrefixes: ChainEnvPrefixes;
+  defaults: {
+    chainId?: number;
+    chainName: string;
+    rpcUrl?: string;
+    currencyName: string;
+    currencySymbol: string;
+    currencyDecimals: number;
+    explorerUrl?: string;
+  };
+}): NetworkConfig => {
+  const chainId = parseChainId(
+    readChainEnv(options.envPrefixes, "CHAIN_ID"),
+  ) ?? options.defaults.chainId;
+  const chainName =
+    readChainEnv(options.envPrefixes, "CHAIN_NAME") || options.defaults.chainName;
+  const rpcUrls = cleanUrls([
+    readChainEnv(options.envPrefixes, "RPC_URL") || options.defaults.rpcUrl,
+  ]);
+  const currencyName =
+    readChainEnv(options.envPrefixes, "CURRENCY_NAME") ||
+    options.defaults.currencyName;
+  const currencySymbol =
+    readChainEnv(options.envPrefixes, "CURRENCY_SYMBOL") ||
+    options.defaults.currencySymbol;
+  const currencyDecimals = parseDecimals(
+    readChainEnv(options.envPrefixes, "CURRENCY_DECIMALS"),
+    options.defaults.currencyDecimals,
+  );
+  const explorerUrls = cleanUrls([
+    readChainEnv(options.envPrefixes, "EXPLORER_URL") || options.defaults.explorerUrl,
+  ]);
+
+  return {
+    id: options.id,
+    label: options.label,
+    shortLabel: options.shortLabel,
+    kind: options.kind,
+    description: options.description,
+    chainId,
+    chainName,
+    rpcUrls,
+    nativeCurrency: {
+      name: currencyName,
+      symbol: currencySymbol,
+      decimals: currencyDecimals,
+    },
+    blockExplorerUrls: explorerUrls,
+    isTestnet: options.isTestnet,
+  };
+};
+
 const NETWORKS: NetworkConfig[] = [
-  {
+  buildNetworkConfig({
+    id: "avalanche-mainnet",
+    label: "Avalanche C-Chain",
+    shortLabel: "Avalanche",
+    kind: "evm",
+    description: "Avalanche mainnet (C-Chain) is the default PokerWars network.",
+    envPrefixes: { primary: "AVALANCHE" },
+    defaults: {
+      chainId: 43114,
+      chainName: "Avalanche C-Chain",
+      rpcUrl: "https://api.avax.network/ext/bc/C/rpc",
+      currencyName: "Avalanche",
+      currencySymbol: "AVAX",
+      currencyDecimals: 18,
+      explorerUrl: "https://snowtrace.io",
+    },
+  }),
+  buildNetworkConfig({
+    id: "avalanche-testnet",
+    label: "Avalanche Fuji",
+    shortLabel: "Fuji Test",
+    kind: "evm",
+    description: "Avalanche Fuji testnet for staging and QA.",
+    isTestnet: true,
+    envPrefixes: { primary: "AVALANCHE_TESTNET" },
+    defaults: {
+      chainId: 43113,
+      chainName: "Avalanche Fuji",
+      rpcUrl: "https://api.avax-test.network/ext/bc/C/rpc",
+      currencyName: "Avalanche Fuji",
+      currencySymbol: "AVAX",
+      currencyDecimals: 18,
+      explorerUrl: "https://testnet.snowtrace.io",
+    },
+  }),
+  buildNetworkConfig({
     id: "hyperliquid-mainnet",
     label: "Hyperliquid Mainnet",
     shortLabel: "Hyperliquid",
     kind: "evm",
-    description: "Hyperliquid production network for PokerWars tables.",
-    chainId: parseChainId(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CHAIN_ID")),
-    chainName: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CHAIN_NAME") || "Hyperliquid",
-    rpcUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_RPC_URL")]),
-    nativeCurrency: {
-      name: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CURRENCY_NAME") || "HYPE",
-      symbol: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CURRENCY_SYMBOL") || "HYPE",
-      decimals: parseDecimals(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_CURRENCY_DECIMALS"), 18),
+    description: "Hyperliquid mainnet (legacy) remains supported.",
+    envPrefixes: { primary: "HYPERLIQUID" },
+    defaults: {
+      chainId: undefined,
+      chainName: "Hyperliquid",
+      rpcUrl: undefined,
+      currencyName: "HYPE",
+      currencySymbol: "HYPE",
+      currencyDecimals: 18,
+      explorerUrl: undefined,
     },
-    blockExplorerUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_EXPLORER_URL")]),
-  },
-  {
+  }),
+  buildNetworkConfig({
     id: "hyperliquid-testnet",
     label: "Hyperliquid Testnet",
     shortLabel: "Hyperliquid Test",
     kind: "evm",
-    description: "Hyperliquid testnet for staging and QA.",
-    chainId: parseChainId(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_ID")),
-    chainName: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CHAIN_NAME") || "Hyperliquid Testnet",
-    rpcUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_RPC_URL")]),
-    nativeCurrency: {
-      name: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_NAME") || "HYPE",
-      symbol: readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_SYMBOL") || "tHYPE",
-      decimals: parseDecimals(readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_CURRENCY_DECIMALS"), 18),
-    },
-    blockExplorerUrls: cleanUrls([readPublicEnv("NEXT_PUBLIC_HYPERLIQUID_TESTNET_EXPLORER_URL")]),
+    description: "Hyperliquid testnet remains available for legacy tables.",
     isTestnet: true,
-  },
+    envPrefixes: { primary: "HYPERLIQUID_TESTNET" },
+    defaults: {
+      chainId: undefined,
+      chainName: "Hyperliquid Testnet",
+      rpcUrl: undefined,
+      currencyName: "HYPE",
+      currencySymbol: "tHYPE",
+      currencyDecimals: 18,
+      explorerUrl: undefined,
+    },
+  }),
 ];
 
 export const AVAILABLE_NETWORKS: NetworkConfig[] = NETWORKS;
@@ -81,11 +205,17 @@ export const PRIMARY_NETWORKS: NetworkConfig[] = NETWORKS.filter(
   (network) => !network.isTestnet,
 );
 
-const DEFAULT_NETWORK_FALLBACK: SupportedNetworkId = "hyperliquid-mainnet";
+const DEFAULT_NETWORK_FALLBACK: SupportedNetworkId = "avalanche-mainnet";
 
-export const DEFAULT_NETWORK_ID: SupportedNetworkId = (
-  readPublicEnvOptional("NEXT_PUBLIC_DEFAULT_NETWORK") as SupportedNetworkId | undefined
-) ?? DEFAULT_NETWORK_FALLBACK;
+export const DEFAULT_NETWORK_ID: SupportedNetworkId = (() => {
+  const envDefault = readPublicEnvOptional("NEXT_PUBLIC_DEFAULT_NETWORK");
+  if (envDefault && SUPPORTED_NETWORK_IDS.includes(envDefault as SupportedNetworkId)) {
+    return envDefault as SupportedNetworkId;
+  }
+  const primary = PRIMARY_NETWORKS[0]?.id;
+  if (primary) return primary;
+  return DEFAULT_NETWORK_FALLBACK;
+})();
 
 export function getNetworkConfig(id: SupportedNetworkId): NetworkConfig {
   const network = NETWORKS.find((item) => item.id === id);
@@ -94,3 +224,6 @@ export function getNetworkConfig(id: SupportedNetworkId): NetworkConfig {
   }
   return network;
 }
+
+export const isSupportedNetworkId = (value: unknown): value is SupportedNetworkId =>
+  SUPPORTED_NETWORK_IDS.includes(value as SupportedNetworkId);

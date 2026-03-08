@@ -42,7 +42,7 @@ export function NFTDetail() {
             <p>Creator: 0x1234...abcd</p>
             <p>Owner: 0xabcd...1234</p>
             <p>Royalties: 5%</p>
-            <p>Chain: Hyperliquid</p>
+            <p>Chain: Avalanche</p>
             <p>Token ID: #1</p>
             <p>Properties: Legendary</p>
           </div>

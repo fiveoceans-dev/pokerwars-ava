@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useAccount, useDisconnect, useChainId } from "wagmi";
+import { useAccount, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import {
   AVAILABLE_NETWORKS,
   DEFAULT_NETWORK_ID,
@@ -82,6 +82,7 @@ function generateDemoAddress(): string {
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { address: wagmiAddress, status: wagmiStatus, isConnected } = useAccount();
   const connectedChainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
   const { disconnectAsync } = useDisconnect();
   const [mode, setMode] = useState<WalletMode>(() => {
     if (typeof window === "undefined") return null;
@@ -134,6 +135,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const address = mode === "demo" ? demoAddress : wagmiAddress || undefined;
   const chainId = mode === "demo" ? activeNetwork.chainId : connectedChainId;
+
+  // Keep selected network in sync with the wallet's current chain
+  useEffect(() => {
+    if (!connectedChainId) return;
+    const match = AVAILABLE_NETWORKS.find(
+      (net) => net.chainId && net.chainId === connectedChainId,
+    );
+    if (match && match.id !== networkId) {
+      setNetworkId(match.id);
+      persist(STORAGE_KEYS.network, match.id);
+    }
+  }, [connectedChainId, networkId]);
 
   const connect = useCallback(async () => {
     resetError();
@@ -190,12 +203,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (!cfg.chainId || !cfg.rpcUrls.length) {
           throw new Error(`${cfg.label} is missing chain configuration`);
         }
+        if (isConnected && switchChainAsync && connectedChainId !== cfg.chainId) {
+          await switchChainAsync({ chainId: cfg.chainId });
+        }
       } catch (err) {
         console.error("Failed to switch chain", err);
         if (err instanceof Error) setError(err.message);
       }
     },
-    [],
+    [isConnected, switchChainAsync, connectedChainId],
   );
 
   const formatAddress = useCallback((addr?: string) => shortAddress(addr), []);

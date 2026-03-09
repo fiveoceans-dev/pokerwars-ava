@@ -1,42 +1,52 @@
+# Smart Contracts — Avalanche
 
-# PokerWars Foundry Workspace
+Solidity smart contracts for PokerWars, built with Hardhat and targeting the Avalanche C-Chain.
 
-This directory contains the on-chain pieces of PokerWars, built with [Foundry](https://book.getfoundry.sh/).
+## Structure
 
-## Prerequisites
-- Install Foundry: `curl -L https://foundry.paradigm.xyz | bash`
-- Install dependencies: `forge install`
-
-## Usage
-```bash
-# build & test
-forge build
-forge test
-
-# deploy to Hyperliquid (requires PRIVATE_KEY & HYPERLIQUID_RPC_URL env vars)
-forge script script/Deploy.s.sol --rpc-url $HYPERLIQUID_RPC_URL \
-  --broadcast --verify
-```
-
-## Layout
 ```
 contracts/
-├── foundry.toml          # Foundry configuration
-├── src/                  # Solidity contracts
-│   └── HyperPoker.sol    # Table registry placeholder
-├── script/               # Deployment scripts
-│   └── Deploy.s.sol
-├── test/                 # Solidity unit tests
-│   └── HyperPoker.t.sol
-└── lib/                  # External dependencies (forge install)
+├── contracts/          # Solidity source files
+│   └── PokerTable.sol  # Core poker table contract
+├── scripts/            # Deployment scripts
+│   └── deploy.ts
+├── test/               # Contract tests
+│   └── PokerTable.test.ts
+├── hardhat.config.ts   # Hardhat configuration (Avalanche Fuji + Mainnet)
+├── package.json
+├── tsconfig.json
+└── .env.example
 ```
 
-Populate `.env` (or export variables) with:
+## Quick Start
 
-```
-PRIVATE_KEY=0x...
-HYPERLIQUID_RPC_URL=https://...
-HYPERLIQUID_EXPLORER_API_KEY=...
+```bash
+cd contracts
+npm install
+
+# Compile
+npx hardhat compile
+
+# Test
+npx hardhat test
+
+# Deploy to Avalanche Fuji testnet
+npx hardhat run scripts/deploy.ts --network fuji
+
+# Deploy to Avalanche mainnet
+npx hardhat run scripts/deploy.ts --network avalanche
 ```
 
-This workspace is intentionally light-weight; add additional contracts and tests as you migrate gameplay logic on-chain.
+## Networks
+
+| Network           | Chain ID | RPC                                      |
+| ----------------- | -------- | ---------------------------------------- |
+| Avalanche Mainnet | 43114    | https://api.avax.network/ext/bc/C/rpc    |
+| Avalanche Fuji    | 43113    | https://api.avax-test.network/ext/bc/C/rpc |
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and fill in:
+
+- `DEPLOYER_PRIVATE_KEY` — Private key for deployments
+- `SNOWTRACE_API_KEY` — For contract verification on Snowtrace
